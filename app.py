@@ -3,6 +3,7 @@ import os
 import database
 from pages.login import login_bp
 from pages.dashboard import dashboard_bp
+from pages.yedekleme import yedekleme_bp
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-degistir')
@@ -12,6 +13,7 @@ database.init_db()
 
 app.register_blueprint(login_bp)
 app.register_blueprint(dashboard_bp)
+app.register_blueprint(yedekleme_bp)
 
 
 @app.after_request
