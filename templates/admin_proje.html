@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ proje.ad }} - Admin{% endblock %}
+{% block content %}
+<p style="margin-bottom:14px;"><a class="item-link" href="{{ url_for('admin.admin_page') }}" style="color:var(--accent);">&larr; Projeler</a></p>
+
+<div class="card">
+    <h2>{{ proje.ad }}</h2>
+    <p style="font-size:12px;color:var(--text-secondary);">Kod: {{ proje.kod }}</p>
+    <div style="margin-top:12px;">
+        <a class="btn" href="{{ url_for('admin.proje_gir', proje_id=proje.id) }}">Cihazlar / Sayfalar / Tag'lere Gir</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Kullanıcılar</h2>
+    {% if kullanicilar %}
+    <table>
+        <thead><tr><th>Kullanıcı Adı</th><th>Ad Soyad</th><th>Rol</th></tr></thead>
+        <tbody>
+        {% for k in kullanicilar %}
+            <tr>
+                <td>{{ k.kullanici_adi }}</td>
+                <td>{{ k.ad_soyad }}</td>
+                <td><span class="badge">{{ k.rol }}</span></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-secondary);font-size:14px;">Henüz kullanıcı yok.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Yeni Kullanıcı Ekle</h2>
+    <form method="POST" action="{{ url_for('admin.kullanici_ekle', proje_id=proje.id) }}">
+        <label>Kullanıcı Adı (tüm sistemde benzersiz)</label>
+        <input type="text" name="kullanici_adi" required autocomplete="off">
+        <label>Şifre</label>
+        <input type="password" name="sifre" required>
+        <label>Ad Soyad</label>
+        <input type="text" name="ad_soyad" required>
+        <label>Rol</label>
+        <select name="rol">
+            <option value="operator">Operatör (sadece görüntüler/kontrol eder)</option>
+            <option value="tasarimci">Tasarımcı (sayfa/element/tag düzenler)</option>
+        </select>
+        <button type="submit">Kullanıcı Ekle</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Cihazlar</h2>
+    {% if cihazlar %}
+    <table>
+        <thead><tr><th>Ad</th><th>Kimlik</th><th>Son Görülme</th></tr></thead>
+        <tbody>
+        {% for c in cihazlar %}
+            <tr>
+                <td>{{ c.ad }}</td>
+                <td style="font-family:monospace;font-size:11px;">{{ c.cihaz_kimlik }}</td>
+                <td>{% if c.son_gorulme %}<span class="badge on">{{ c.son_gorulme }}</span>{% else %}<span class="badge">Hiç bağlanmadı</span>{% endif %}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-secondary);font-size:14px;">Henüz cihaz yok. Cihaz eklemek için "Cihazlar / Sayfalar / Tag'lere Gir" butonunu kullanın.</p>
+    {% endif %}
+</div>
+{% endblock %}

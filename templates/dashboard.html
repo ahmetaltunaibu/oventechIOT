@@ -27,7 +27,7 @@
     {% endif %}
 </div>
 
-{% if session.get('rol') == 'tasarimci' %}
+{% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
 <div class="card">
     <h2>Yeni Cihaz Ekle</h2>
     <form method="POST" action="{{ url_for('dashboard.cihaz_ekle') }}">

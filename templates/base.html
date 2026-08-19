@@ -92,15 +92,21 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    {% if session.get('kullanici_id') %}
+    {% if session.get('kullanici_id') or session.get('platform_admin') %}
     <div class="topbar">
         <div>
             <span class="logo">⚙️ OventechIOT</span>
-            <span class="proje-adi"> — {{ session.get('proje_ad') }}</span>
+            {% if session.get('proje_ad') %}<span class="proje-adi"> — {{ session.get('proje_ad') }}</span>{% endif %}
         </div>
         <div class="right">
-            <span>{{ session.get('ad_soyad') }} ({{ session.get('rol') }})</span>
-            <a class="logout" href="{{ url_for('login.logout') }}">Çıkış</a>
+            {% if session.get('platform_admin') %}
+                <a class="item-link" href="{{ url_for('admin.admin_page') }}">Admin Panel</a>
+                <span>{{ session.get('kullanici_adi') }} (platform admin)</span>
+                <a class="logout" href="{{ url_for('admin.admin_logout') }}">Çıkış</a>
+            {% else %}
+                <span>{{ session.get('ad_soyad') }} ({{ session.get('rol') }})</span>
+                <a class="logout" href="{{ url_for('login.logout') }}">Çıkış</a>
+            {% endif %}
         </div>
     </div>
     {% endif %}

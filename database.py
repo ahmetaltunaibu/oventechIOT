@@ -5,8 +5,13 @@ birden fazla kullanıcısı (rol: tasarımcı/operatör) ve birden fazla cihazı
 (ESP32 köprü) olabilir. Her cihazın tag'leri (Modbus adres tanımları) ve
 sayfaları (element düzeni, JSON) var.
 
-Kullanıcı adları PROJE İÇİNDE benzersiz — farklı müşteriler aynı kullanıcı
-adını (örn. "admin") kullanabilir, bu yüzden girişte proje kodu da gerekiyor.
+İki ayrı giriş var:
+  - Platform yöneticisi (sen/Oventech) — proje bağımsız, tüm projeleri
+    görür/yönetir, yeni proje açar. Kimlik bilgisi ortam değişkeninde
+    (PLATFORM_ADMIN_USER/PASSWORD), veritabanında bir kaydı yok.
+  - Proje kullanıcıları (müşteriler) — sadece kullanıcı adı + şifre ile
+    giriş yapar (proje kodu YOK, gereksiz). Bu yüzden kullanıcı adları
+    TÜM SİSTEMDE (projeler arası) benzersiz olmak zorunda.
 """
 import sqlite3
 import hashlib
@@ -45,12 +50,11 @@ def init_db():
         CREATE TABLE IF NOT EXISTS kullanicilar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             proje_id INTEGER NOT NULL REFERENCES projeler(id) ON DELETE CASCADE,
-            kullanici_adi TEXT NOT NULL,
+            kullanici_adi TEXT UNIQUE NOT NULL,   -- TUM SISTEMDE benzersiz (proje kodu olmadan giris icin)
             sifre_hash TEXT NOT NULL,
             ad_soyad TEXT NOT NULL,
             rol TEXT NOT NULL DEFAULT 'operator',  -- 'tasarimci' | 'operator'
-            olusturma_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(proje_id, kullanici_adi)
+            olusturma_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
@@ -92,6 +96,32 @@ def init_db():
         )
     ''')
 
+    # Migration: eski kullanicilar tablosu UNIQUE(proje_id, kullanici_adi)
+    # ile olusmus olabilir (kod hala proje_kodu istiyordu) - artik kullanici
+    # adi TUM SISTEMDE benzersiz olmali (proje kodu olmadan giris icin).
+    eski_sql = cursor.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='kullanicilar'"
+    ).fetchone()
+    if eski_sql and 'UNIQUE(proje_id, kullanici_adi)' in eski_sql[0]:
+        cursor.execute('ALTER TABLE kullanicilar RENAME TO kullanicilar_eski')
+        cursor.execute('''
+            CREATE TABLE kullanicilar (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                proje_id INTEGER NOT NULL REFERENCES projeler(id) ON DELETE CASCADE,
+                kullanici_adi TEXT UNIQUE NOT NULL,
+                sifre_hash TEXT NOT NULL,
+                ad_soyad TEXT NOT NULL,
+                rol TEXT NOT NULL DEFAULT 'operator',
+                olusturma_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('''
+            INSERT OR IGNORE INTO kullanicilar
+            SELECT id, proje_id, kullanici_adi, sifre_hash, ad_soyad, rol, olusturma_zamani
+            FROM kullanicilar_eski
+        ''')
+        cursor.execute('DROP TABLE kullanicilar_eski')
+
     conn.commit()
     conn.close()
 
@@ -100,12 +130,41 @@ def init_db():
 # PROJE
 # ============================================================
 
-def hic_proje_var_mi() -> bool:
+def proje_listesi():
+    """Platform yöneticisi için — tüm projeler + cihaz/kullanıcı sayıları."""
     conn = get_db()
     try:
-        return conn.execute('SELECT COUNT(*) AS n FROM projeler').fetchone()['n'] > 0
+        rows = conn.execute('''
+            SELECT p.*,
+                   (SELECT COUNT(*) FROM cihazlar c WHERE c.proje_id = p.id) AS cihaz_sayisi,
+                   (SELECT COUNT(*) FROM kullanicilar k WHERE k.proje_id = p.id) AS kullanici_sayisi
+            FROM projeler p ORDER BY p.ad
+        ''').fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+def proje_getir(proje_id: int):
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT * FROM projeler WHERE id = ?', (proje_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def proje_kullanicilari(proje_id: int):
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            'SELECT id, kullanici_adi, ad_soyad, rol FROM kullanicilar WHERE proje_id = ? ORDER BY kullanici_adi',
+            (proje_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
 
 def proje_ekle(kod: str, ad: str):
     conn = get_db()
@@ -142,24 +201,23 @@ def kullanici_ekle(proje_id: int, kullanici_adi: str, sifre: str, ad_soyad: str,
         conn.commit()
         return True, cur.lastrowid
     except sqlite3.IntegrityError:
-        return False, 'Bu kullanıcı adı bu projede zaten var'
+        return False, 'Bu kullanıcı adı zaten kullanılıyor (tüm sistemde benzersiz olmalı)'
     finally:
         conn.close()
 
 
-def giris_dogrula(proje_kodu: str, kullanici_adi: str, sifre: str):
-    """Basarili ise (proje_dict, kullanici_dict) doner, degilse (None, None)."""
+def giris_dogrula(kullanici_adi: str, sifre: str):
+    """Proje kullanıcısı girişi — sadece kullanıcı adı + şifre. Başarılıysa
+    (proje_dict, kullanici_dict) döner, değilse (None, None)."""
     conn = get_db()
     try:
-        proje = conn.execute('SELECT * FROM projeler WHERE kod = ?', (proje_kodu.strip(),)).fetchone()
-        if not proje:
-            return None, None
         kullanici = conn.execute('''
-            SELECT * FROM kullanicilar WHERE proje_id = ? AND kullanici_adi = ? AND sifre_hash = ?
-        ''', (proje['id'], kullanici_adi.strip(), _sifre_hashle(sifre))).fetchone()
+            SELECT * FROM kullanicilar WHERE kullanici_adi = ? AND sifre_hash = ?
+        ''', (kullanici_adi.strip(), _sifre_hashle(sifre))).fetchone()
         if not kullanici:
             return None, None
-        return dict(proje), dict(kullanici)
+        proje = conn.execute('SELECT * FROM projeler WHERE id = ?', (kullanici['proje_id'],)).fetchone()
+        return (dict(proje) if proje else None), dict(kullanici)
     finally:
         conn.close()
 

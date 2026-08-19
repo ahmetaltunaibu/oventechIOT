@@ -8,6 +8,11 @@ dashboard_bp = Blueprint('dashboard', __name__)
 @dashboard_bp.route('/')
 @login_required
 def dashboard_page():
+    if not session.get('proje_id'):
+        if session.get('platform_admin'):
+            return redirect(url_for('admin.admin_page'))
+        flash('Herhangi bir projeye bağlı değilsiniz.', 'danger')
+        return redirect(url_for('login.login_page'))
     cihazlar = database.proje_cihazlari(session['proje_id'])
     return render_template('dashboard.html', cihazlar=cihazlar)
 
