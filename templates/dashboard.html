@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Cihazlar - OventechIOT{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Cihazlar</h2>
+    {% if cihazlar %}
+    <table>
+        <thead><tr><th>Ad</th><th>Kimlik</th><th>Son Görülme</th></tr></thead>
+        <tbody>
+        {% for c in cihazlar %}
+            <tr>
+                <td><a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=c.id) }}">{{ c.ad }}</a></td>
+                <td style="font-family:monospace;font-size:11px;">{{ c.cihaz_kimlik }}</td>
+                <td>
+                    {% if c.son_gorulme %}
+                        <span class="badge on">{{ c.son_gorulme }}</span>
+                    {% else %}
+                        <span class="badge">Hiç bağlanmadı</span>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-secondary);font-size:14px;">Henüz cihaz eklenmedi.</p>
+    {% endif %}
+</div>
+
+{% if session.get('rol') == 'tasarimci' %}
+<div class="card">
+    <h2>Yeni Cihaz Ekle</h2>
+    <form method="POST" action="{{ url_for('dashboard.cihaz_ekle') }}">
+        <label>Cihaz Adı</label>
+        <input type="text" name="ad" placeholder="örn. Kurutma Fırını 1" required>
+        <button type="submit">Ekle</button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

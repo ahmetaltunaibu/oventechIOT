@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f2a3d">
+    <title>{% block title %}OventechIOT{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #0f1720;
+            --panel: #17222e;
+            --panel2: #1e2d3d;
+            --border: #2a3b4c;
+            --accent: #2e9ed9;
+            --accent-dark: #1f7bb0;
+            --green: #2ecc71;
+            --red: #e74c3c;
+            --text: #e8eef4;
+            --text-secondary: #8aa0b3;
+            --radius: 10px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding-bottom: 40px;
+        }
+        .topbar {
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .topbar .logo { font-weight: 700; font-size: 18px; }
+        .topbar .proje-adi { color: var(--text-secondary); font-size: 13px; }
+        .topbar .right { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+        .topbar a.logout { color: var(--red); text-decoration: none; }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px 16px; }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            margin-bottom: 16px;
+        }
+        .card h2 { font-size: 15px; margin-bottom: 12px; color: var(--accent); }
+        .flash {
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        .flash.success { background: rgba(46,204,113,0.15); color: var(--green); }
+        .flash.danger  { background: rgba(231,76,60,0.15); color: var(--red); }
+        .flash.warning { background: rgba(241,196,15,0.15); color: #f1c40f; }
+        input, select {
+            width: 100%;
+            padding: 9px 12px;
+            background: var(--panel2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        label { font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+        button, .btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 9px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        button:active, .btn:active { transform: scale(0.97); }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-secondary); font-weight: 600; }
+        a.item-link { color: var(--text); text-decoration: none; }
+        a.item-link:hover { color: var(--accent); }
+        .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); color: var(--text-secondary); }
+        .badge.on { background: rgba(46,204,113,0.15); color: var(--green); }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if session.get('kullanici_id') %}
+    <div class="topbar">
+        <div>
+            <span class="logo">⚙️ OventechIOT</span>
+            <span class="proje-adi"> — {{ session.get('proje_ad') }}</span>
+        </div>
+        <div class="right">
+            <span>{{ session.get('ad_soyad') }} ({{ session.get('rol') }})</span>
+            <a class="logout" href="{{ url_for('login.logout') }}">Çıkış</a>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Giriş - OventechIOT{% endblock %}
+{% block content %}
+<div style="max-width:380px;margin:60px auto 0;">
+    <div class="card">
+        <h2 style="text-align:center;font-size:20px;margin-bottom:20px;">⚙️ OventechIOT Giriş</h2>
+        <form method="POST">
+            <label>Proje Kodu</label>
+            <input type="text" name="proje_kodu" required autocomplete="off">
+            <label>Kullanıcı Adı</label>
+            <input type="text" name="kullanici_adi" required autocomplete="off">
+            <label>Şifre</label>
+            <input type="password" name="sifre" required>
+            <button type="submit" style="width:100%;margin-top:8px;">Giriş Yap</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
