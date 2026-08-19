@@ -1,6 +1,11 @@
 """Sayfa/element editörü ve runtime görünümü (Step 2 — Button elementi).
 
-Bir sayfa, `sayfalar.elementler` kolonunda JSON liste olarak saklanır:
+Bir sayfa "ad" (mantıksal isim, örn. "Ana Sayfa") altında 1-2 ayrı DÜZEN
+(hedef) tutabilir: 'masaustu' ve 'mobil'. Her düzenin kendi tuval boyutu ve
+element listesi vardır. Runtime'da tarayıcı genişliğine göre uygun düzen
+seçilir; mobil düzen tanımlanmamışsa masaüstü düzeni ölçeklenerek kullanılır.
+
+`sayfalar.elementler` JSON liste olarak saklanır:
   [{id, type:'button', x, y, w, h, label, tag_id, mod,
     acik_deger, kapali_deger, renk_acik, renk_kapali, renk_yazi}, ...]
 
@@ -12,6 +17,8 @@ from pages.login import login_required, tasarimci_required
 import database
 
 sayfa_bp = Blueprint('sayfa', __name__)
+
+HEDEFLER = ('masaustu', 'mobil')
 
 
 def _cihaz_dogrula(cihaz_id):
@@ -29,11 +36,11 @@ def sayfa_olustur(cihaz_id):
     if not ad:
         flash('Sayfa adı zorunlu.', 'danger')
         return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
-    if database.sayfa_getir(cihaz_id, ad):
+    if database.sayfa_getir(cihaz_id, ad, 'masaustu'):
         flash('Bu isimde bir sayfa zaten var.', 'danger')
         return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
-    database.sayfa_kaydet(cihaz_id, ad, [])
-    return redirect(url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz_id, sayfa_ad=ad))
+    database.sayfa_kaydet(cihaz_id, ad, [], hedef='masaustu')
+    return redirect(url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz_id, sayfa_ad=ad, hedef='masaustu'))
 
 
 @sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/sil', methods=['POST'])
@@ -47,6 +54,17 @@ def sayfa_sil(cihaz_id, sayfa_ad):
     return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
 
+@sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/<hedef>/sil', methods=['POST'])
+@tasarimci_required
+def sayfa_varyant_sil(cihaz_id, sayfa_ad, hedef):
+    if not _cihaz_dogrula(cihaz_id) or hedef not in HEDEFLER:
+        flash('Geçersiz istek.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    database.sayfa_varyant_sil(cihaz_id, sayfa_ad, hedef)
+    flash(f"{'Mobil' if hedef == 'mobil' else 'Masaüstü'} düzeni silindi.", 'success')
+    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+
 @sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/tasarla')
 @tasarimci_required
 def sayfa_tasarla(cihaz_id, sayfa_ad):
@@ -54,28 +72,67 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
     if not cihaz:
         flash('Cihaz bulunamadı.', 'danger')
         return redirect(url_for('dashboard.dashboard_page'))
-    sayfa = database.sayfa_getir(cihaz_id, sayfa_ad)
+
+    hedef = request.args.get('hedef', 'masaustu')
+    if hedef not in HEDEFLER:
+        hedef = 'masaustu'
+
+    sayfa = database.sayfa_getir(cihaz_id, sayfa_ad, hedef)
     if not sayfa:
-        flash('Sayfa bulunamadı.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        # Bu düzen (örn. mobil) henüz yok — diğer düzenden kopyalamayı öner,
+        # yoksa boş başlat.
+        diger_hedef = 'mobil' if hedef == 'masaustu' else 'masaustu'
+        diger = database.sayfa_getir(cihaz_id, sayfa_ad, diger_hedef)
+        if diger is None:
+            flash('Sayfa bulunamadı.', 'danger')
+            return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        sayfa = {'elementler': [], 'tuval_w': None, 'tuval_h': None}
+
+    varsayilan_w = 1280 if hedef == 'masaustu' else 420
+    varsayilan_h = 800 if hedef == 'masaustu' else 860
+
+    diger_hedef = 'mobil' if hedef == 'masaustu' else 'masaustu'
+    diger_var_mi = database.sayfa_getir(cihaz_id, sayfa_ad, diger_hedef) is not None
+
     tagler = database.cihaz_tagleri(cihaz_id)
     return render_template(
         'sayfa_tasarla.html',
-        cihaz=cihaz, sayfa_ad=sayfa_ad,
+        cihaz=cihaz, sayfa_ad=sayfa_ad, hedef=hedef, diger_hedef=diger_hedef, diger_var_mi=diger_var_mi,
+        tuval_w=sayfa.get('tuval_w') or varsayilan_w,
+        tuval_h=sayfa.get('tuval_h') or varsayilan_h,
         elementler_json=json.dumps(sayfa['elementler'], ensure_ascii=False),
         tagler_json=json.dumps(tagler, ensure_ascii=False),
     )
 
 
-@sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/kaydet', methods=['POST'])
+@sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/<hedef>/diger-duzenden-kopyala', methods=['POST'])
 @tasarimci_required
-def sayfa_kaydet(cihaz_id, sayfa_ad):
-    if not _cihaz_dogrula(cihaz_id):
-        return jsonify({'error': 'Cihaz bulunamadı'}), 404
-    elementler = request.get_json(silent=True)
-    if elementler is None or not isinstance(elementler, list):
+def sayfa_kopyala(cihaz_id, sayfa_ad, hedef):
+    if not _cihaz_dogrula(cihaz_id) or hedef not in HEDEFLER:
+        flash('Geçersiz istek.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    diger_hedef = 'mobil' if hedef == 'masaustu' else 'masaustu'
+    diger = database.sayfa_getir(cihaz_id, sayfa_ad, diger_hedef)
+    if not diger:
+        flash('Kopyalanacak diğer düzen bulunamadı.', 'danger')
+    else:
+        database.sayfa_kaydet(cihaz_id, sayfa_ad, diger['elementler'], hedef=hedef)
+        flash('Diğer düzenden kopyalandı — konumları yeni tuvala göre ayarlamayı unutma.', 'success')
+    return redirect(url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz_id, sayfa_ad=sayfa_ad, hedef=hedef))
+
+
+@sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/<hedef>/kaydet', methods=['POST'])
+@tasarimci_required
+def sayfa_kaydet(cihaz_id, sayfa_ad, hedef):
+    if not _cihaz_dogrula(cihaz_id) or hedef not in HEDEFLER:
+        return jsonify({'error': 'Geçersiz istek'}), 400
+    veri = request.get_json(silent=True)
+    if veri is None or not isinstance(veri, dict) or not isinstance(veri.get('elementler'), list):
         return jsonify({'error': 'Geçersiz veri'}), 400
-    database.sayfa_kaydet(cihaz_id, sayfa_ad, elementler)
+    database.sayfa_kaydet(
+        cihaz_id, sayfa_ad, veri['elementler'], hedef=hedef,
+        tuval_w=veri.get('tuval_w'), tuval_h=veri.get('tuval_h')
+    )
     return jsonify({'success': True})
 
 
@@ -86,14 +143,24 @@ def sayfa_calistir(cihaz_id, sayfa_ad):
     if not cihaz:
         flash('Cihaz bulunamadı.', 'danger')
         return redirect(url_for('dashboard.dashboard_page'))
-    sayfa = database.sayfa_getir(cihaz_id, sayfa_ad)
-    if not sayfa:
+
+    masaustu = database.sayfa_getir(cihaz_id, sayfa_ad, 'masaustu')
+    mobil = database.sayfa_getir(cihaz_id, sayfa_ad, 'mobil')
+    if not masaustu and not mobil:
         flash('Sayfa bulunamadı.', 'danger')
         return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+    def paket(s):
+        if not s:
+            return 'null'
+        return json.dumps({
+            'elementler': s['elementler'], 'tuval_w': s['tuval_w'], 'tuval_h': s['tuval_h']
+        }, ensure_ascii=False)
+
     return render_template(
         'sayfa_calistir.html',
         cihaz=cihaz, sayfa_ad=sayfa_ad,
-        elementler_json=json.dumps(sayfa['elementler'], ensure_ascii=False),
+        masaustu_json=paket(masaustu), mobil_json=paket(mobil),
     )
 
 

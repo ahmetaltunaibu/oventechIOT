@@ -111,16 +111,24 @@
     <h2>Sayfalar</h2>
     {% if sayfalar %}
     <table>
-        <thead><tr><th>Ad</th><th>Son Güncelleme</th><th></th></tr></thead>
+        <thead><tr><th>Ad</th><th>Düzenler</th><th>Son Güncelleme</th><th></th></tr></thead>
         <tbody>
         {% for s in sayfalar %}
             <tr>
                 <td>{{ s.ad }}</td>
+                <td>
+                    {% if 'masaustu' in s.hedefler %}<span class="badge on">🖥️ masaüstü</span>{% endif %}
+                    {% if 'mobil' in s.hedefler %}<span class="badge on">📱 mobil</span>{% endif %}
+                </td>
                 <td>{{ s.guncelleme_zamani }}</td>
                 <td style="white-space:nowrap;">
                     <a class="btn" href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}" style="padding:5px 10px;font-size:12px;">Aç</a>
                     {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
-                    <a class="btn" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}" style="padding:5px 10px;font-size:12px;background:var(--accent-dark);">Düzenle</a>
+                    <a class="btn" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=s.ad, hedef='masaustu') }}" style="padding:5px 10px;font-size:12px;background:var(--accent-dark);">🖥️ Düzenle</a>
+                    <a class="btn" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=s.ad, hedef='mobil') }}" style="padding:5px 10px;font-size:12px;background:var(--accent-dark);">📱 Düzenle</a>
+                    <form method="POST" action="{{ url_for('sayfa.sayfa_sil', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}" style="display:inline;" onsubmit="return confirm('{{ s.ad }} sayfası (tüm düzenleriyle) silinsin mi?');">
+                        <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
+                    </form>
                     {% endif %}
                 </td>
             </tr>

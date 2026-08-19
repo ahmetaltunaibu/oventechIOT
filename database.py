@@ -102,12 +102,41 @@ def init_db():
         CREATE TABLE IF NOT EXISTS sayfalar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             cihaz_id INTEGER NOT NULL REFERENCES cihazlar(id) ON DELETE CASCADE,
-            ad TEXT NOT NULL,
+            ad TEXT NOT NULL,                       -- kullanıcıya gösterilen mantıksal sayfa adı
+            hedef TEXT NOT NULL DEFAULT 'masaustu',  -- 'masaustu' | 'mobil' — aynı ad farklı düzenler tutabilir
+            tuval_w INTEGER NOT NULL DEFAULT 1280,
+            tuval_h INTEGER NOT NULL DEFAULT 800,
             elementler TEXT NOT NULL DEFAULT '[]',  -- JSON liste: [{id,type,props}, ...]
             guncelleme_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(cihaz_id, ad)
+            UNIQUE(cihaz_id, ad, hedef)
         )
     ''')
+
+    # Migration: eski sayfalar tablosunda hedef kolonu yoksa (mobil/masaüstü
+    # ayrımından önceki şema) yeniden oluştur, eski veriyi 'masaustu' olarak taşı.
+    eski_sayfa_sql = cursor.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='sayfalar'"
+    ).fetchone()
+    if eski_sayfa_sql and 'hedef' not in eski_sayfa_sql[0]:
+        cursor.execute('ALTER TABLE sayfalar RENAME TO sayfalar_eski')
+        cursor.execute('''
+            CREATE TABLE sayfalar (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cihaz_id INTEGER NOT NULL REFERENCES cihazlar(id) ON DELETE CASCADE,
+                ad TEXT NOT NULL,
+                hedef TEXT NOT NULL DEFAULT 'masaustu',
+                tuval_w INTEGER NOT NULL DEFAULT 1280,
+                tuval_h INTEGER NOT NULL DEFAULT 800,
+                elementler TEXT NOT NULL DEFAULT '[]',
+                guncelleme_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(cihaz_id, ad, hedef)
+            )
+        ''')
+        cursor.execute('''
+            INSERT INTO sayfalar (id, cihaz_id, ad, hedef, tuval_w, tuval_h, elementler, guncelleme_zamani)
+            SELECT id, cihaz_id, ad, 'masaustu', 700, 480, elementler, guncelleme_zamani FROM sayfalar_eski
+        ''')
+        cursor.execute('DROP TABLE sayfalar_eski')
 
     # Migration: eski kullanicilar tablosu UNIQUE(proje_id, kullanici_adi)
     # ile olusmus olabilir (kod hala proje_kodu istiyordu) - artik kullanici
@@ -465,26 +494,35 @@ def cihaz_tag_degerleri(cihaz_id: int):
 # SAYFA (element düzeni — JSON)
 # ============================================================
 
-def sayfa_kaydet(cihaz_id: int, ad: str, elementler: list):
+def sayfa_kaydet(cihaz_id: int, ad: str, elementler: list, hedef: str = 'masaustu',
+                  tuval_w: int = None, tuval_h: int = None):
+    varsayilan_w = 1280 if hedef == 'masaustu' else 420
+    varsayilan_h = 800 if hedef == 'masaustu' else 860
     conn = get_db()
     try:
         conn.execute('''
-            INSERT INTO sayfalar (cihaz_id, ad, elementler, guncelleme_zamani)
-            VALUES (?, ?, ?, datetime('now', '+3 hours'))
-            ON CONFLICT(cihaz_id, ad) DO UPDATE SET
+            INSERT INTO sayfalar (cihaz_id, ad, hedef, tuval_w, tuval_h, elementler, guncelleme_zamani)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+3 hours'))
+            ON CONFLICT(cihaz_id, ad, hedef) DO UPDATE SET
                 elementler = excluded.elementler,
+                tuval_w = excluded.tuval_w,
+                tuval_h = excluded.tuval_h,
                 guncelleme_zamani = datetime('now', '+3 hours')
-        ''', (cihaz_id, ad.strip(), json.dumps(elementler, ensure_ascii=False)))
+        ''', (cihaz_id, ad.strip(), hedef, tuval_w or varsayilan_w, tuval_h or varsayilan_h,
+              json.dumps(elementler, ensure_ascii=False)))
         conn.commit()
         return True
     finally:
         conn.close()
 
 
-def sayfa_getir(cihaz_id: int, ad: str):
+def sayfa_getir(cihaz_id: int, ad: str, hedef: str = 'masaustu'):
     conn = get_db()
     try:
-        row = conn.execute('SELECT * FROM sayfalar WHERE cihaz_id = ? AND ad = ?', (cihaz_id, ad.strip())).fetchone()
+        row = conn.execute(
+            'SELECT * FROM sayfalar WHERE cihaz_id = ? AND ad = ? AND hedef = ?',
+            (cihaz_id, ad.strip(), hedef)
+        ).fetchone()
         if not row:
             return None
         d = dict(row)
@@ -495,6 +533,7 @@ def sayfa_getir(cihaz_id: int, ad: str):
 
 
 def sayfa_sil(cihaz_id: int, ad: str):
+    """Sayfanın TÜM düzenlerini (masaüstü + mobil) siler."""
     conn = get_db()
     try:
         conn.execute('DELETE FROM sayfalar WHERE cihaz_id = ? AND ad = ?', (cihaz_id, ad.strip()))
@@ -504,10 +543,32 @@ def sayfa_sil(cihaz_id: int, ad: str):
         conn.close()
 
 
-def cihaz_sayfalari(cihaz_id: int):
+def sayfa_varyant_sil(cihaz_id: int, ad: str, hedef: str):
+    """Sayfanın sadece tek bir düzenini (örn. sadece mobil) siler."""
     conn = get_db()
     try:
-        rows = conn.execute('SELECT id, ad, guncelleme_zamani FROM sayfalar WHERE cihaz_id = ? ORDER BY ad', (cihaz_id,)).fetchall()
-        return [dict(r) for r in rows]
+        conn.execute('DELETE FROM sayfalar WHERE cihaz_id = ? AND ad = ? AND hedef = ?', (cihaz_id, ad.strip(), hedef))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def cihaz_sayfalari(cihaz_id: int):
+    """Sayfa adlarını, hangi düzenlerin (masaustu/mobil) mevcut olduğunu ve
+    en son güncelleme zamanını gruplanmış şekilde döner."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            'SELECT ad, hedef, guncelleme_zamani FROM sayfalar WHERE cihaz_id = ? ORDER BY ad',
+            (cihaz_id,)
+        ).fetchall()
+        gruplar = {}
+        for r in rows:
+            g = gruplar.setdefault(r['ad'], {'ad': r['ad'], 'hedefler': [], 'guncelleme_zamani': r['guncelleme_zamani']})
+            g['hedefler'].append(r['hedef'])
+            if r['guncelleme_zamani'] and r['guncelleme_zamani'] > (g['guncelleme_zamani'] or ''):
+                g['guncelleme_zamani'] = r['guncelleme_zamani']
+        return sorted(gruplar.values(), key=lambda g: g['ad'])
     finally:
         conn.close()
