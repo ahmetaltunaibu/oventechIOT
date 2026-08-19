@@ -86,7 +86,7 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
         if diger is None:
             flash('Sayfa bulunamadı.', 'danger')
             return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
-        sayfa = {'elementler': [], 'tuval_w': None, 'tuval_h': None}
+        sayfa = {'elementler': [], 'tuval_w': None, 'tuval_h': None, 'arkaplan': None}
 
     varsayilan_w = 1280 if hedef == 'masaustu' else 420
     varsayilan_h = 800 if hedef == 'masaustu' else 860
@@ -100,6 +100,7 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
         cihaz=cihaz, sayfa_ad=sayfa_ad, hedef=hedef, diger_hedef=diger_hedef, diger_var_mi=diger_var_mi,
         tuval_w=sayfa.get('tuval_w') or varsayilan_w,
         tuval_h=sayfa.get('tuval_h') or varsayilan_h,
+        arkaplan=sayfa.get('arkaplan') or '#1e2d3d',
         elementler_json=json.dumps(sayfa['elementler'], ensure_ascii=False),
         tagler_json=json.dumps(tagler, ensure_ascii=False),
     )
@@ -116,7 +117,7 @@ def sayfa_kopyala(cihaz_id, sayfa_ad, hedef):
     if not diger:
         flash('Kopyalanacak diğer düzen bulunamadı.', 'danger')
     else:
-        database.sayfa_kaydet(cihaz_id, sayfa_ad, diger['elementler'], hedef=hedef)
+        database.sayfa_kaydet(cihaz_id, sayfa_ad, diger['elementler'], hedef=hedef, arkaplan=diger['arkaplan'])
         flash('Diğer düzenden kopyalandı — konumları yeni tuvala göre ayarlamayı unutma.', 'success')
     return redirect(url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz_id, sayfa_ad=sayfa_ad, hedef=hedef))
 
@@ -131,7 +132,7 @@ def sayfa_kaydet(cihaz_id, sayfa_ad, hedef):
         return jsonify({'error': 'Geçersiz veri'}), 400
     database.sayfa_kaydet(
         cihaz_id, sayfa_ad, veri['elementler'], hedef=hedef,
-        tuval_w=veri.get('tuval_w'), tuval_h=veri.get('tuval_h')
+        tuval_w=veri.get('tuval_w'), tuval_h=veri.get('tuval_h'), arkaplan=veri.get('arkaplan')
     )
     return jsonify({'success': True})
 
@@ -154,7 +155,8 @@ def sayfa_calistir(cihaz_id, sayfa_ad):
         if not s:
             return 'null'
         return json.dumps({
-            'elementler': s['elementler'], 'tuval_w': s['tuval_w'], 'tuval_h': s['tuval_h']
+            'elementler': s['elementler'], 'tuval_w': s['tuval_w'], 'tuval_h': s['tuval_h'],
+            'arkaplan': s['arkaplan']
         }, ensure_ascii=False)
 
     return render_template(

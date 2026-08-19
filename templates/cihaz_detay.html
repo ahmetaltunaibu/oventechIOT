@@ -8,18 +8,17 @@
     <p style="font-size:12px;color:var(--text-secondary);font-family:monospace;">Cihaz Kimliği: {{ cihaz.cihaz_kimlik }}</p>
 
     {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
-    <form method="POST" action="{{ url_for('dashboard.cihaz_yeniden_adlandir', cihaz_id=cihaz.id) }}" style="margin-top:14px;display:flex;gap:8px;align-items:flex-end;max-width:420px;">
-        <div style="flex:1;">
-            <label>Cihaz Adını Değiştir</label>
-            <input type="text" name="ad" value="{{ cihaz.ad }}" required style="margin-bottom:0;">
-        </div>
-        <button type="submit">Kaydet</button>
-    </form>
-
-    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:12px;color:var(--text-secondary);">Bu cihazı silmek, bağlı tüm tag ve sayfaları da kalıcı olarak siler.</span>
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+        <form method="POST" action="{{ url_for('dashboard.cihaz_yeniden_adlandir', cihaz_id=cihaz.id) }}" style="display:flex;gap:8px;align-items:flex-end;flex:1;min-width:220px;">
+            <div style="flex:1;">
+                <label>Cihaz Adını Değiştir</label>
+                <input type="text" name="ad" value="{{ cihaz.ad }}" required style="margin-bottom:0;">
+            </div>
+            <button type="submit">Kaydet</button>
+        </form>
         <form method="POST" action="{{ url_for('dashboard.cihaz_sil', cihaz_id=cihaz.id) }}" onsubmit="return confirm('{{ cihaz.ad }} silinsin mi? Tüm tag ve sayfaları da silinir.');">
-            <button type="submit" style="background:var(--red);">Cihazı Sil</button>
+            <label style="visibility:hidden;">.</label>
+            <button type="submit" style="background:var(--red);display:block;">Cihazı Sil</button>
         </form>
     </div>
     {% endif %}

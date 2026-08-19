@@ -50,6 +50,7 @@ function tuvalCiz() {
     const tuval = document.getElementById('tuval');
     tuval.style.width = aktifSayfa.tuval_w + 'px';
     tuval.style.height = aktifSayfa.tuval_h + 'px';
+    tuval.style.background = aktifSayfa.arkaplan || '#1e2d3d';
     tuval.innerHTML = '';
     aktifSayfa.elementler.forEach(el => {
         const div = document.createElement('div');

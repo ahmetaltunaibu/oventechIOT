@@ -71,7 +71,19 @@
 
     <div id="panel">
         <div class="card">
-            <h2>Özellikler</h2>
+            <h2>Sayfa Özellikleri ({{ 'Masaüstü' if hedef == 'masaustu' else 'Mobil' }})</h2>
+            <label>Genişlik / Yükseklik (px)</label>
+            <div style="display:flex;gap:8px;">
+                <input type="number" id="sayfaW" value="{{ tuval_w }}" min="100">
+                <input type="number" id="sayfaH" value="{{ tuval_h }}" min="100">
+            </div>
+            <label>Arka Plan Rengi</label>
+            <input type="color" id="sayfaArkaplan" value="{{ arkaplan }}" style="height:38px;">
+            <button type="button" onclick="sayfaOzellikUygula()" style="width:100%;margin-top:4px;">Tuvala Uygula</button>
+        </div>
+
+        <div class="card">
+            <h2>Element Özellikleri</h2>
             <div id="panelBos" class="panel-alan aktif">
                 <p style="font-size:13px;color:var(--text-secondary);">Düzenlemek için bir elementi seç.</p>
             </div>
@@ -120,9 +132,25 @@
 <script>
 let elementler = {{ elementler_json | safe }};
 const tagler = {{ tagler_json | safe }};
-const tuvalW = {{ tuval_w }};
-const tuvalH = {{ tuval_h }};
+let tuvalW = {{ tuval_w }};
+let tuvalH = {{ tuval_h }};
+let arkaplan = "{{ arkaplan }}";
 const hedef = "{{ hedef }}";
+
+function tuvalCerceveGuncelle() {
+    const tuval = document.getElementById('tuval');
+    tuval.style.width = tuvalW + 'px';
+    tuval.style.height = tuvalH + 'px';
+    tuval.style.background = arkaplan;
+}
+
+function sayfaOzellikUygula() {
+    tuvalW = parseInt(document.getElementById('sayfaW').value) || tuvalW;
+    tuvalH = parseInt(document.getElementById('sayfaH').value) || tuvalH;
+    arkaplan = document.getElementById('sayfaArkaplan').value;
+    tuvalCerceveGuncelle();
+}
+tuvalCerceveGuncelle();
 let seciliId = null;
 let surukleniyor = null; // {id, offsetX, offsetY}
 
@@ -245,7 +273,7 @@ async function kaydet() {
         const res = await fetch("{{ url_for('sayfa.sayfa_kaydet', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ elementler: elementler, tuval_w: tuvalW, tuval_h: tuvalH })
+            body: JSON.stringify({ elementler: elementler, tuval_w: tuvalW, tuval_h: tuvalH, arkaplan: arkaplan })
         });
         const data = await res.json();
         durum.textContent = res.ok ? '✅ Kaydedildi' : ('❌ ' + (data.error || 'Hata'));

@@ -106,6 +106,7 @@ def init_db():
             hedef TEXT NOT NULL DEFAULT 'masaustu',  -- 'masaustu' | 'mobil' — aynı ad farklı düzenler tutabilir
             tuval_w INTEGER NOT NULL DEFAULT 1280,
             tuval_h INTEGER NOT NULL DEFAULT 800,
+            arkaplan TEXT NOT NULL DEFAULT '#1e2d3d',
             elementler TEXT NOT NULL DEFAULT '[]',  -- JSON liste: [{id,type,props}, ...]
             guncelleme_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(cihaz_id, ad, hedef)
@@ -127,6 +128,7 @@ def init_db():
                 hedef TEXT NOT NULL DEFAULT 'masaustu',
                 tuval_w INTEGER NOT NULL DEFAULT 1280,
                 tuval_h INTEGER NOT NULL DEFAULT 800,
+                arkaplan TEXT NOT NULL DEFAULT '#1e2d3d',
                 elementler TEXT NOT NULL DEFAULT '[]',
                 guncelleme_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(cihaz_id, ad, hedef)
@@ -137,6 +139,12 @@ def init_db():
             SELECT id, cihaz_id, ad, 'masaustu', 700, 480, elementler, guncelleme_zamani FROM sayfalar_eski
         ''')
         cursor.execute('DROP TABLE sayfalar_eski')
+
+    # Migration: eski sayfalar tablosunda arkaplan kolonu yoksa ekle (Sayfa
+    # Özellikleri paneli için gerekli).
+    sayfa_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(sayfalar)").fetchall()}
+    if sayfa_kolonlari and 'arkaplan' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan TEXT NOT NULL DEFAULT '#1e2d3d'")
 
     # Migration: eski kullanicilar tablosu UNIQUE(proje_id, kullanici_adi)
     # ile olusmus olabilir (kod hala proje_kodu istiyordu) - artik kullanici
@@ -495,21 +503,22 @@ def cihaz_tag_degerleri(cihaz_id: int):
 # ============================================================
 
 def sayfa_kaydet(cihaz_id: int, ad: str, elementler: list, hedef: str = 'masaustu',
-                  tuval_w: int = None, tuval_h: int = None):
+                  tuval_w: int = None, tuval_h: int = None, arkaplan: str = None):
     varsayilan_w = 1280 if hedef == 'masaustu' else 420
     varsayilan_h = 800 if hedef == 'masaustu' else 860
     conn = get_db()
     try:
         conn.execute('''
-            INSERT INTO sayfalar (cihaz_id, ad, hedef, tuval_w, tuval_h, elementler, guncelleme_zamani)
-            VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+3 hours'))
+            INSERT INTO sayfalar (cihaz_id, ad, hedef, tuval_w, tuval_h, arkaplan, elementler, guncelleme_zamani)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '+3 hours'))
             ON CONFLICT(cihaz_id, ad, hedef) DO UPDATE SET
                 elementler = excluded.elementler,
                 tuval_w = excluded.tuval_w,
                 tuval_h = excluded.tuval_h,
+                arkaplan = excluded.arkaplan,
                 guncelleme_zamani = datetime('now', '+3 hours')
         ''', (cihaz_id, ad.strip(), hedef, tuval_w or varsayilan_w, tuval_h or varsayilan_h,
-              json.dumps(elementler, ensure_ascii=False)))
+              arkaplan or '#1e2d3d', json.dumps(elementler, ensure_ascii=False)))
         conn.commit()
         return True
     finally:
