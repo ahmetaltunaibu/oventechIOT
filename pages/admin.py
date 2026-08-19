@@ -46,6 +46,27 @@ def admin_login():
     return render_template('admin_login.html')
 
 
+@admin_bp.route('/debug-env')
+def debug_env():
+    """Geçici teşhis: sunucunun gördüğü admin env değişkenlerini maskeli gösterir.
+    Yalnızca mevcut PLATFORM_ADMIN_KEY ile korunur (backup anahtarıyla aynı)."""
+    verilen = request.args.get('anahtar', '')
+    if not verilen or verilen != os.environ.get('PLATFORM_ADMIN_KEY'):
+        return {'error': 'Unauthorized'}, 401
+
+    def mask(v):
+        if not v:
+            return None
+        if len(v) <= 4:
+            return '*' * len(v)
+        return v[0] + '*' * (len(v) - 2) + v[-1] + f' (uzunluk={len(v)})'
+
+    return {
+        'PLATFORM_ADMIN_USER': mask(PLATFORM_ADMIN_USER),
+        'PLATFORM_ADMIN_PASSWORD': mask(PLATFORM_ADMIN_PASSWORD),
+    }
+
+
 @admin_bp.route('/logout')
 def admin_logout():
     session.clear()
