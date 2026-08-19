@@ -32,17 +32,59 @@ def cihaz_ekle():
     return redirect(url_for('dashboard.dashboard_page'))
 
 
+def _cihaz_dogrula(cihaz_id):
+    """Cihazın oturumdaki projeye ait olduğunu doğrular, yoksa None döner."""
+    cihazlar = {c['id']: c for c in database.proje_cihazlari(session['proje_id'])}
+    return cihazlar.get(cihaz_id)
+
+
 @dashboard_bp.route('/cihaz/<int:cihaz_id>')
 @login_required
 def cihaz_detay(cihaz_id):
-    cihazlar = {c['id']: c for c in database.proje_cihazlari(session['proje_id'])}
-    cihaz = cihazlar.get(cihaz_id)
+    cihaz = _cihaz_dogrula(cihaz_id)
     if not cihaz:
         flash('Cihaz bulunamadı ya da bu projeye ait değil.', 'danger')
         return redirect(url_for('dashboard.dashboard_page'))
     tagler = database.cihaz_tagleri(cihaz_id)
     sayfalar = database.cihaz_sayfalari(cihaz_id)
     return render_template('cihaz_detay.html', cihaz=cihaz, tagler=tagler, sayfalar=sayfalar)
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/yeniden-adlandir', methods=['POST'])
+@tasarimci_required
+def cihaz_yeniden_adlandir(cihaz_id):
+    if not _cihaz_dogrula(cihaz_id):
+        flash('Cihaz bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    yeni_ad = request.form.get('ad', '').strip()
+    if not yeni_ad:
+        flash('Cihaz adı zorunlu.', 'danger')
+    else:
+        database.cihaz_yeniden_adlandir(cihaz_id, yeni_ad)
+        flash('Cihaz adı güncellendi.', 'success')
+    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/sil', methods=['POST'])
+@tasarimci_required
+def cihaz_sil(cihaz_id):
+    if not _cihaz_dogrula(cihaz_id):
+        flash('Cihaz bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    database.cihaz_sil(cihaz_id)
+    flash('Cihaz silindi.', 'success')
+    return redirect(url_for('dashboard.dashboard_page'))
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/tag/<int:tag_id>/sil', methods=['POST'])
+@tasarimci_required
+def tag_sil(cihaz_id, tag_id):
+    if not _cihaz_dogrula(cihaz_id):
+        flash('Cihaz bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    database.tag_sil(tag_id)
+    flash('Tag silindi.', 'success')
+    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/tag-ekle', methods=['POST'])

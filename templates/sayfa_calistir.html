@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{{ sayfa_ad }} - {{ cihaz.ad }}{% endblock %}
+{% block extra_css %}
+<style>
+    #tuval {
+        position: relative;
+        width: 700px; max-width: 100%; height: 480px;
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .el-buton {
+        position: absolute;
+        border: none; border-radius: 6px;
+        font-size: 13px; font-weight: 600;
+        cursor: pointer; user-select: none;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        transition: filter 0.1s;
+    }
+    .el-buton:active { filter: brightness(0.85); }
+</style>
+{% endblock %}
+{% block content %}
+<p><a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}">&larr; {{ cihaz.ad }}</a></p>
+
+<div class="card">
+    <h2>{{ sayfa_ad }}</h2>
+    <div id="tuval"></div>
+</div>
+
+<script>
+const elementler = {{ elementler_json | safe }};
+const cihazId = {{ cihaz.id }};
+let degerler = {}; // tag_id -> {ad, deger, yazilacak_deger}
+
+function tuvalCiz() {
+    const tuval = document.getElementById('tuval');
+    tuval.innerHTML = '';
+    elementler.forEach(el => {
+        const div = document.createElement('div');
+        div.className = 'el-buton';
+        div.dataset.id = el.id;
+        div.style.left = el.x + 'px';
+        div.style.top = el.y + 'px';
+        div.style.width = el.w + 'px';
+        div.style.height = el.h + 'px';
+        div.style.color = el.renk_yazi;
+        div.textContent = el.label;
+        renkGuncelle(div, el);
+
+        if (el.mod === 'momentary') {
+            div.addEventListener('mousedown', () => yaz(el, el.acik_deger));
+            div.addEventListener('touchstart', (e) => { e.preventDefault(); yaz(el, el.acik_deger); });
+            div.addEventListener('mouseup', () => yaz(el, el.kapali_deger));
+            div.addEventListener('touchend', (e) => { e.preventDefault(); yaz(el, el.kapali_deger); });
+        } else {
+            div.addEventListener('click', () => tikla(el));
+        }
+        tuval.appendChild(div);
+    });
+}
+
+function renkGuncelle(div, el) {
+    const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+    const acik = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+    div.style.background = acik ? el.renk_acik : el.renk_kapali;
+}
+
+function tikla(el) {
+    if (!el.tag_id) return;
+    if (el.mod === 'set_on') { yaz(el, el.acik_deger); return; }
+    if (el.mod === 'set_off') { yaz(el, el.kapali_deger); return; }
+    // toggle
+    const guncelDeger = degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+    const acik = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+    yaz(el, acik ? el.kapali_deger : el.acik_deger);
+}
+
+async function yaz(el, deger) {
+    if (!el.tag_id) return;
+    try {
+        await fetch(`/api/cihaz/${cihazId}/tag/${el.tag_id}/yaz`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deger: deger })
+        });
+        // İyimser güncelleme — ESP32 onayı gelene kadar geçici gösterim
+        if (!degerler[el.tag_id]) degerler[el.tag_id] = {};
+        degerler[el.tag_id].deger = deger;
+        tuvalCiz();
+    } catch (e) { /* sessiz geç, bir sonraki poll düzeltir */ }
+}
+
+async function degerleriYenile() {
+    try {
+        const res = await fetch(`/api/cihaz/${cihazId}/degerler`);
+        if (!res.ok) return;
+        degerler = await res.json();
+        tuvalCiz();
+    } catch (e) { /* bağlantı sorunu — sessiz geç */ }
+}
+
+tuvalCiz();
+degerleriYenile();
+setInterval(degerleriYenile, 3000);
+</script>
+{% endblock %}

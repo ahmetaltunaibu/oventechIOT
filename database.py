@@ -81,9 +81,22 @@ def init_db():
             olcek_max_raw REAL DEFAULT 0,
             olcek_min_muh REAL DEFAULT 0,
             olcek_max_muh REAL DEFAULT 0,
+            deger TEXT,                          -- ESP32'den en son okunan değer
+            yazilacak_deger TEXT,                -- kullanıcının yazmak istediği, ESP32'ye henüz iletilmemiş değer
+            deger_zamani TIMESTAMP,
             UNIQUE(cihaz_id, ad)
         )
     ''')
+
+    # Migration: eski tagler tablosunda deger/yazilacak_deger/deger_zamani
+    # kolonları yoksa ekle (Step 2 - Button elementi için gerekli).
+    mevcut_kolonlar = {row[1] for row in cursor.execute("PRAGMA table_info(tagler)").fetchall()}
+    if 'deger' not in mevcut_kolonlar:
+        cursor.execute('ALTER TABLE tagler ADD COLUMN deger TEXT')
+    if 'yazilacak_deger' not in mevcut_kolonlar:
+        cursor.execute('ALTER TABLE tagler ADD COLUMN yazilacak_deger TEXT')
+    if 'deger_zamani' not in mevcut_kolonlar:
+        cursor.execute('ALTER TABLE tagler ADD COLUMN deger_zamani TIMESTAMP')
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sayfalar (
@@ -258,6 +271,27 @@ def cihaz_getir_kimlik(cihaz_kimlik: str):
         conn.close()
 
 
+def cihaz_yeniden_adlandir(cihaz_id: int, yeni_ad: str):
+    conn = get_db()
+    try:
+        conn.execute('UPDATE cihazlar SET ad = ? WHERE id = ?', (yeni_ad.strip(), cihaz_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def cihaz_sil(cihaz_id: int):
+    """Cihazı ve ona bağlı tag/sayfaları siler (ON DELETE CASCADE)."""
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM cihazlar WHERE id = ?', (cihaz_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def cihaz_son_gorulme_guncelle(cihaz_kimlik: str):
     conn = get_db()
     try:
@@ -298,6 +332,67 @@ def cihaz_tagleri(cihaz_id: int):
         conn.close()
 
 
+def tag_sil(tag_id: int):
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM tagler WHERE id = ?', (tag_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def tag_getir(tag_id: int):
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT * FROM tagler WHERE id = ?', (tag_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def tag_yaz_iste(tag_id: int, deger):
+    """Kullanıcı bir butona bastı — ESP32 bir sonraki xchange'de bunu okuyup
+    PLC'ye yazacak (ESP32 tarafı ayrı bir görev). Değer string olarak saklanır."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE tagler SET yazilacak_deger = ? WHERE id = ?",
+            (str(deger), tag_id)
+        )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def tag_deger_guncelle(tag_id: int, deger):
+    """ESP32'den gelen okunan değeri kaydeder (xchange sırasında kullanılacak)."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE tagler SET deger = ?, deger_zamani = datetime('now', '+3 hours') WHERE id = ?",
+            (str(deger), tag_id)
+        )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def cihaz_tag_degerleri(cihaz_id: int):
+    """Runtime sayfaların değer okuması için: {tag_id: {ad, deger, yazilacak_deger, deger_zamani}}"""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            'SELECT id, ad, deger, yazilacak_deger, deger_zamani FROM tagler WHERE cihaz_id = ?',
+            (cihaz_id,)
+        ).fetchall()
+        return {r['id']: dict(r) for r in rows}
+    finally:
+        conn.close()
+
+
 # ============================================================
 # SAYFA (element düzeni — JSON)
 # ============================================================
@@ -327,6 +422,16 @@ def sayfa_getir(cihaz_id: int, ad: str):
         d = dict(row)
         d['elementler'] = json.loads(d['elementler'])
         return d
+    finally:
+        conn.close()
+
+
+def sayfa_sil(cihaz_id: int, ad: str):
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM sayfalar WHERE cihaz_id = ? AND ad = ?', (cihaz_id, ad.strip()))
+        conn.commit()
+        return True
     finally:
         conn.close()
 

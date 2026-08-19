@@ -5,6 +5,7 @@ from pages.login import login_bp
 from pages.dashboard import dashboard_bp
 from pages.yedekleme import yedekleme_bp
 from pages.admin import admin_bp
+from pages.sayfa import sayfa_bp
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-degistir')
@@ -16,6 +17,7 @@ app.register_blueprint(login_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(yedekleme_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(sayfa_bp)
 
 
 @app.after_request

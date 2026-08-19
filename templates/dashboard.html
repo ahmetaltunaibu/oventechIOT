@@ -5,7 +5,7 @@
     <h2>Cihazlar</h2>
     {% if cihazlar %}
     <table>
-        <thead><tr><th>Ad</th><th>Kimlik</th><th>Son Görülme</th></tr></thead>
+        <thead><tr><th>Ad</th><th>Kimlik</th><th>Son Görülme</th>{% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}<th></th>{% endif %}</tr></thead>
         <tbody>
         {% for c in cihazlar %}
             <tr>
@@ -18,6 +18,13 @@
                         <span class="badge">Hiç bağlanmadı</span>
                     {% endif %}
                 </td>
+                {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+                <td style="white-space:nowrap;">
+                    <form method="POST" action="{{ url_for('dashboard.cihaz_sil', cihaz_id=c.id) }}" style="display:inline;" onsubmit="return confirm('{{ c.ad }} silinsin mi? Tüm tag ve sayfaları da silinir.');">
+                        <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
+                    </form>
+                </td>
+                {% endif %}
             </tr>
         {% endfor %}
         </tbody>
