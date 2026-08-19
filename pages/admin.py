@@ -9,8 +9,13 @@ import database
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
-PLATFORM_ADMIN_USER = os.environ.get('PLATFORM_ADMIN_USER')
-PLATFORM_ADMIN_PASSWORD = os.environ.get('PLATFORM_ADMIN_PASSWORD')
+def _env_strip(ad):
+    v = os.environ.get(ad)
+    return v.strip() if v else v
+
+
+PLATFORM_ADMIN_USER = _env_strip('PLATFORM_ADMIN_USER')
+PLATFORM_ADMIN_PASSWORD = _env_strip('PLATFORM_ADMIN_PASSWORD')
 
 
 def admin_required(f):
@@ -27,9 +32,11 @@ def admin_required(f):
 def admin_login():
     if request.method == 'POST':
         kullanici_adi = request.form.get('kullanici_adi', '').strip()
-        sifre = request.form.get('sifre', '')
-        if (PLATFORM_ADMIN_USER and PLATFORM_ADMIN_PASSWORD
-                and kullanici_adi == PLATFORM_ADMIN_USER and sifre == PLATFORM_ADMIN_PASSWORD):
+        sifre = request.form.get('sifre', '').strip()
+        if not PLATFORM_ADMIN_USER or not PLATFORM_ADMIN_PASSWORD:
+            flash('Sunucuda PLATFORM_ADMIN_USER / PLATFORM_ADMIN_PASSWORD ortam değişkenleri tanımlı değil.', 'danger')
+            return redirect(url_for('admin.admin_login'))
+        if (kullanici_adi == PLATFORM_ADMIN_USER and sifre == PLATFORM_ADMIN_PASSWORD):
             session.clear()
             session['platform_admin'] = True
             session['kullanici_adi'] = kullanici_adi
