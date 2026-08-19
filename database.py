@@ -100,6 +100,13 @@ def init_db():
 # PROJE
 # ============================================================
 
+def hic_proje_var_mi() -> bool:
+    conn = get_db()
+    try:
+        return conn.execute('SELECT COUNT(*) AS n FROM projeler').fetchone()['n'] > 0
+    finally:
+        conn.close()
+
 def proje_ekle(kod: str, ad: str):
     conn = get_db()
     try:
