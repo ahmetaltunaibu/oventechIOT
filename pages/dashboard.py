@@ -87,6 +87,30 @@ def tag_sil(cihaz_id, tag_id):
     return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
 
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/tag/<int:tag_id>/duzenle', methods=['POST'])
+@tasarimci_required
+def tag_duzenle(cihaz_id, tag_id):
+    if not _cihaz_dogrula(cihaz_id):
+        flash('Cihaz bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+
+    ad           = request.form.get('ad', '').strip()
+    modbus_adres = request.form.get('modbus_adres', '').strip()
+    veri_tipi    = request.form.get('veri_tipi', 'bool')
+    erisim       = request.form.get('erisim', 'read')
+
+    if not ad or not modbus_adres:
+        flash('Tag adı ve Modbus adresi zorunlu.', 'danger')
+        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+    ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim)
+    if ok:
+        flash('Tag güncellendi.', 'success')
+    else:
+        flash(f'Hata: {hata}', 'danger')
+    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/tag-ekle', methods=['POST'])
 @tasarimci_required
 def tag_ekle(cihaz_id):

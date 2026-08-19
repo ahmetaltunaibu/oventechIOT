@@ -3,6 +3,8 @@ görür/yönetir, yeni proje açar. Kimlik bilgisi ortam değişkeninde
 (PLATFORM_ADMIN_USER / PLATFORM_ADMIN_PASSWORD), veritabanında kaydı yok.
 """
 import os
+import re
+import unicodedata
 from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 import database
@@ -59,14 +61,30 @@ def admin_page():
     return render_template('admin.html', projeler=projeler)
 
 
+def _slug_uret(metin: str) -> str:
+    """'Oventech Test A.Ş.' -> 'oventech-test-as' gibi bir kod üretir.
+    Proje kodu sadece iç kullanım içindir (DB'de benzersiz kimlik), kullanıcıya
+    hiçbir yerde gösterilmez/girilmez."""
+    normal = unicodedata.normalize('NFKD', metin).encode('ascii', 'ignore').decode('ascii')
+    slug = re.sub(r'[^a-zA-Z0-9]+', '-', normal).strip('-').lower()
+    return slug or 'proje'
+
+
 @admin_bp.route('/proje-ekle', methods=['POST'])
 @admin_required
 def proje_ekle():
-    kod = request.form.get('kod', '').strip()
     ad = request.form.get('ad', '').strip()
-    if not kod or not ad:
-        flash('Proje kodu ve adı zorunlu.', 'danger')
+    if not ad:
+        flash('Proje adı zorunlu.', 'danger')
         return redirect(url_for('admin.admin_page'))
+
+    taban_kod = _slug_uret(ad)
+    kod = taban_kod
+    sayac = 2
+    while database.proje_getir_kod(kod):
+        kod = f'{taban_kod}-{sayac}'
+        sayac += 1
+
     ok, sonuc = database.proje_ekle(kod, ad)
     if ok:
         flash(f'Proje oluşturuldu: {ad}', 'success')
@@ -99,6 +117,26 @@ def proje_sil(proje_id):
     database.proje_sil(proje_id)
     flash('Proje silindi.', 'success')
     return redirect(url_for('admin.admin_page'))
+
+
+@admin_bp.route('/proje/<int:proje_id>/kullanici/<int:kullanici_id>/duzenle', methods=['POST'])
+@admin_required
+def kullanici_duzenle(proje_id, kullanici_id):
+    if not database.proje_getir(proje_id):
+        flash('Proje bulunamadı.', 'danger')
+        return redirect(url_for('admin.admin_page'))
+
+    ad_soyad = request.form.get('ad_soyad', '').strip()
+    rol = request.form.get('rol', 'operator')
+    yeni_sifre = request.form.get('yeni_sifre', '').strip()
+
+    if not ad_soyad:
+        flash('Ad soyad zorunlu.', 'danger')
+        return redirect(url_for('admin.proje_detay', proje_id=proje_id))
+
+    database.kullanici_guncelle(kullanici_id, ad_soyad, rol, yeni_sifre or None)
+    flash('Kullanıcı güncellendi.' + (' Şifre de değiştirildi.' if yeni_sifre else ''), 'success')
+    return redirect(url_for('admin.proje_detay', proje_id=proje_id))
 
 
 @admin_bp.route('/proje/<int:proje_id>/kullanici/<int:kullanici_id>/sil', methods=['POST'])

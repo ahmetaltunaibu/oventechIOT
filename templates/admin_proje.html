@@ -27,23 +27,34 @@
 <div class="card">
     <h2>Kullanıcılar</h2>
     {% if kullanicilar %}
-    <table>
-        <thead><tr><th>Kullanıcı Adı</th><th>Ad Soyad</th><th>Rol</th><th></th></tr></thead>
-        <tbody>
-        {% for k in kullanicilar %}
-            <tr>
-                <td>{{ k.kullanici_adi }}</td>
-                <td>{{ k.ad_soyad }}</td>
-                <td><span class="badge">{{ k.rol }}</span></td>
-                <td>
-                    <form method="POST" action="{{ url_for('admin.kullanici_sil', proje_id=proje.id, kullanici_id=k.id) }}" style="display:inline;" onsubmit="return confirm('{{ k.kullanici_adi }} silinsin mi?');">
-                        <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
-                    </form>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    {% for k in kullanicilar %}
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-family:monospace;font-size:13px;">{{ k.kullanici_adi }}</span>
+            <form method="POST" action="{{ url_for('admin.kullanici_sil', proje_id=proje.id, kullanici_id=k.id) }}" onsubmit="return confirm('{{ k.kullanici_adi }} silinsin mi?');">
+                <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
+            </form>
+        </div>
+        <form method="POST" action="{{ url_for('admin.kullanici_duzenle', proje_id=proje.id, kullanici_id=k.id) }}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:140px;">
+                <label>Ad Soyad</label>
+                <input type="text" name="ad_soyad" value="{{ k.ad_soyad }}" required style="margin-bottom:0;">
+            </div>
+            <div>
+                <label>Rol</label>
+                <select name="rol" style="margin-bottom:0;">
+                    <option value="operator" {% if k.rol == 'operator' %}selected{% endif %}>Operatör</option>
+                    <option value="tasarimci" {% if k.rol == 'tasarimci' %}selected{% endif %}>Tasarımcı</option>
+                </select>
+            </div>
+            <div style="flex:1;min-width:140px;">
+                <label>Yeni Şifre (boş bırakılırsa değişmez)</label>
+                <input type="password" name="yeni_sifre" style="margin-bottom:0;">
+            </div>
+            <button type="submit">Kaydet</button>
+        </form>
+    </div>
+    {% endfor %}
     {% else %}
     <p style="color:var(--text-secondary);font-size:14px;">Henüz kullanıcı yok.</p>
     {% endif %}

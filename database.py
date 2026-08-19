@@ -240,6 +240,25 @@ def kullanici_ekle(proje_id: int, kullanici_adi: str, sifre: str, ad_soyad: str,
         conn.close()
 
 
+def kullanici_guncelle(kullanici_id: int, ad_soyad: str, rol: str, yeni_sifre: str = None):
+    conn = get_db()
+    try:
+        if yeni_sifre:
+            conn.execute(
+                'UPDATE kullanicilar SET ad_soyad = ?, rol = ?, sifre_hash = ? WHERE id = ?',
+                (ad_soyad.strip(), rol, _sifre_hashle(yeni_sifre), kullanici_id)
+            )
+        else:
+            conn.execute(
+                'UPDATE kullanicilar SET ad_soyad = ?, rol = ? WHERE id = ?',
+                (ad_soyad.strip(), rol, kullanici_id)
+            )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def kullanici_sil(kullanici_id: int):
     conn = get_db()
     try:
@@ -351,6 +370,21 @@ def tag_ekle(cihaz_id: int, ad: str, modbus_adres: str, veri_tipi: str = 'bool',
         ''', (cihaz_id, ad.strip(), modbus_adres.strip(), veri_tipi, erisim))
         conn.commit()
         return True, cur.lastrowid
+    except sqlite3.IntegrityError:
+        return False, 'Bu isimde bir tag bu cihazda zaten var'
+    finally:
+        conn.close()
+
+
+def tag_guncelle(tag_id: int, ad: str, modbus_adres: str, veri_tipi: str, erisim: str):
+    conn = get_db()
+    try:
+        conn.execute('''
+            UPDATE tagler SET ad = ?, modbus_adres = ?, veri_tipi = ?, erisim = ?
+            WHERE id = ?
+        ''', (ad.strip(), modbus_adres.strip(), veri_tipi, erisim, tag_id))
+        conn.commit()
+        return True, None
     except sqlite3.IntegrityError:
         return False, 'Bu isimde bir tag bu cihazda zaten var'
     finally:

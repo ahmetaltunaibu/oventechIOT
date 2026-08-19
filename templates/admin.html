@@ -31,8 +31,6 @@
 <div class="card">
     <h2>Yeni Proje</h2>
     <form method="POST" action="{{ url_for('admin.proje_ekle') }}">
-        <label>Proje Kodu (iç kullanım, benzersiz)</label>
-        <input type="text" name="kod" placeholder="örn. oventech-musteri1" required autocomplete="off">
         <label>Proje / Müşteri Adı</label>
         <input type="text" name="ad" placeholder="örn. Oventech Test A.Ş." required>
         <button type="submit">Proje Oluştur</button>

@@ -25,27 +25,61 @@
 
 <div class="card">
     <h2>Tag'ler</h2>
+    {% set tasarimci_mi = session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
     {% if tagler %}
-    <table>
-        <thead><tr><th>Ad</th><th>Modbus Adres</th><th>Tip</th><th>Erişim</th>{% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}<th></th>{% endif %}</tr></thead>
-        <tbody>
+        {% if tasarimci_mi %}
         {% for t in tagler %}
-            <tr>
-                <td>{{ t.ad }}</td>
-                <td style="font-family:monospace;">{{ t.modbus_adres }}</td>
-                <td>{{ t.veri_tipi }}</td>
-                <td>{{ t.erisim }}</td>
-                {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
-                <td>
-                    <form method="POST" action="{{ url_for('dashboard.tag_sil', cihaz_id=cihaz.id, tag_id=t.id) }}" style="display:inline;" onsubmit="return confirm('{{ t.ad }} tag\'i silinsin mi?');">
-                        <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
-                    </form>
-                </td>
-                {% endif %}
-            </tr>
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:13px;color:var(--text-secondary);">#{{ t.id }}</span>
+                <form method="POST" action="{{ url_for('dashboard.tag_sil', cihaz_id=cihaz.id, tag_id=t.id) }}" onsubmit="return confirm('{{ t.ad }} tag\'i silinsin mi?');">
+                    <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
+                </form>
+            </div>
+            <form method="POST" action="{{ url_for('dashboard.tag_duzenle', cihaz_id=cihaz.id, tag_id=t.id) }}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                <div style="flex:1;min-width:120px;">
+                    <label>Tag Adı</label>
+                    <input type="text" name="ad" value="{{ t.ad }}" required style="margin-bottom:0;">
+                </div>
+                <div style="flex:1;min-width:120px;">
+                    <label>Modbus Adresi</label>
+                    <input type="text" name="modbus_adres" value="{{ t.modbus_adres }}" required style="margin-bottom:0;">
+                </div>
+                <div>
+                    <label>Veri Tipi</label>
+                    <select name="veri_tipi" style="margin-bottom:0;">
+                        <option value="bool" {% if t.veri_tipi == 'bool' %}selected{% endif %}>bool</option>
+                        <option value="int" {% if t.veri_tipi == 'int' %}selected{% endif %}>int</option>
+                        <option value="float" {% if t.veri_tipi == 'float' %}selected{% endif %}>float</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Erişim</label>
+                    <select name="erisim" style="margin-bottom:0;">
+                        <option value="read" {% if t.erisim == 'read' %}selected{% endif %}>okuma</option>
+                        <option value="write" {% if t.erisim == 'write' %}selected{% endif %}>yazma</option>
+                        <option value="readwrite" {% if t.erisim == 'readwrite' %}selected{% endif %}>okuma+yazma</option>
+                    </select>
+                </div>
+                <button type="submit">Kaydet</button>
+            </form>
+        </div>
         {% endfor %}
-        </tbody>
-    </table>
+        {% else %}
+        <table>
+            <thead><tr><th>Ad</th><th>Modbus Adres</th><th>Tip</th><th>Erişim</th></tr></thead>
+            <tbody>
+            {% for t in tagler %}
+                <tr>
+                    <td>{{ t.ad }}</td>
+                    <td style="font-family:monospace;">{{ t.modbus_adres }}</td>
+                    <td>{{ t.veri_tipi }}</td>
+                    <td>{{ t.erisim }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
     {% else %}
     <p style="color:var(--text-secondary);font-size:14px;">Henüz tag eklenmedi.</p>
     {% endif %}
