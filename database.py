@@ -249,6 +249,9 @@ def cihaz_ekle(proje_id: int, ad: str):
         ''', (proje_id, cihaz_kimlik, ad.strip()))
         conn.commit()
         return True, {'id': cur.lastrowid, 'cihaz_kimlik': cihaz_kimlik}
+    except sqlite3.IntegrityError:
+        return False, ('Bu proje artık bulunamıyor (oturumunuz güncel olmayan bir '
+                        'projeye işaret ediyor olabilir). Çıkış yapıp tekrar giriş deneyin.')
     finally:
         conn.close()
 
