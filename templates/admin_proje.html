@@ -9,19 +9,37 @@
     <div style="margin-top:12px;">
         <a class="btn" href="{{ url_for('admin.proje_gir', proje_id=proje.id) }}">Cihazlar / Sayfalar / Tag'lere Gir</a>
     </div>
+
+    <div style="margin-top:16px;display:flex;gap:20px;flex-wrap:wrap;">
+        <form method="POST" action="{{ url_for('admin.proje_duzenle', proje_id=proje.id) }}" style="display:flex;gap:8px;align-items:flex-end;">
+            <div>
+                <label>Proje Adını Değiştir</label>
+                <input type="text" name="ad" value="{{ proje.ad }}" required style="margin-bottom:0;">
+            </div>
+            <button type="submit">Kaydet</button>
+        </form>
+        <form method="POST" action="{{ url_for('admin.proje_sil', proje_id=proje.id) }}" onsubmit="return confirm('{{ proje.ad }} silinsin mi? Tüm kullanıcı/cihaz/tag/sayfaları da silinir.');">
+            <button type="submit" style="background:var(--red);">Projeyi Sil</button>
+        </form>
+    </div>
 </div>
 
 <div class="card">
     <h2>Kullanıcılar</h2>
     {% if kullanicilar %}
     <table>
-        <thead><tr><th>Kullanıcı Adı</th><th>Ad Soyad</th><th>Rol</th></tr></thead>
+        <thead><tr><th>Kullanıcı Adı</th><th>Ad Soyad</th><th>Rol</th><th></th></tr></thead>
         <tbody>
         {% for k in kullanicilar %}
             <tr>
                 <td>{{ k.kullanici_adi }}</td>
                 <td>{{ k.ad_soyad }}</td>
                 <td><span class="badge">{{ k.rol }}</span></td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin.kullanici_sil', proje_id=proje.id, kullanici_id=k.id) }}" style="display:inline;" onsubmit="return confirm('{{ k.kullanici_adi }} silinsin mi?');">
+                        <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
+                    </form>
+                </td>
             </tr>
         {% endfor %}
         </tbody>

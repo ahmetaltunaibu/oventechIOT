@@ -75,6 +75,43 @@ def proje_ekle():
     return redirect(url_for('admin.admin_page'))
 
 
+@admin_bp.route('/proje/<int:proje_id>/duzenle', methods=['POST'])
+@admin_required
+def proje_duzenle(proje_id):
+    if not database.proje_getir(proje_id):
+        flash('Proje bulunamadı.', 'danger')
+        return redirect(url_for('admin.admin_page'))
+    yeni_ad = request.form.get('ad', '').strip()
+    if not yeni_ad:
+        flash('Proje adı zorunlu.', 'danger')
+    else:
+        database.proje_yeniden_adlandir(proje_id, yeni_ad)
+        flash('Proje adı güncellendi.', 'success')
+    return redirect(url_for('admin.proje_detay', proje_id=proje_id))
+
+
+@admin_bp.route('/proje/<int:proje_id>/sil', methods=['POST'])
+@admin_required
+def proje_sil(proje_id):
+    if not database.proje_getir(proje_id):
+        flash('Proje bulunamadı.', 'danger')
+        return redirect(url_for('admin.admin_page'))
+    database.proje_sil(proje_id)
+    flash('Proje silindi.', 'success')
+    return redirect(url_for('admin.admin_page'))
+
+
+@admin_bp.route('/proje/<int:proje_id>/kullanici/<int:kullanici_id>/sil', methods=['POST'])
+@admin_required
+def kullanici_sil(proje_id, kullanici_id):
+    if not database.proje_getir(proje_id):
+        flash('Proje bulunamadı.', 'danger')
+        return redirect(url_for('admin.admin_page'))
+    database.kullanici_sil(kullanici_id)
+    flash('Kullanıcı silindi.', 'success')
+    return redirect(url_for('admin.proje_detay', proje_id=proje_id))
+
+
 @admin_bp.route('/proje/<int:proje_id>')
 @admin_required
 def proje_detay(proje_id):

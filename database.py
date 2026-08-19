@@ -191,6 +191,27 @@ def proje_ekle(kod: str, ad: str):
         conn.close()
 
 
+def proje_yeniden_adlandir(proje_id: int, yeni_ad: str):
+    conn = get_db()
+    try:
+        conn.execute('UPDATE projeler SET ad = ? WHERE id = ?', (yeni_ad.strip(), proje_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def proje_sil(proje_id: int):
+    """Projeyi ve ona bağlı tüm kullanıcı/cihaz/tag/sayfaları siler (ON DELETE CASCADE)."""
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM projeler WHERE id = ?', (proje_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def proje_getir_kod(kod: str):
     conn = get_db()
     try:
@@ -215,6 +236,16 @@ def kullanici_ekle(proje_id: int, kullanici_adi: str, sifre: str, ad_soyad: str,
         return True, cur.lastrowid
     except sqlite3.IntegrityError:
         return False, 'Bu kullanıcı adı zaten kullanılıyor (tüm sistemde benzersiz olmalı)'
+    finally:
+        conn.close()
+
+
+def kullanici_sil(kullanici_id: int):
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM kullanicilar WHERE id = ?', (kullanici_id,))
+        conn.commit()
+        return True
     finally:
         conn.close()
 

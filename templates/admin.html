@@ -13,7 +13,12 @@
                 <td style="font-family:monospace;font-size:12px;">{{ p.kod }}</td>
                 <td>{{ p.cihaz_sayisi }}</td>
                 <td>{{ p.kullanici_sayisi }}</td>
-                <td><a class="btn" href="{{ url_for('admin.proje_gir', proje_id=p.id) }}">Cihazlara Gir</a></td>
+                <td style="white-space:nowrap;">
+                    <a class="btn" href="{{ url_for('admin.proje_gir', proje_id=p.id) }}" style="padding:5px 10px;font-size:12px;">Cihazlara Gir</a>
+                    <form method="POST" action="{{ url_for('admin.proje_sil', proje_id=p.id) }}" style="display:inline;" onsubmit="return confirm('{{ p.ad }} silinsin mi? Tüm kullanıcı/cihaz/tag/sayfaları da silinir.');">
+                        <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
+                    </form>
+                </td>
             </tr>
         {% endfor %}
         </tbody>
