@@ -377,19 +377,6 @@ def cihaz_yeniden_adlandir(cihaz_id: int, yeni_ad: str):
         conn.close()
 
 
-NAV_STILLERI = ('ust_sekme', 'alt_navbar', 'sandvic', 'yok')
-
-
-def cihaz_nav_stili_guncelle(cihaz_id: int, nav_stili: str):
-    if nav_stili not in NAV_STILLERI:
-        nav_stili = 'ust_sekme'
-    conn = get_db()
-    try:
-        conn.execute('UPDATE cihazlar SET nav_stili = ? WHERE id = ?', (nav_stili, cihaz_id))
-        conn.commit()
-        return True
-    finally:
-        conn.close()
 
 
 def cihaz_sil(cihaz_id: int):

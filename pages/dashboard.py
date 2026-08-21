@@ -67,18 +67,6 @@ def cihaz_yeniden_adlandir(cihaz_id):
     return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
 
-@dashboard_bp.route('/cihaz/<int:cihaz_id>/nav-stili', methods=['POST'])
-@tasarimci_required
-def cihaz_nav_stili(cihaz_id):
-    if not _cihaz_dogrula(cihaz_id):
-        flash('Cihaz bulunamadı.', 'danger')
-        return redirect(url_for('dashboard.dashboard_page'))
-    nav_stili = request.form.get('nav_stili', 'ust_sekme')
-    database.cihaz_nav_stili_guncelle(cihaz_id, nav_stili)
-    flash('Navigasyon stili güncellendi.', 'success')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
-
-
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/sil', methods=['POST'])
 @tasarimci_required
 def cihaz_sil(cihaz_id):

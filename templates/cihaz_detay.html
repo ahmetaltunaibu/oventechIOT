@@ -21,19 +21,6 @@
             <button type="submit" style="background:var(--red);display:block;">Cihazı Sil</button>
         </form>
     </div>
-
-    <form method="POST" action="{{ url_for('dashboard.cihaz_nav_stili', cihaz_id=cihaz.id) }}" style="margin-top:14px;display:flex;gap:8px;align-items:flex-end;max-width:420px;">
-        <div style="flex:1;">
-            <label>Sayfalar Arası Navigasyon Stili (birden fazla sayfa varsa runtime'da görünür)</label>
-            <select name="nav_stili" style="margin-bottom:0;">
-                <option value="ust_sekme" {% if cihaz.nav_stili == 'ust_sekme' %}selected{% endif %}>Üst Sekmeler</option>
-                <option value="alt_navbar" {% if cihaz.nav_stili == 'alt_navbar' %}selected{% endif %}>Alt Nav Bar</option>
-                <option value="sandvic" {% if cihaz.nav_stili == 'sandvic' %}selected{% endif %}>Sandviç (Aç/Kapa) Menü</option>
-                <option value="yok" {% if cihaz.nav_stili == 'yok' %}selected{% endif %}>Yok — sadece dashboard'dan geç</option>
-            </select>
-        </div>
-        <button type="submit">Kaydet</button>
-    </form>
     {% endif %}
 </div>
 
