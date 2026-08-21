@@ -144,6 +144,15 @@
     <form method="POST" action="{{ url_for('sayfa.sayfa_olustur', cihaz_id=cihaz.id) }}" style="margin-top:14px;">
         <label>Yeni Sayfa Adı</label>
         <input type="text" name="ad" placeholder="örn. Ana Sayfa" required>
+        {% if proje_sayfalari %}
+        <label>Şablon (opsiyonel — bu projedeki başka bir sayfadan başla)</label>
+        <select name="sablon">
+            <option value="">— boş başla —</option>
+            {% for s in proje_sayfalari %}
+            <option value="{{ s.cihaz_id }}:{{ s.sayfa_ad }}">{{ s.cihaz_ad }} — {{ s.sayfa_ad }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
         <button type="submit">Sayfa Oluştur</button>
     </form>
     {% endif %}

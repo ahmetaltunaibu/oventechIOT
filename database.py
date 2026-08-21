@@ -581,3 +581,21 @@ def cihaz_sayfalari(cihaz_id: int):
         return sorted(gruplar.values(), key=lambda g: g['ad'])
     finally:
         conn.close()
+
+
+def proje_tum_sayfalari(proje_id: int):
+    """Projedeki TÜM cihazların TÜM sayfalarını (şablon seçimi için) döner:
+    [{cihaz_id, cihaz_ad, sayfa_ad}, ...] — her mantıksal sayfa adı bir kez
+    (hangi düzenleri olduğuna bakılmaksızın)."""
+    conn = get_db()
+    try:
+        rows = conn.execute('''
+            SELECT DISTINCT s.cihaz_id, c.ad AS cihaz_ad, s.ad AS sayfa_ad
+            FROM sayfalar s
+            JOIN cihazlar c ON c.id = s.cihaz_id
+            WHERE c.proje_id = ?
+            ORDER BY c.ad, s.ad
+        ''', (proje_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
