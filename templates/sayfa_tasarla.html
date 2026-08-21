@@ -24,7 +24,8 @@
         display: flex; align-items: center; justify-content: center;
         box-shadow: 0 1px 3px rgba(0,0,0,0.4);
     }
-    .el-ogesi.etiket-tipi { box-shadow: none; border: 1px dashed transparent; }
+    .el-ogesi.el-tipi-label, .el-ogesi.el-tipi-sekil, .el-ogesi.el-tipi-resim { box-shadow: none; }
+    .el-ogesi.el-tipi-resim img { width: 100%; height: 100%; pointer-events: none; }
     .el-ogesi.secili { outline: 2px solid var(--accent); outline-offset: 2px; }
     .resize-tutamac {
         position: absolute; right: -6px; bottom: -6px;
@@ -152,8 +153,10 @@
 <div id="element-ozellik-perde" class="modal-perde" onclick="ozellikKapat()"></div>
 <div id="element-ozellik-modal" class="modal-kutu">
     <h2 style="color:var(--accent);font-size:15px;margin-bottom:14px;">Element Özellikleri</h2>
-    <label>Etiket / Metin</label>
-    <input type="text" id="ozLabel">
+    <div id="ozAlanGenelMetin" class="ozel-alan gorunur">
+        <label>Etiket / Metin</label>
+        <input type="text" id="ozLabel">
+    </div>
 
     <div id="ozAlanButon" class="ozel-alan">
         <label>Bağlı Tag</label>
@@ -196,8 +199,34 @@
         </div>
     </div>
 
-    <label>Yazı Rengi</label>
-    <input type="color" id="ozRenkYazi" value="#ffffff" style="height:38px;">
+    <div id="ozAlanSekil" class="ozel-alan">
+        <label>Dolgu Rengi</label>
+        <input type="color" id="ozSekilDolgu" value="#2e9ed9" style="height:38px;">
+        <label>Kenarlık Rengi</label>
+        <input type="color" id="ozSekilKenarlik" value="#1f7bb0" style="height:38px;">
+        <label>Kenarlık Kalınlığı (px)</label>
+        <input type="number" id="ozSekilKenarlikKalinlik" value="0" min="0">
+        <label>Köşe Yarıçapı (px — kareyi daireye çevirmek için W/H'nin yarısını gir)</label>
+        <input type="number" id="ozSekilKose" value="0" min="0">
+    </div>
+
+    <div id="ozAlanResim" class="ozel-alan">
+        <label>Resim URL</label>
+        <input type="text" id="ozResimUrl" placeholder="https://...">
+        <label>Sığdırma</label>
+        <select id="ozResimSigdirma">
+            <option value="cover">Kapla (kırpılabilir)</option>
+            <option value="contain">Sığdır (boşluk kalabilir)</option>
+            <option value="fill">Doldur (gerilir)</option>
+        </select>
+        <label>Köşe Yarıçapı (px)</label>
+        <input type="number" id="ozResimKose" value="0" min="0">
+    </div>
+
+    <div id="ozAlanYaziRengi" class="ozel-alan gorunur">
+        <label>Yazı Rengi</label>
+        <input type="color" id="ozRenkYazi" value="#ffffff" style="height:38px;">
+    </div>
 
     <label>Genişlik / Yükseklik</label>
     <div style="display:flex;gap:8px;">
@@ -348,6 +377,26 @@ function etiketEkle(x, y) {
     render();
 }
 
+function sekilEkle(x, y) {
+    elementler.push({
+        id: uid(), type: 'sekil',
+        x: Math.max(0, x - 60), y: Math.max(0, y - 40), w: 120, h: 80,
+        sekil_dolgu: '#2e9ed9', sekil_kenarlik: '#1f7bb0', sekil_kenarlik_kalinlik: 0, sekil_kose: 0
+    });
+    seciliId = elementler[elementler.length - 1].id;
+    render();
+}
+
+function resimEkle(x, y) {
+    elementler.push({
+        id: uid(), type: 'resim',
+        x: Math.max(0, x - 75), y: Math.max(0, y - 50), w: 150, h: 100,
+        resim_url: '', resim_sigdirma: 'cover', resim_kose: 0
+    });
+    seciliId = elementler[elementler.length - 1].id;
+    render();
+}
+
 function bul(id) { return elementler.find(e => e.id === id); }
 
 function render() {
@@ -355,23 +404,43 @@ function render() {
     tuval.innerHTML = '';
     elementler.forEach(el => {
         const div = document.createElement('div');
-        const etiketMi = el.type === 'label';
-        div.className = 'el-ogesi' + (etiketMi ? ' etiket-tipi' : '') + (el.id === seciliId ? ' secili' : '');
+        div.className = 'el-ogesi el-tipi-' + el.type + (el.id === seciliId ? ' secili' : '');
         div.style.left = el.x + 'px';
         div.style.top = el.y + 'px';
         div.style.width = el.w + 'px';
         div.style.height = el.h + 'px';
-        if (etiketMi) {
+
+        if (el.type === 'label') {
             div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.fontWeight = '500';
+            div.style.color = el.renk_yazi;
+            div.textContent = el.label;
+        } else if (el.type === 'sekil') {
+            div.style.background = el.sekil_dolgu || '#2e9ed9';
+            div.style.border = `${el.sekil_kenarlik_kalinlik || 0}px solid ${el.sekil_kenarlik || 'transparent'}`;
+            div.style.borderRadius = (el.sekil_kose || 0) + 'px';
+        } else if (el.type === 'resim') {
+            div.style.borderRadius = (el.resim_kose || 0) + 'px';
+            div.style.overflow = 'hidden';
+            div.style.background = '#0008';
+            if (el.resim_url) {
+                const img = document.createElement('img');
+                img.src = el.resim_url;
+                img.style.objectFit = el.resim_sigdirma || 'cover';
+                div.appendChild(img);
+            } else {
+                div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+                div.style.color = 'var(--text-secondary)'; div.style.fontSize = '11px';
+                div.textContent = '🖼️ URL gir';
+            }
         } else {
             // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
             // — "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
             div.style.background = (el._onizleme === 'acik') ? el.renk_acik : el.renk_kapali;
+            div.style.color = el.renk_yazi;
+            div.textContent = el.label;
         }
-        div.style.color = el.renk_yazi;
-        div.textContent = el.label;
         div.addEventListener('mousedown', (e) => baslaSurukle(e, el.id));
         div.addEventListener('click', (e) => { e.stopPropagation(); sec(el.id); });
         div.addEventListener('dblclick', (e) => { e.stopPropagation(); sec(el.id); ozellikAc(); });
@@ -450,6 +519,8 @@ function tuvalBaglamMenusu(e) {
     baglamMenuGoster(e.clientX, e.clientY, [
         { etiket: '+ Buton Ekle', aksiyon: () => butonEkle(tuvalX, tuvalY) },
         { etiket: '+ Etiket Ekle', aksiyon: () => etiketEkle(tuvalX, tuvalY) },
+        { etiket: '+ Dikdörtgen/Kare Ekle', aksiyon: () => sekilEkle(tuvalX, tuvalY) },
+        { etiket: '+ Resim Ekle', aksiyon: () => resimEkle(tuvalX, tuvalY) },
         { ayrac: true },
         { etiket: '📥 Şablon Uygula', aksiyon: sablonAc },
         { etiket: '⚙ Sayfa Özellikleri', aksiyon: sayfaOzellikAc },
@@ -503,21 +574,28 @@ function ozellikKapat() {
 function guncellePanel() {
     const el = seciliId ? bul(seciliId) : null;
     if (!el) return;
-    const etiketMi = el.type === 'label';
-    document.getElementById('ozAlanButon').classList.toggle('gorunur', !etiketMi);
-    document.getElementById('ozAlanEtiket').classList.toggle('gorunur', etiketMi);
 
-    document.getElementById('ozLabel').value = el.label;
-    document.getElementById('ozRenkYazi').value = el.renk_yazi;
+    document.getElementById('ozAlanGenelMetin').classList.toggle('gorunur', el.type === 'button' || el.type === 'label');
+    document.getElementById('ozAlanYaziRengi').classList.toggle('gorunur', el.type === 'button' || el.type === 'label');
+    document.getElementById('ozAlanButon').classList.toggle('gorunur', el.type === 'button');
+    document.getElementById('ozAlanEtiket').classList.toggle('gorunur', el.type === 'label');
+    document.getElementById('ozAlanSekil').classList.toggle('gorunur', el.type === 'sekil');
+    document.getElementById('ozAlanResim').classList.toggle('gorunur', el.type === 'resim');
+
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
 
-    if (etiketMi) {
+    if (el.type === 'button' || el.type === 'label') {
+        document.getElementById('ozLabel').value = el.label;
+        document.getElementById('ozRenkYazi').value = el.renk_yazi;
+    }
+
+    if (el.type === 'label') {
         document.getElementById('ozFontBoyutu').value = el.font_boyutu || 16;
         const seffaf = !el.renk_arkaplan || el.renk_arkaplan === 'transparent';
         document.getElementById('ozSeffaf').checked = seffaf;
         document.getElementById('ozRenkArkaplan').value = seffaf ? '#1e2d3d' : el.renk_arkaplan;
-    } else {
+    } else if (el.type === 'button') {
         document.getElementById('ozTag').value = el.tag_id || '';
         document.getElementById('ozMod').value = el.mod;
         document.getElementById('ozAcikDeger').value = el.acik_deger;
@@ -525,21 +603,33 @@ function guncellePanel() {
         document.getElementById('ozRenkAcik').value = el.renk_acik;
         document.getElementById('ozRenkKapali').value = el.renk_kapali;
         document.getElementById('ozOnizlemeDurum').value = el._onizleme || 'kapali';
+    } else if (el.type === 'sekil') {
+        document.getElementById('ozSekilDolgu').value = el.sekil_dolgu || '#2e9ed9';
+        document.getElementById('ozSekilKenarlik').value = el.sekil_kenarlik || '#1f7bb0';
+        document.getElementById('ozSekilKenarlikKalinlik').value = el.sekil_kenarlik_kalinlik || 0;
+        document.getElementById('ozSekilKose').value = el.sekil_kose || 0;
+    } else if (el.type === 'resim') {
+        document.getElementById('ozResimUrl').value = el.resim_url || '';
+        document.getElementById('ozResimSigdirma').value = el.resim_sigdirma || 'cover';
+        document.getElementById('ozResimKose').value = el.resim_kose || 0;
     }
 }
 
 function uygula() {
     const el = bul(seciliId);
     if (!el) return;
-    el.label = document.getElementById('ozLabel').value || (el.type === 'label' ? 'Metin' : 'Buton');
-    el.renk_yazi = document.getElementById('ozRenkYazi').value;
     el.w = parseInt(document.getElementById('ozW').value) || 120;
     el.h = parseInt(document.getElementById('ozH').value) || 44;
+
+    if (el.type === 'button' || el.type === 'label') {
+        el.label = document.getElementById('ozLabel').value || (el.type === 'label' ? 'Metin' : 'Buton');
+        el.renk_yazi = document.getElementById('ozRenkYazi').value;
+    }
 
     if (el.type === 'label') {
         el.font_boyutu = parseInt(document.getElementById('ozFontBoyutu').value) || 16;
         el.renk_arkaplan = document.getElementById('ozSeffaf').checked ? 'transparent' : document.getElementById('ozRenkArkaplan').value;
-    } else {
+    } else if (el.type === 'button') {
         el.tag_id = document.getElementById('ozTag').value ? parseInt(document.getElementById('ozTag').value) : null;
         el.mod = document.getElementById('ozMod').value;
         el.acik_deger = document.getElementById('ozAcikDeger').value;
@@ -547,6 +637,15 @@ function uygula() {
         el.renk_acik = document.getElementById('ozRenkAcik').value;
         el.renk_kapali = document.getElementById('ozRenkKapali').value;
         el._onizleme = document.getElementById('ozOnizlemeDurum').value;
+    } else if (el.type === 'sekil') {
+        el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;
+        el.sekil_kenarlik = document.getElementById('ozSekilKenarlik').value;
+        el.sekil_kenarlik_kalinlik = parseInt(document.getElementById('ozSekilKenarlikKalinlik').value) || 0;
+        el.sekil_kose = parseInt(document.getElementById('ozSekilKose').value) || 0;
+    } else if (el.type === 'resim') {
+        el.resim_url = document.getElementById('ozResimUrl').value.trim();
+        el.resim_sigdirma = document.getElementById('ozResimSigdirma').value;
+        el.resim_kose = parseInt(document.getElementById('ozResimKose').value) || 0;
     }
     render();
 }

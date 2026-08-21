@@ -130,6 +130,9 @@
         display: flex; align-items: center; justify-content: center;
         pointer-events: none;
     }
+    .el-sekil { position: absolute; box-sizing: border-box; pointer-events: none; }
+    .el-resim { position: absolute; overflow: hidden; pointer-events: none; }
+    .el-resim img { width: 100%; height: 100%; }
 </style>
 {% endblock %}
 {% block content %}
@@ -208,6 +211,30 @@ function tuvalCiz() {
             div.className = 'el-etiket';
             div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'sekil') {
+            div.className = 'el-sekil';
+            div.style.background = el.sekil_dolgu || '#2e9ed9';
+            div.style.border = `${el.sekil_kenarlik_kalinlik || 0}px solid ${el.sekil_kenarlik || 'transparent'}`;
+            div.style.borderRadius = (el.sekil_kose || 0) + 'px';
+            div.textContent = '';
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'resim') {
+            div.className = 'el-resim';
+            div.style.borderRadius = (el.resim_kose || 0) + 'px';
+            div.textContent = '';
+            if (el.resim_url) {
+                const img = document.createElement('img');
+                img.src = el.resim_url;
+                img.style.objectFit = el.resim_sigdirma || 'cover';
+                div.appendChild(img);
+            }
             tuval.appendChild(div);
             return;
         }
