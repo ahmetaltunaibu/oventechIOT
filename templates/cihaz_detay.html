@@ -123,7 +123,8 @@
                 </td>
                 <td>{{ s.guncelleme_zamani }}</td>
                 <td style="white-space:nowrap;">
-                    <a class="btn" href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}" style="padding:5px 10px;font-size:12px;">Aç</a>
+                    <a class="btn" href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}?gorunum=masaustu" style="padding:5px 10px;font-size:12px;">🖥️ Aç</a>
+                    <a class="btn" href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}?gorunum=mobil" style="padding:5px 10px;font-size:12px;">📱 Aç</a>
                     {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
                     <a class="btn" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=s.ad, hedef='masaustu') }}" style="padding:5px 10px;font-size:12px;background:var(--accent-dark);">🖥️ Düzenle</a>
                     <a class="btn" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=s.ad, hedef='mobil') }}" style="padding:5px 10px;font-size:12px;background:var(--accent-dark);">📱 Düzenle</a>
@@ -144,15 +145,6 @@
     <form method="POST" action="{{ url_for('sayfa.sayfa_olustur', cihaz_id=cihaz.id) }}" style="margin-top:14px;">
         <label>Yeni Sayfa Adı</label>
         <input type="text" name="ad" placeholder="örn. Ana Sayfa" required>
-        {% if proje_sayfalari %}
-        <label>Şablon (opsiyonel — bu projedeki başka bir sayfadan başla)</label>
-        <select name="sablon">
-            <option value="">— boş başla —</option>
-            {% for s in proje_sayfalari %}
-            <option value="{{ s.cihaz_id }}:{{ s.sayfa_ad }}">{{ s.cihaz_ad }} — {{ s.sayfa_ad }}</option>
-            {% endfor %}
-        </select>
-        {% endif %}
         <button type="submit">Sayfa Oluştur</button>
     </form>
     {% endif %}

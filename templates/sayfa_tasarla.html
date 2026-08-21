@@ -138,6 +138,31 @@
 <!-- Sag tik baglam menusu -->
 <div id="baglam-menu"></div>
 
+<!-- Element(ler) secilince saginda beliren hizli-eylem paneli -->
+<div id="yan-panel" style="position:fixed;top:50%;right:14px;transform:translateY(-50%);display:none;
+     flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:10px;
+     padding:6px;z-index:150;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
+    <button type="button" class="mini-ikon coklu-gerekli" title="Sola Hizala" onclick="hizala('sol')">⇤</button>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Sağa Hizala" onclick="hizala('sag')">⇥</button>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Üste Hizala" onclick="hizala('ust')">⇧</button>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Alta Hizala" onclick="hizala('alt')">⇩</button>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Yatayda Ortala" onclick="hizala('yatay-orta')">↔</button>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Dikeyde Ortala" onclick="hizala('dikey-orta')">↕</button>
+    <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Genişliği Eşitle" onclick="boyutEsitle('genislik')">W=</button>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Yüksekliği Eşitle" onclick="boyutEsitle('yukseklik')">H=</button>
+    <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
+    <button type="button" class="mini-ikon" title="En Üste Getir" onclick="enUsteGetir()">⤒</button>
+    <button type="button" class="mini-ikon" title="Üste Getir" onclick="usteGetir()">↑</button>
+    <button type="button" class="mini-ikon" title="Alta Gönder" onclick="altaGonder()">↓</button>
+    <button type="button" class="mini-ikon" title="En Alta Gönder" onclick="enAltaGonder()">⤓</button>
+    <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Grupla" onclick="grupla()">🔗</button>
+    <button type="button" id="btnGrubuCoz" class="mini-ikon" title="Grubu Çöz" onclick="grubuCoz()" style="display:none;">✂</button>
+    <button type="button" class="mini-ikon" title="Kilitle" onclick="topluKilitle(true)">🔒</button>
+    <button type="button" class="mini-ikon" title="Kilidi Aç" onclick="topluKilitle(false)">🔓</button>
+</div>
+
 <!-- Sayfa Ozellikleri modali -->
 <div id="sayfa-ozellik-perde" class="modal-perde" onclick="sayfaOzellikKapat()"></div>
 <div id="sayfa-ozellik-modal" class="modal-kutu">
@@ -474,6 +499,10 @@ function sayfaOzellikUygula() {
     arkaplan = document.getElementById('sayfaArkaplan').value;
     arkaplanResim = document.getElementById('sayfaArkaplanResimUrl').value.trim();
     arkaplanSigdirma = document.getElementById('sayfaArkaplanSigdirma').value;
+    arkaplanGradientAktif = document.getElementById('sayfaGradientAktif').checked;
+    arkaplanGradientRenk1 = document.getElementById('sayfaGradientRenk1').value;
+    arkaplanGradientRenk2 = document.getElementById('sayfaGradientRenk2').value;
+    arkaplanGradientYon = document.getElementById('sayfaGradientYon').value;
     tuvalCerceveGuncelle();
     sayfaOzellikKapat();
 }
@@ -483,10 +512,13 @@ tuvalCerceveGuncelle();
 function sablonAc() {
     const liste = document.getElementById('sablon-liste');
     liste.innerHTML = '';
-    if (!projeSayfalari.length) {
+    // Kullanıcı isteği: bir sayfa kendi kendisini şablon olarak alamaz —
+    // düzenlemekte olduğun sayfayı listeden çıkarıyoruz.
+    const secilebilirSayfalar = projeSayfalari.filter(s => !(s.cihaz_id === cihazId && s.sayfa_ad === "{{ sayfa_ad }}"));
+    if (!secilebilirSayfalar.length) {
         liste.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">Bu projede henüz başka sayfa yok.</p>';
     }
-    projeSayfalari.forEach(s => {
+    secilebilirSayfalar.forEach(s => {
         const div = document.createElement('div');
         div.className = 'sablon-satir';
         div.innerHTML = `${s.sayfa_ad}<small>${s.cihaz_ad}</small>`;
@@ -865,7 +897,21 @@ function render() {
 // düğümlerini yok edip yeniden oluşturduğu için tarayıcının çift tıklama
 // algısını (aynı düğüm üzerinde iki click) bozuyordu. Bunun yerine sadece
 // ilgili elementlerin sınıfını / boyutlandırma tutamacını güncelliyoruz.
+function yanPanelGuncelle() {
+    const panel = document.getElementById('yan-panel');
+    if (!panel) return;
+    if (typeof saltOkunur !== 'undefined' && saltOkunur) { panel.style.display = 'none'; return; }
+    panel.style.display = seciliSet.size >= 1 ? 'flex' : 'none';
+    panel.querySelectorAll('.coklu-gerekli').forEach(b => { b.style.opacity = seciliSet.size >= 2 ? '1' : '0.35'; });
+    const grubuCozBtn = document.getElementById('btnGrubuCoz');
+    if (grubuCozBtn) {
+        const digerGruplu = [...seciliSet].some(sid => { const e = bul(sid); return e && e.grup_id; });
+        grubuCozBtn.style.display = digerGruplu ? 'flex' : 'none';
+    }
+}
+
 function selectionGorunumunuTazele(eskiSet, yeniSet) {
+    yanPanelGuncelle();
     document.querySelectorAll('.el-ogesi.secili').forEach(d => {
         if (!yeniSet.has(d.dataset.elId)) d.classList.remove('secili');
     });
@@ -1302,41 +1348,17 @@ function tuvalBaglamMenusu(e) {
     baglamMenuGoster(e.clientX, e.clientY, maddeler);
 }
 
+// Not: hizalama/boyut-eşitleme/katman-sırası/gruplama/kilitleme artık sağda
+// beliren ⚡ hızlı-eylem panelinde — sağ tık menüsü şişmesin diye buradan
+// kaldırıldı, sadece temel eylemler kaldı.
 function elementBaglamMenusu(e, id) {
     const maddeler = [
         { etiket: '✎ Özellikler', aksiyon: () => { secTekli(id); ozellikAc(); } },
         { etiket: '⧉ Çoğalt (Ctrl+D)', aksiyon: cogalt },
         { etiket: '📋 Kopyala (Ctrl+C)', aksiyon: kopyala },
         { ayrac: true },
-        { etiket: '⤒ En Üste Getir', aksiyon: enUsteGetir },
-        { etiket: '↑ Üste Getir', aksiyon: usteGetir },
-        { etiket: '↓ Alta Gönder', aksiyon: altaGonder },
-        { etiket: '⤓ En Alta Gönder', aksiyon: enAltaGonder },
+        { etiket: '🗑 Sil (Del)', tehlike: true, aksiyon: elementSil },
     ];
-    if (seciliSet.size > 1) {
-        maddeler.push({ ayrac: true });
-        maddeler.push({ etiket: '⇤ Sola Hizala', aksiyon: () => hizala('sol') });
-        maddeler.push({ etiket: '⇥ Sağa Hizala', aksiyon: () => hizala('sag') });
-        maddeler.push({ etiket: '⇧ Üste Hizala', aksiyon: () => hizala('ust') });
-        maddeler.push({ etiket: '⇩ Alta Hizala', aksiyon: () => hizala('alt') });
-        maddeler.push({ etiket: '↔ Yatayda Ortala', aksiyon: () => hizala('yatay-orta') });
-        maddeler.push({ etiket: '↕ Dikeyde Ortala', aksiyon: () => hizala('dikey-orta') });
-        maddeler.push({ ayrac: true });
-        maddeler.push({ etiket: '📐 Genişliği Eşitle', aksiyon: () => boyutEsitle('genislik') });
-        maddeler.push({ etiket: '📐 Yüksekliği Eşitle', aksiyon: () => boyutEsitle('yukseklik') });
-        maddeler.push({ etiket: '📐 İkisini de Eşitle', aksiyon: () => boyutEsitle('ikisi') });
-        maddeler.push({ ayrac: true });
-        maddeler.push({ etiket: '🔗 Grupla', aksiyon: grupla });
-    }
-    const digerGruplu = [...seciliSet].some(sid => { const e2 = bul(sid); return e2 && e2.grup_id; });
-    if (digerGruplu) {
-        maddeler.push({ etiket: '🔓 Grubu Çöz', aksiyon: grubuCoz });
-    }
-    maddeler.push({ ayrac: true });
-    maddeler.push({ etiket: '🔒 Kilitle', aksiyon: () => topluKilitle(true) });
-    maddeler.push({ etiket: '🔓 Kilidi Aç', aksiyon: () => topluKilitle(false) });
-    maddeler.push({ ayrac: true });
-    maddeler.push({ etiket: '🗑 Sil (Del)', tehlike: true, aksiyon: elementSil });
     baglamMenuGoster(e.clientX, e.clientY, maddeler);
 }
 

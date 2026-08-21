@@ -172,6 +172,17 @@ def init_db():
     if sayfa_kolonlari and 'arkaplan_gradient_yon' not in sayfa_kolonlari:
         cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan_gradient_yon TEXT NOT NULL DEFAULT 'to bottom'")
 
+    # Migration: BAĞLANTILI ŞABLON — kullanıcı isteği: bir sayfa başka bir
+    # sayfayı "şablon" olarak seçtiğinde artık bir kerelik KOPYA değil,
+    # kalıcı bir BAĞLANTI kurulsun; bağlantılı sayfanın elementleri sadece
+    # KAYNAK sayfada düzenlenebilsin, bağlantılı sayfada düzenleme kilitli
+    # olsun. sablon_kaynak_* dolu ise bu sayfa "bağlantılı"dır.
+    sayfa_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(sayfalar)").fetchall()}
+    if sayfa_kolonlari and 'sablon_kaynak_cihaz_id' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN sablon_kaynak_cihaz_id INTEGER")
+    if sayfa_kolonlari and 'sablon_kaynak_sayfa_ad' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN sablon_kaynak_sayfa_ad TEXT")
+
     # Resim elementi icin yuklenen dosyalar — DB icinde BLOB olarak saklanir
     # (Render'in diski deploy'da sifirlaniyor, ama tum .db zaten yedekleniyor
     # — boylece yuklenen resimler de yedekle birlikte tasinir).
@@ -725,16 +736,145 @@ def demo_veri_olustur():
 def proje_tum_sayfalari(proje_id: int):
     """Projedeki TÜM cihazların TÜM sayfalarını (şablon seçimi için) döner:
     [{cihaz_id, cihaz_ad, sayfa_ad}, ...] — her mantıksal sayfa adı bir kez
-    (hangi düzenleri olduğuna bakılmaksızın)."""
+    (hangi düzenleri olduğuna bakılmaksızın). Kendisi zaten başka bir
+    sayfaya BAĞLI (linked) sayfalar listelenmez — zincirleme bağlantı
+    (A→B→C) oluşmasın diye sadece "kök" sayfalar şablon kaynağı olabilir."""
     conn = get_db()
     try:
         rows = conn.execute('''
             SELECT DISTINCT s.cihaz_id, c.ad AS cihaz_ad, s.ad AS sayfa_ad
             FROM sayfalar s
             JOIN cihazlar c ON c.id = s.cihaz_id
-            WHERE c.proje_id = ?
+            WHERE c.proje_id = ? AND s.sablon_kaynak_cihaz_id IS NULL
             ORDER BY c.ad, s.ad
         ''', (proje_id,)).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def sayfa_getir_efektif(cihaz_id: int, ad: str, hedef: str = 'masaustu'):
+    """sayfa_getir gibi ama sayfa bir ŞABLONA BAĞLIYSA (sablon_kaynak_*
+    doluysa) elementler/tuval/arkaplan bilgisini KAYNAK sayfadan çözerek
+    döner — kullanıcı isteği: bağlantılı sayfa artık kendi elementlerini
+    tutmuyor, kaynaktaki neyse onu gösteriyor (tasarımda salt okunur,
+    çalışırken de her zaman kaynaktaki güncel hali)."""
+    sayfa = sayfa_getir(cihaz_id, ad, hedef)
+    if not sayfa:
+        return None
+    if sayfa.get('sablon_kaynak_cihaz_id') and sayfa.get('sablon_kaynak_sayfa_ad'):
+        kaynak = sayfa_getir(sayfa['sablon_kaynak_cihaz_id'], sayfa['sablon_kaynak_sayfa_ad'], hedef)
+        if kaynak:
+            sonuc = dict(kaynak)
+            sonuc['id'] = sayfa['id']
+            sonuc['ad'] = sayfa['ad']
+            sonuc['hedef'] = sayfa['hedef']
+            sonuc['sablon_baglantili'] = True
+            sonuc['sablon_kaynak_cihaz_id'] = sayfa['sablon_kaynak_cihaz_id']
+            sonuc['sablon_kaynak_sayfa_ad'] = sayfa['sablon_kaynak_sayfa_ad']
+            return sonuc
+        # Kaynak silinmiş olabilir — bağlantı koptu say, kendi (boş) verisiyle devam et.
+    sayfa['sablon_baglantili'] = False
+    return sayfa
+
+
+def sayfa_baglantili_olustur(cihaz_id: int, ad: str, kaynak_cihaz_id: int, kaynak_sayfa_ad: str):
+    """Yeni sayfa oluştururken 'şablon' seçilmişse artık bir kerelik KOPYA
+    değil, KALICI BAĞLANTI kurulur — kaynağın hangi düzenleri (masaustu/
+    mobil) varsa o düzenler için birer satır açılır, kendi elementler'i
+    boş kalır (efektif veri her zaman sayfa_getir_efektif ile kaynaktan
+    okunur)."""
+    conn = get_db()
+    try:
+        olusturuldu = False
+        for hedef in ('masaustu', 'mobil'):
+            kaynak = conn.execute(
+                'SELECT * FROM sayfalar WHERE cihaz_id = ? AND ad = ? AND hedef = ?',
+                (kaynak_cihaz_id, kaynak_sayfa_ad, hedef)
+            ).fetchone()
+            if not kaynak:
+                continue
+            conn.execute('''
+                INSERT INTO sayfalar (cihaz_id, ad, hedef, tuval_w, tuval_h, arkaplan, elementler,
+                                       sablon_kaynak_cihaz_id, sablon_kaynak_sayfa_ad, guncelleme_zamani)
+                VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, datetime('now', '+3 hours'))
+                ON CONFLICT(cihaz_id, ad, hedef) DO UPDATE SET
+                    sablon_kaynak_cihaz_id = excluded.sablon_kaynak_cihaz_id,
+                    sablon_kaynak_sayfa_ad = excluded.sablon_kaynak_sayfa_ad,
+                    guncelleme_zamani = datetime('now', '+3 hours')
+            ''', (cihaz_id, ad.strip(), hedef, kaynak['tuval_w'], kaynak['tuval_h'], kaynak['arkaplan'],
+                  kaynak_cihaz_id, kaynak_sayfa_ad.strip()))
+            olusturuldu = True
+        conn.commit()
+        return olusturuldu
+    finally:
+        conn.close()
+
+
+def sayfa_sablonlu_mu(cihaz_id: int, ad: str, hedef: str = 'masaustu'):
+    """Bu (cihaz_id, ad, hedef) sayfası başka bir sayfaya BAĞLI mı? Kaynak
+    (cihaz_id, sayfa_ad) çiftini döner, bağlı değilse None."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT sablon_kaynak_cihaz_id, sablon_kaynak_sayfa_ad FROM sayfalar WHERE cihaz_id = ? AND ad = ? AND hedef = ?',
+            (cihaz_id, ad.strip(), hedef)
+        ).fetchone()
+        if row and row['sablon_kaynak_cihaz_id'] and row['sablon_kaynak_sayfa_ad']:
+            return {'cihaz_id': row['sablon_kaynak_cihaz_id'], 'sayfa_ad': row['sablon_kaynak_sayfa_ad']}
+        return None
+    finally:
+        conn.close()
+
+
+def sayfa_sablon_baglantisi_kaldir(cihaz_id: int, ad: str):
+    """Bağlantıyı KOPARIR — kullanıcı isteği: "seçimi de iptal edebilir
+    olmamız gerekiyor". Kopma anındaki (kaynaktan gelen) içerik BU sayfanın
+    kendi satırına KOPYALANIR ki bağlantı kesilince hiçbir şey kaybolmasın;
+    sayfa o andan itibaren bağımsız ve serbestçe düzenlenebilir olur."""
+    conn = get_db()
+    try:
+        for hedef in ('masaustu', 'mobil'):
+            row = conn.execute(
+                'SELECT * FROM sayfalar WHERE cihaz_id = ? AND ad = ? AND hedef = ?',
+                (cihaz_id, ad.strip(), hedef)
+            ).fetchone()
+            if not row:
+                continue
+            d = dict(row)
+            if not (d.get('sablon_kaynak_cihaz_id') and d.get('sablon_kaynak_sayfa_ad')):
+                continue
+            kaynak = conn.execute(
+                'SELECT * FROM sayfalar WHERE cihaz_id = ? AND ad = ? AND hedef = ?',
+                (d['sablon_kaynak_cihaz_id'], d['sablon_kaynak_sayfa_ad'], hedef)
+            ).fetchone()
+            if kaynak:
+                kd = dict(kaynak)
+                conn.execute('''
+                    UPDATE sayfalar SET
+                        elementler = :elementler, tuval_w = :tuval_w, tuval_h = :tuval_h,
+                        arkaplan = :arkaplan, arkaplan_resim = :arkaplan_resim, arkaplan_sigdirma = :arkaplan_sigdirma,
+                        arkaplan_gradient_aktif = :arkaplan_gradient_aktif, arkaplan_gradient_renk1 = :arkaplan_gradient_renk1,
+                        arkaplan_gradient_renk2 = :arkaplan_gradient_renk2, arkaplan_gradient_yon = :arkaplan_gradient_yon,
+                        sablon_kaynak_cihaz_id = NULL, sablon_kaynak_sayfa_ad = NULL
+                    WHERE id = :id
+                ''', {
+                    'elementler': kd['elementler'], 'tuval_w': kd['tuval_w'], 'tuval_h': kd['tuval_h'],
+                    'arkaplan': kd['arkaplan'], 'arkaplan_resim': kd.get('arkaplan_resim'),
+                    'arkaplan_sigdirma': kd.get('arkaplan_sigdirma'),
+                    'arkaplan_gradient_aktif': kd.get('arkaplan_gradient_aktif'),
+                    'arkaplan_gradient_renk1': kd.get('arkaplan_gradient_renk1'),
+                    'arkaplan_gradient_renk2': kd.get('arkaplan_gradient_renk2'),
+                    'arkaplan_gradient_yon': kd.get('arkaplan_gradient_yon'),
+                    'id': d['id'],
+                })
+            else:
+                # Kaynak silinmiş — sadece bağlantıyı temizle, mevcut (boş) veri kalır.
+                conn.execute(
+                    'UPDATE sayfalar SET sablon_kaynak_cihaz_id = NULL, sablon_kaynak_sayfa_ad = NULL WHERE id = ?',
+                    (d['id'],)
+                )
+        conn.commit()
+        return True
     finally:
         conn.close()

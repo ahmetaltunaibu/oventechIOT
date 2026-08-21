@@ -42,36 +42,10 @@ def sayfa_olustur(cihaz_id):
         flash('Bu isimde bir sayfa zaten var.', 'danger')
         return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
-    kaynak = request.form.get('sablon', '').strip()  # "cihaz_id:sayfa_ad" ya da bos
-    if kaynak and ':' in kaynak:
-        kaynak_cihaz_id_str, kaynak_sayfa_ad = kaynak.split(':', 1)
-        try:
-            kaynak_cihaz_id = int(kaynak_cihaz_id_str)
-        except ValueError:
-            kaynak_cihaz_id = None
-        # Sablon, oturumdaki projeye ait bir cihazdan olmali (baska projenin
-        # verisi sizmasin diye).
-        if kaynak_cihaz_id and _cihaz_dogrula(kaynak_cihaz_id):
-            kopyalandi = False
-            for hedef in HEDEFLER:
-                kaynak_sayfa = database.sayfa_getir(kaynak_cihaz_id, kaynak_sayfa_ad, hedef)
-                if kaynak_sayfa:
-                    database.sayfa_kaydet(
-                        cihaz_id, ad, kaynak_sayfa['elementler'], hedef=hedef,
-                        tuval_w=kaynak_sayfa['tuval_w'], tuval_h=kaynak_sayfa['tuval_h'],
-                        arkaplan=kaynak_sayfa['arkaplan'],
-                        arkaplan_resim=kaynak_sayfa.get('arkaplan_resim'),
-                        arkaplan_sigdirma=kaynak_sayfa.get('arkaplan_sigdirma'),
-                        arkaplan_gradient_aktif=kaynak_sayfa.get('arkaplan_gradient_aktif'),
-                        arkaplan_gradient_renk1=kaynak_sayfa.get('arkaplan_gradient_renk1'),
-                        arkaplan_gradient_renk2=kaynak_sayfa.get('arkaplan_gradient_renk2'),
-                        arkaplan_gradient_yon=kaynak_sayfa.get('arkaplan_gradient_yon'),
-                    )
-                    kopyalandi = True
-            if kopyalandi:
-                flash(f"Sayfa '{kaynak_sayfa_ad}' şablonundan oluşturuldu.", 'success')
-                return redirect(url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz_id, sayfa_ad=ad, hedef='masaustu'))
-
+    # Not: sayfa oluştururken "şablon" seçme özelliği kaldırıldı — kullanıcı
+    # isteği: aynı işlevi tasarım ekranında sağ tık > "📥 Şablon Uygula" zaten
+    # sağlıyor (istediğin zaman ekleyip/geri alabiliyorsun), burada ayrıca
+    # olmasına gerek yok.
     database.sayfa_kaydet(cihaz_id, ad, [], hedef='masaustu')
     return redirect(url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz_id, sayfa_ad=ad, hedef='masaustu'))
 

@@ -98,8 +98,14 @@ let degerler = {}; // tag_id -> {ad, deger, yazilacak_deger}
 let aktifSayfa = null; // {elementler, tuval_w, tuval_h}
 
 function sayfaSec() {
-    // Dar ekranlarda mobil düzen varsa onu kullan, yoksa masaüstünü ölçekle.
-    const dar = window.innerWidth < 768;
+    // Kullanıcı isteği: masaüstünden mobil düzeni önizlemenin bir yolu
+    // yoktu (sadece ekran genişliğine göre otomatik seçiliyordu) — ?gorunum=
+    // parametresiyle zorla mobil/masaüstü önizleme yapılabiliyor artık.
+    const zorlaGorunum = new URLSearchParams(location.search).get('gorunum');
+    let dar;
+    if (zorlaGorunum === 'mobil') dar = true;
+    else if (zorlaGorunum === 'masaustu') dar = false;
+    else dar = window.innerWidth < 768; // param yoksa eskisi gibi ekran genişliğine bak
     aktifSayfa = (dar && mobil) ? mobil : (masaustu || mobil);
 }
 
