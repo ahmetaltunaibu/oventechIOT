@@ -76,18 +76,62 @@
         padding: 20px; width: 320px; max-height: 86vh; overflow-y: auto;
     }
 
-    /* Tasarim ekranindaki nav stili onizlemesi — runtime'da GORUNECEK olan
-       ust sekme/alt navbar/sandvic'i tasarim sirasinda da gostermek icin. */
-    #nav-onizleme-ust, #nav-onizleme-alt {
-        display: flex; gap: 6px; padding: 6px 10px; margin-bottom: 8px;
+    /* Tasarim ekranindaki nav stili onizlemesi — RUNTIME'DAKI (sayfa_calistir.html)
+       ile AYNI sinif/gorunum kullanilir, boylece kayittan sonra calisan sayfada
+       ne gorunecegi tasarim sirasinda BIREBIR gorulur. Sayfa sayisi 1 olsa
+       bile (runtime'da o zaman gizlenir) burada HER ZAMAN gosterilir — "hangi
+       stili sectim, nasil goruecek" sorusuna tasarim anindan cevap versin diye. */
+    #onizleme-etiket { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; }
+    #onizleme-sarmalayici { position: relative; }
+    #sayfa-nav-onizleme {
+        display: flex; align-items: center; gap: 6px; padding: 8px 14px; margin-bottom: 8px;
         background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
-        font-size: 11px; flex-wrap: wrap;
+        overflow-x: auto; white-space: nowrap;
     }
-    #nav-onizleme-ust span, #nav-onizleme-alt span {
-        padding: 4px 10px; border-radius: 5px; background: var(--panel2); color: var(--text-secondary);
+    #sayfa-nav-onizleme a {
+        display: inline-block; padding: 6px 14px; border-radius: 6px;
+        font-size: 12px; font-weight: 600; color: var(--text-secondary);
+        text-decoration: none; background: var(--panel2); flex-shrink: 0; pointer-events: none;
     }
-    #nav-onizleme-ust span.aktif, #nav-onizleme-alt span.aktif { background: var(--accent); color: #fff; }
-    #nav-onizleme-etiket { font-size: 11px; color: var(--text-secondary); margin-bottom:4px; }
+    #sayfa-nav-onizleme a.aktif { background: var(--accent); color: #fff; }
+
+    #alt-navbar-onizleme {
+        display: flex; margin-top: 8px;
+        background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    }
+    #alt-navbar-onizleme a {
+        flex: 1; min-width: 72px; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 2px; padding: 8px 4px; font-size: 11px; font-weight: 600;
+        color: var(--text-secondary); text-decoration: none; pointer-events: none;
+    }
+    #alt-navbar-onizleme a .nokta { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+    #alt-navbar-onizleme a.aktif { color: var(--accent); }
+    #alt-navbar-onizleme a.aktif .nokta { background: var(--accent); }
+
+    #sandvic-btn-onizleme {
+        position: absolute; top: 10px; right: 10px; z-index: 5;
+        width: 40px; height: 40px; border-radius: 50%;
+        background: var(--accent); color: #fff; border: none; font-size: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer;
+    }
+    #sandvic-panel-onizleme {
+        position: absolute; top: 0; right: -220px; width: 200px; height: 100%;
+        background: var(--panel); border-left: 1px solid var(--border);
+        padding: 60px 12px 12px; transition: right 0.2s ease; z-index: 6; overflow-y: auto;
+    }
+    #sandvic-panel-onizleme.acik { right: 0; }
+    #sandvic-panel-onizleme a {
+        display: block; padding: 8px 10px; margin-bottom: 6px; border-radius: 6px;
+        font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--panel2);
+        text-decoration: none; pointer-events: none;
+    }
+    #sandvic-panel-onizleme a.aktif { background: var(--accent); color: #fff; }
+
+    /* Zoom kontrolleri */
+    #zoom-cubuk {
+        display: flex; align-items: center; gap: 4px; margin-bottom: 8px;
+    }
+    #zoom-yuzde { font-size: 12px; color: var(--text-secondary); min-width: 42px; text-align: center; }
 </style>
 {% endblock %}
 {% block content %}
@@ -112,21 +156,39 @@
     <span id="durum"></span>
 </div>
 
-{% if sayfalar and sayfalar|length > 1 and cihaz.nav_stili in ('ust_sekme', 'sandvic') %}
-<div id="nav-onizleme-etiket">Runtime önizlemesi — bu cihazda "{{ {'ust_sekme':'Üst Sekmeler','sandvic':'Sandviç Menü'}[cihaz.nav_stili] }}" navigasyonu aktif:</div>
-<div id="nav-onizleme-ust">
-    {% for s in sayfalar %}<span class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</span>{% endfor %}
+{% set nav_adlari = {'ust_sekme':'Üst Sekmeler','alt_navbar':'Alt Nav Bar','sandvic':'Sandviç Menü','yok':'Yok'} %}
+<div id="onizleme-etiket">🔎 Bu cihazda seçili navigasyon stili: <b>{{ nav_adlari.get(cihaz.nav_stili, 'Üst Sekmeler') }}</b> — aşağıda runtime'daki GERÇEK görünümüyle önizleniyor. (Ayarlar: cihaz sayfasından "Navigasyon Stili".)</div>
+
+{% if cihaz.nav_stili == 'ust_sekme' %}
+<div id="sayfa-nav-onizleme">
+    {% for s in (sayfalar or [{'ad': sayfa_ad}]) %}<a class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</a>{% endfor %}
 </div>
 {% endif %}
 
-<div id="tuval-cerceve">
-    <div id="tuval" style="width:{{ tuval_w }}px;height:{{ tuval_h }}px;"></div>
+<div id="zoom-cubuk">
+    <button type="button" class="mini-ikon" title="Uzaklaştır" onclick="zoomAyarla(zoom - 0.1)">－</button>
+    <span id="zoom-yuzde">100%</span>
+    <button type="button" class="mini-ikon" title="Yakınlaştır" onclick="zoomAyarla(zoom + 0.1)">＋</button>
+    <button type="button" class="mini-ikon" title="Sığdır" onclick="zoomSigdir()">⛶</button>
+    <button type="button" class="mini-ikon" title="%100" onclick="zoomAyarla(1)">1:1</button>
 </div>
 
-{% if sayfalar and sayfalar|length > 1 and cihaz.nav_stili == 'alt_navbar' %}
-<div id="nav-onizleme-etiket" style="margin-top:8px;">Runtime önizlemesi — bu cihazda "Alt Nav Bar" navigasyonu aktif (ekranın altında sabit durur):</div>
-<div id="nav-onizleme-alt">
-    {% for s in sayfalar %}<span class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</span>{% endfor %}
+<div id="onizleme-sarmalayici">
+    {% if cihaz.nav_stili == 'sandvic' %}
+    <button type="button" id="sandvic-btn-onizleme" onclick="document.getElementById('sandvic-panel-onizleme').classList.toggle('acik')">☰</button>
+    <div id="sandvic-panel-onizleme">
+        {% for s in (sayfalar or [{'ad': sayfa_ad}]) %}<a class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</a>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div id="tuval-cerceve">
+        <div id="tuval" style="width:{{ tuval_w }}px;height:{{ tuval_h }}px;"></div>
+    </div>
+</div>
+
+{% if cihaz.nav_stili == 'alt_navbar' %}
+<div id="alt-navbar-onizleme">
+    {% for s in (sayfalar or [{'ad': sayfa_ad}]) %}<a class="{{ 'aktif' if s.ad == sayfa_ad else '' }}"><span class="nokta"></span>{{ s.ad }}</a>{% endfor %}
 </div>
 {% endif %}
 
@@ -206,12 +268,37 @@ let tuvalH = {{ tuval_h }};
 let arkaplan = "{{ arkaplan }}";
 const hedef = "{{ hedef }}";
 
+let zoom = 1;
+
 function tuvalCerceveGuncelle() {
     const tuval = document.getElementById('tuval');
     tuval.style.width = tuvalW + 'px';
     tuval.style.height = tuvalH + 'px';
     tuval.style.background = arkaplan;
     document.getElementById('tuvalBoyutYazi').textContent = tuvalW + '×' + tuvalH;
+    zoomUygula();
+}
+
+function zoomAyarla(v) {
+    zoom = Math.max(0.2, Math.min(3, Math.round(v * 100) / 100));
+    zoomUygula();
+}
+
+function zoomSigdir() {
+    const cerceve = document.getElementById('tuval-cerceve');
+    const oran = Math.min(
+        (cerceve.clientWidth - 20) / tuvalW,
+        (cerceve.clientHeight - 20) / tuvalH,
+        1.5
+    );
+    zoomAyarla(oran > 0 ? oran : 1);
+}
+
+function zoomUygula() {
+    const tuval = document.getElementById('tuval');
+    tuval.style.transform = `scale(${zoom})`;
+    tuval.style.transformOrigin = 'top left';
+    document.getElementById('zoom-yuzde').textContent = Math.round(zoom * 100) + '%';
 }
 
 function sayfaOzellikAc() {
@@ -309,7 +396,11 @@ function baslaSurukle(e, id) {
     e.preventDefault();
     const el = bul(id);
     const rect = document.getElementById('tuval').getBoundingClientRect();
-    surukleniyor = { id, offsetX: e.clientX - rect.left - el.x, offsetY: e.clientY - rect.top - el.y };
+    surukleniyor = {
+        id,
+        offsetX: (e.clientX - rect.left) / zoom - el.x,
+        offsetY: (e.clientY - rect.top) / zoom - el.y
+    };
     sec(id);
 }
 
@@ -324,15 +415,15 @@ document.addEventListener('mousemove', (e) => {
     if (surukleniyor) {
         const el = bul(surukleniyor.id);
         const rect = document.getElementById('tuval').getBoundingClientRect();
-        el.x = Math.max(0, Math.min(tuvalW - el.w, Math.round(e.clientX - rect.left - surukleniyor.offsetX)));
-        el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(e.clientY - rect.top - surukleniyor.offsetY)));
+        el.x = Math.max(0, Math.min(tuvalW - el.w, Math.round((e.clientX - rect.left) / zoom - surukleniyor.offsetX)));
+        el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round((e.clientY - rect.top) / zoom - surukleniyor.offsetY)));
         render();
     } else if (boyutlandiriliyor) {
         const el = bul(boyutlandiriliyor.id);
-        const dx = e.clientX - boyutlandiriliyor.startX;
-        const dy = e.clientY - boyutlandiriliyor.startY;
-        el.w = Math.max(24, Math.min(tuvalW - el.x, boyutlandiriliyor.startW + dx));
-        el.h = Math.max(24, Math.min(tuvalH - el.y, boyutlandiriliyor.startH + dy));
+        const dx = (e.clientX - boyutlandiriliyor.startX) / zoom;
+        const dy = (e.clientY - boyutlandiriliyor.startY) / zoom;
+        el.w = Math.max(24, Math.min(tuvalW - el.x, Math.round(boyutlandiriliyor.startW + dx)));
+        el.h = Math.max(24, Math.min(tuvalH - el.y, Math.round(boyutlandiriliyor.startH + dy)));
         render();
     }
 });
@@ -346,8 +437,8 @@ document.addEventListener('click', baglamMenuKapat);
 
 function tuvalBaglamMenusu(e) {
     const rect = document.getElementById('tuval').getBoundingClientRect();
-    const tuvalX = Math.round(e.clientX - rect.left);
-    const tuvalY = Math.round(e.clientY - rect.top);
+    const tuvalX = Math.round((e.clientX - rect.left) / zoom);
+    const tuvalY = Math.round((e.clientY - rect.top) / zoom);
     baglamMenuGoster(e.clientX, e.clientY, [
         { etiket: '+ Buton Ekle', aksiyon: () => butonEkle(tuvalX, tuvalY) },
         { ayrac: true },
