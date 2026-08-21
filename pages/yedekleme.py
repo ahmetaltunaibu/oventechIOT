@@ -45,4 +45,12 @@ def yedek_yukle():
     if not dosya or dosya.filename == '':
         return jsonify({'error': 'Dosya gönderilmedi (form alanı adı: dosya)'}), 400
     dosya.save(database.DB_NAME)
-    return jsonify({'success': True, 'mesaj': 'Veritabanı geri yüklendi'})
+    # NOT (bulunan hata): yüklenen yedek dosyası ESKİ bir şemaya sahip
+    # olabilir (kod ilerlemiş, migration'lar eklenmiş ama yedek eski
+    # tarihli) — init_db() normalde sadece uygulama açılışında bir kez
+    # çalıştığı için, geri yükleme sırasında yeni dosyaya migration
+    # UYGULANMIYORDU (örn. "no such column: nav_stili" hatası buradan
+    # geliyordu). Yüklemeden hemen sonra migration'ları bu dosya üzerinde
+    # tekrar çalıştırıyoruz.
+    database.init_db()
+    return jsonify({'success': True, 'mesaj': 'Veritabanı geri yüklendi ve güncel şemaya taşındı'})
