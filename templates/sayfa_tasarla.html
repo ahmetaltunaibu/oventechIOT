@@ -7,7 +7,7 @@
     #tuval-cerceve {
         overflow: auto;
         max-width: 100%;
-        max-height: 78vh;
+        max-height: 82vh;
         border: 1px dashed var(--border);
         border-radius: 8px;
         background: repeating-conic-gradient(var(--panel2) 0% 25%, var(--bg) 0% 50%) 50% / 20px 20px;
@@ -26,6 +26,12 @@
         box-shadow: 0 1px 3px rgba(0,0,0,0.4);
     }
     .el-buton.secili { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .resize-tutamac {
+        position: absolute; right: -6px; bottom: -6px;
+        width: 12px; height: 12px; border-radius: 3px;
+        background: var(--accent); border: 1px solid #fff;
+        cursor: nwse-resize;
+    }
     #panel { width: 260px; flex-shrink: 0; }
     #panel .card { position: sticky; top: 16px; }
     .panel-alan { display: none; }
@@ -35,6 +41,31 @@
         background: var(--panel2); color: var(--text-secondary); text-decoration: none; display: inline-block;
     }
     .hedef-tab.aktif { background: var(--accent); color: #fff; }
+
+    /* Sag tik baglam menusu */
+    #baglam-menu {
+        position: fixed; display: none; z-index: 200;
+        background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+        min-width: 190px; padding: 4px; font-size: 13px;
+    }
+    #baglam-menu .madde {
+        padding: 8px 12px; border-radius: 5px; cursor: pointer; color: var(--text);
+    }
+    #baglam-menu .madde:hover { background: var(--panel2); }
+    #baglam-menu .madde.tehlike { color: var(--red); }
+    #baglam-menu .ayrac { height: 1px; background: var(--border); margin: 4px 6px; }
+
+    /* Sayfa Ozellikleri modal (sag tikla acilir) */
+    #sayfa-ozellik-perde {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 300; display: none;
+    }
+    #sayfa-ozellik-modal {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+        z-index: 301; display: none;
+        background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+        padding: 20px; width: 320px;
+    }
 </style>
 {% endblock %}
 {% block content %}
@@ -47,13 +78,12 @@
         <a class="hedef-tab {% if hedef == 'mobil' %}aktif{% endif %}" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='mobil') }}">📱 Mobil</a>
     </div>
     <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
-        Tuval boyutu: {{ tuval_w }}×{{ tuval_h }}px.
+        Tuval boyutu: <span id="tuvalBoyutYazi">{{ tuval_w }}×{{ tuval_h }}</span>px — element eklemek/sayfa ayarları için tuvalde <b>sağ tıkla</b>, bir elementi düzenlemek için <b>çift tıkla</b>.
         {% if not diger_var_mi %}
             Diğer düzen ({{ 'mobil' if hedef == 'masaustu' else 'masaüstü' }}) henüz tanımlı değil — runtime'da bu düzen ölçeklenerek kullanılır.
         {% endif %}
     </p>
-    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-        <button type="button" onclick="butonEkle()">+ Buton Ekle</button>
+    <div style="display:flex;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
         <button type="button" onclick="kaydet()" style="background:var(--green);">Kaydet</button>
         {% if diger_var_mi %}
         <form method="POST" action="{{ url_for('sayfa.sayfa_kopyala', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}" onsubmit="return confirm('{{ diger_hedef }} düzenindeki elementler buraya kopyalanacak, mevcut içerik silinecek. Emin misin?');">
@@ -71,21 +101,9 @@
 
     <div id="panel">
         <div class="card">
-            <h2>Sayfa Özellikleri ({{ 'Masaüstü' if hedef == 'masaustu' else 'Mobil' }})</h2>
-            <label>Genişlik / Yükseklik (px)</label>
-            <div style="display:flex;gap:8px;">
-                <input type="number" id="sayfaW" value="{{ tuval_w }}" min="100">
-                <input type="number" id="sayfaH" value="{{ tuval_h }}" min="100">
-            </div>
-            <label>Arka Plan Rengi</label>
-            <input type="color" id="sayfaArkaplan" value="{{ arkaplan }}" style="height:38px;">
-            <button type="button" onclick="sayfaOzellikUygula()" style="width:100%;margin-top:4px;">Tuvala Uygula</button>
-        </div>
-
-        <div class="card">
             <h2>Element Özellikleri</h2>
             <div id="panelBos" class="panel-alan aktif">
-                <p style="font-size:13px;color:var(--text-secondary);">Düzenlemek için bir elementi seç.</p>
+                <p style="font-size:13px;color:var(--text-secondary);">Düzenlemek için bir elemente çift tıkla (ya da sağ tık &rarr; Özellikler).</p>
             </div>
             <div id="panelDolu" class="panel-alan">
                 <label>Etiket</label>
@@ -129,6 +147,26 @@
     </div>
 </div>
 
+<!-- Sag tik baglam menusu (hem tuval hem element icin ayni div, icerigi JS ile degisir) -->
+<div id="baglam-menu"></div>
+
+<!-- Sayfa Ozellikleri modali (sag tikla acilir) -->
+<div id="sayfa-ozellik-perde" onclick="sayfaOzellikKapat()"></div>
+<div id="sayfa-ozellik-modal">
+    <h2 style="color:var(--accent);font-size:15px;margin-bottom:14px;">Sayfa Özellikleri ({{ 'Masaüstü' if hedef == 'masaustu' else 'Mobil' }})</h2>
+    <label>Genişlik / Yükseklik (px)</label>
+    <div style="display:flex;gap:8px;">
+        <input type="number" id="sayfaW" value="{{ tuval_w }}" min="100">
+        <input type="number" id="sayfaH" value="{{ tuval_h }}" min="100">
+    </div>
+    <label>Arka Plan Rengi</label>
+    <input type="color" id="sayfaArkaplan" value="{{ arkaplan }}" style="height:38px;">
+    <div style="display:flex;gap:8px;margin-top:6px;">
+        <button type="button" onclick="sayfaOzellikUygula()">Tuvala Uygula</button>
+        <button type="button" onclick="sayfaOzellikKapat()" style="background:var(--panel2);">Kapat</button>
+    </div>
+</div>
+
 <script>
 let elementler = {{ elementler_json | safe }};
 const tagler = {{ tagler_json | safe }};
@@ -142,17 +180,30 @@ function tuvalCerceveGuncelle() {
     tuval.style.width = tuvalW + 'px';
     tuval.style.height = tuvalH + 'px';
     tuval.style.background = arkaplan;
+    document.getElementById('tuvalBoyutYazi').textContent = tuvalW + '×' + tuvalH;
 }
 
+function sayfaOzellikAc() {
+    document.getElementById('sayfa-ozellik-perde').style.display = 'block';
+    document.getElementById('sayfa-ozellik-modal').style.display = 'block';
+    baglamMenuKapat();
+}
+function sayfaOzellikKapat() {
+    document.getElementById('sayfa-ozellik-perde').style.display = 'none';
+    document.getElementById('sayfa-ozellik-modal').style.display = 'none';
+}
 function sayfaOzellikUygula() {
     tuvalW = parseInt(document.getElementById('sayfaW').value) || tuvalW;
     tuvalH = parseInt(document.getElementById('sayfaH').value) || tuvalH;
     arkaplan = document.getElementById('sayfaArkaplan').value;
     tuvalCerceveGuncelle();
+    sayfaOzellikKapat();
 }
 tuvalCerceveGuncelle();
+
 let seciliId = null;
-let surukleniyor = null; // {id, offsetX, offsetY}
+let surukleniyor = null;   // {id, offsetX, offsetY}
+let boyutlandiriliyor = null; // {id, startX, startY, startW, startH}
 
 const tagSelect = document.getElementById('ozTag');
 tagler.forEach(t => {
@@ -164,10 +215,10 @@ tagler.forEach(t => {
 
 function uid() { return 'el_' + Math.random().toString(36).slice(2, 10); }
 
-function butonEkle() {
+function butonEkle(x, y) {
     const el = {
         id: uid(), type: 'button',
-        x: 20, y: 20, w: 120, h: 44,
+        x: Math.max(0, x - 60), y: Math.max(0, y - 22), w: 120, h: 44,
         label: 'Buton', tag_id: null, mod: 'toggle',
         acik_deger: '1', kapali_deger: '0',
         renk_acik: '#2ecc71', renk_kapali: '#e74c3c', renk_yazi: '#ffffff'
@@ -194,6 +245,15 @@ function render() {
         div.textContent = el.label;
         div.addEventListener('mousedown', (e) => baslaSurukle(e, el.id));
         div.addEventListener('click', (e) => { e.stopPropagation(); sec(el.id); });
+        div.addEventListener('dblclick', (e) => { e.stopPropagation(); sec(el.id); ozellikleriAc(); });
+        div.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); sec(el.id); elementBaglamMenusu(e, el.id); });
+
+        if (el.id === seciliId) {
+            const tutamac = document.createElement('div');
+            tutamac.className = 'resize-tutamac';
+            tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, el.id));
+            div.appendChild(tutamac);
+        }
         tuval.appendChild(div);
     });
     guncellePanel();
@@ -204,25 +264,105 @@ function sec(id) {
     render();
 }
 
+function ozellikleriAc() {
+    // Panel zaten seciliId'ye gore guncelPanel() ile doluyor - burada sadece
+    // gorunur oldugundan emin olup panele odaklaniyoruz.
+    guncellePanel();
+    document.getElementById('panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 document.getElementById('tuval').addEventListener('click', () => { seciliId = null; render(); });
+document.getElementById('tuval').addEventListener('contextmenu', (e) => {
+    if (e.target.id !== 'tuval') return; // bos alana degil bir elemente sag tiklandiysa (element kendi handler'ini kullanir)
+    e.preventDefault();
+    tuvalBaglamMenusu(e);
+});
 
 function baslaSurukle(e, id) {
+    if (e.button !== 0) return; // sadece sol tik ile surukle
     e.preventDefault();
     const el = bul(id);
     const rect = document.getElementById('tuval').getBoundingClientRect();
     surukleniyor = { id, offsetX: e.clientX - rect.left - el.x, offsetY: e.clientY - rect.top - el.y };
     sec(id);
 }
-document.addEventListener('mousemove', (e) => {
-    if (!surukleniyor) return;
-    const el = bul(surukleniyor.id);
-    const rect = document.getElementById('tuval').getBoundingClientRect();
-    el.x = Math.max(0, Math.min(tuvalW - el.w, Math.round(e.clientX - rect.left - surukleniyor.offsetX)));
-    el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(e.clientY - rect.top - surukleniyor.offsetY)));
-    render();
-});
-document.addEventListener('mouseup', () => { surukleniyor = null; });
 
+function baslaBoyutlandir(e, id) {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = bul(id);
+    boyutlandiriliyor = { id, startX: e.clientX, startY: e.clientY, startW: el.w, startH: el.h };
+}
+
+document.addEventListener('mousemove', (e) => {
+    if (surukleniyor) {
+        const el = bul(surukleniyor.id);
+        const rect = document.getElementById('tuval').getBoundingClientRect();
+        el.x = Math.max(0, Math.min(tuvalW - el.w, Math.round(e.clientX - rect.left - surukleniyor.offsetX)));
+        el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(e.clientY - rect.top - surukleniyor.offsetY)));
+        render();
+    } else if (boyutlandiriliyor) {
+        const el = bul(boyutlandiriliyor.id);
+        const dx = e.clientX - boyutlandiriliyor.startX;
+        const dy = e.clientY - boyutlandiriliyor.startY;
+        el.w = Math.max(24, Math.min(tuvalW - el.x, boyutlandiriliyor.startW + dx));
+        el.h = Math.max(24, Math.min(tuvalH - el.y, boyutlandiriliyor.startH + dy));
+        render();
+    }
+});
+document.addEventListener('mouseup', () => { surukleniyor = null; boyutlandiriliyor = null; });
+
+// ---------- Bağlam (sağ tık) menüleri ----------
+function baglamMenuKapat() {
+    document.getElementById('baglam-menu').style.display = 'none';
+}
+document.addEventListener('click', baglamMenuKapat);
+
+function tuvalBaglamMenusu(e) {
+    const rect = document.getElementById('tuval').getBoundingClientRect();
+    const tuvalX = Math.round(e.clientX - rect.left);
+    const tuvalY = Math.round(e.clientY - rect.top);
+    baglamMenuGoster(e.clientX, e.clientY, [
+        { etiket: '+ Buton Ekle', aksiyon: () => butonEkle(tuvalX, tuvalY) },
+        { ayrac: true },
+        { etiket: '⚙ Sayfa Özellikleri', aksiyon: sayfaOzellikAc },
+    ]);
+}
+
+function elementBaglamMenusu(e, id) {
+    baglamMenuGoster(e.clientX, e.clientY, [
+        { etiket: '✎ Özellikler', aksiyon: () => { sec(id); ozellikleriAc(); } },
+        { ayrac: true },
+        { etiket: '🗑 Sil', tehlike: true, aksiyon: () => { seciliId = id; elementSil(); } },
+    ]);
+}
+
+function baglamMenuGoster(x, y, maddeler) {
+    const menu = document.getElementById('baglam-menu');
+    menu.innerHTML = '';
+    maddeler.forEach(m => {
+        if (m.ayrac) {
+            const hr = document.createElement('div');
+            hr.className = 'ayrac';
+            menu.appendChild(hr);
+            return;
+        }
+        const div = document.createElement('div');
+        div.className = 'madde' + (m.tehlike ? ' tehlike' : '');
+        div.textContent = m.etiket;
+        div.addEventListener('click', (ev) => { ev.stopPropagation(); baglamMenuKapat(); m.aksiyon(); });
+        menu.appendChild(div);
+    });
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'block';
+    // Ekran disina taşarsa sola/yukari yasla
+    const boundRect = menu.getBoundingClientRect();
+    if (boundRect.right > window.innerWidth) menu.style.left = (window.innerWidth - boundRect.width - 8) + 'px';
+    if (boundRect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - boundRect.height - 8) + 'px';
+}
+
+// ---------- Özellik paneli ----------
 function guncellePanel() {
     const bos = document.getElementById('panelBos');
     const dolu = document.getElementById('panelDolu');
