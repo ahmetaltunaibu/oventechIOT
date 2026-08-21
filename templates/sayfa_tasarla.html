@@ -10,11 +10,18 @@
         border: 1px dashed var(--border);
         border-radius: 8px;
         background: repeating-conic-gradient(var(--panel2) 0% 25%, var(--bg) 0% 50%) 50% / 20px 20px;
+        /* Kullanıcı isteği: tuval (özellikle dar mobil düzende) sol kenara
+           yapışıyor, sağda boşluk kalıyordu — artık her zaman ortalanıyor. */
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 16px;
     }
     #tuval {
         position: relative;
         background: var(--panel2);
         touch-action: none;
+        flex-shrink: 0;
     }
     .el-ogesi {
         position: absolute;
@@ -24,7 +31,7 @@
         display: flex; align-items: center; justify-content: center;
         box-shadow: 0 1px 3px rgba(0,0,0,0.4);
     }
-    .el-ogesi.el-tipi-label, .el-ogesi.el-tipi-sekil, .el-ogesi.el-tipi-resim { box-shadow: none; }
+    .el-ogesi.el-tipi-label, .el-ogesi.el-tipi-sekil, .el-ogesi.el-tipi-resim, .el-ogesi.el-tipi-cizgi { box-shadow: none; }
     .el-ogesi.el-tipi-resim img { width: 100%; height: 100%; pointer-events: none; }
     .el-ogesi.secili { outline: 2px solid var(--accent); outline-offset: 2px; }
     .resize-tutamac {
@@ -98,6 +105,9 @@
     <a class="mini-ikon {{ 'aktif' if hedef == 'mobil' else '' }}" title="Mobil Düzeni"
        href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='mobil') }}">📱</a>
     <span class="mini-ayrac"></span>
+    <button type="button" class="mini-ikon" title="Geri Al (Ctrl+Z)" onclick="geriAl()">↩</button>
+    <button type="button" class="mini-ikon" title="Yinele (Ctrl+Y)" onclick="ileriAl()">↪</button>
+    <span class="mini-ayrac"></span>
     <button type="button" class="mini-ikon vurgulu" title="Kaydet" onclick="kaydet()">💾</button>
     {% if diger_var_mi %}
     <form method="POST" action="{{ url_for('sayfa.sayfa_kopyala', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}" onsubmit="return confirm('{{ diger_hedef }} düzenindeki elementler buraya kopyalanacak, mevcut içerik silinecek. Emin misin?');" style="display:inline;">
@@ -106,7 +116,7 @@
     {% endif %}
     <span class="mini-ayrac"></span>
     <span class="mini-bilgi" title="Tuval boyutu">📐 <span id="tuvalBoyutYazi">{{ tuval_w }}×{{ tuval_h }}</span></span>
-    <span class="mini-bilgi" title="Element eklemek/sayfa ayarları için tuvalde sağ tıkla, düzenlemek için çift tıkla">❓</span>
+    <span class="mini-bilgi" title="Sağ tık: ekle/menü. Çift tık: özellikler. Shift/Ctrl+tık ya da boş alanda sürükle: çoklu seçim. Seçiliyken: Del sil, Ctrl+D çoğalt, Ctrl+C/V kopyala-yapıştır, Ctrl+Z/Y geri al-yinele, Ctrl+A tümünü seç.">❓</span>
     <button type="button" class="mini-ikon" title="Uzaklaştır" onclick="zoomAyarla(zoom - 0.1)">－</button>
     <span id="zoom-yuzde">100%</span>
     <button type="button" class="mini-ikon" title="Yakınlaştır" onclick="zoomAyarla(zoom + 0.1)">＋</button>
@@ -152,7 +162,10 @@
 <!-- Element Ozellikleri modali -->
 <div id="element-ozellik-perde" class="modal-perde" onclick="ozellikKapat()"></div>
 <div id="element-ozellik-modal" class="modal-kutu">
-    <h2 style="color:var(--accent);font-size:15px;margin-bottom:14px;">Element Özellikleri</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h2 style="color:var(--accent);font-size:15px;">Element Özellikleri</h2>
+        <button type="button" onclick="ozellikKapat()" title="Kapat" style="background:transparent;color:var(--text-secondary);padding:2px 8px;font-size:16px;">✕</button>
+    </div>
     <div id="ozAlanGenelMetin" class="ozel-alan gorunur">
         <label>Etiket / Metin</label>
         <input type="text" id="ozLabel">
@@ -197,6 +210,14 @@
                 <input type="checkbox" id="ozSeffaf" style="width:auto;margin:0;"> Şeffaf
             </label>
         </div>
+        <label>Bağlı Tag (opsiyonel — seçilirse çalışırken canlı değeri gösterir, yazdığın metin yerine)</label>
+        <select id="ozEtiketTag"><option value="">— bağlama, sabit metin göster —</option></select>
+    </div>
+
+    <div id="ozAlanCizgi" class="ozel-alan">
+        <label>Renk</label>
+        <input type="color" id="ozCizgiRenk" value="#e8eef4" style="height:38px;">
+        <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Kalınlık/uzunluk için elementi tuvalde sürükleyerek boyutlandır (yatay çizgi için genişliği, dikey için yüksekliği ayarla).</p>
     </div>
 
     <div id="ozAlanSekil" class="ozel-alan">
@@ -324,6 +345,7 @@ function sayfaOzellikKapat() {
     document.getElementById('sayfa-ozellik-modal').style.display = 'none';
 }
 function sayfaOzellikUygula() {
+    gecmiseKaydet();
     tuvalW = parseInt(document.getElementById('sayfaW').value) || tuvalW;
     tuvalH = parseInt(document.getElementById('sayfaH').value) || tuvalH;
     arkaplan = document.getElementById('sayfaArkaplan').value;
@@ -359,6 +381,7 @@ async function sablonUygula(kaynakCihazId, kaynakSayfaAd) {
         const res = await fetch(`/api/sablon-elementleri/${kaynakCihazId}/${encodeURIComponent(kaynakSayfaAd)}`);
         const data = await res.json();
         if (!res.ok) { alert(data.error || 'Şablon alınamadı'); return; }
+        gecmiseKaydet();
         // Kopyalanan elementlere YENİ id verilir (çakışma olmasın) — küçük bir
         // ofsetle yerleştirilir ki üst üste tam binmesin.
         data.elementler.forEach((kaynakEl, i) => {
@@ -377,22 +400,83 @@ async function sablonUygula(kaynakCihazId, kaynakSayfaAd) {
     }
 }
 
+// seciliId: özellik panelinde gösterilecek "birincil" element (son tıklanan).
+// seciliSet: tuvalde vurgulanan / birlikte taşınan TÜM seçili elementler
+// (çoklu seçim — Shift/Ctrl-tık, dikdörtgen ile sürükleyerek seçim).
 let seciliId = null;
-let surukleniyor = null;
+let seciliSet = new Set();
+let surukleGrubu = null;   // sürüklenen elementler: [{id, offsetX, offsetY}, ...]
 let boyutlandiriliyor = null;
+let marquee = null;        // dikdörtgen-seçim: {x1,y1,x2,y2}
+let marqueeDiv = null;
+let marqueeHareketEtti = false;
+let pano = [];             // uygulama-içi kopyala/yapıştır panosu
 
-const tagSelect = document.getElementById('ozTag');
-tagler.forEach(t => {
-    const opt = document.createElement('option');
-    opt.value = t.id;
-    opt.textContent = t.ad + ' (' + t.erisim + ')';
-    tagSelect.appendChild(opt);
-});
+function durumYaz(msg) { document.getElementById('durum').textContent = msg; }
+
+function tagSecenekleriDoldur(selectEl, ilkSecenekMetni) {
+    selectEl.innerHTML = '';
+    const ilk = document.createElement('option');
+    ilk.value = '';
+    ilk.textContent = ilkSecenekMetni;
+    selectEl.appendChild(ilk);
+    tagler.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.ad + ' (' + t.erisim + ')';
+        selectEl.appendChild(opt);
+    });
+}
+tagSecenekleriDoldur(document.getElementById('ozTag'), '— seçilmedi —');
+tagSecenekleriDoldur(document.getElementById('ozEtiketTag'), '— bağlama, sabit metin göster —');
+
+// ---------- Geri Al / Yinele (Ctrl+Z / Ctrl+Y) ----------
+let gecmis = [];
+let gelecek = [];
+const GECMIS_MAKS = 50;
+
+function anlikGoruntu() {
+    return JSON.stringify({ elementler, tuvalW, tuvalH, arkaplan });
+}
+function gecmiseKaydet() {
+    gecmis.push(anlikGoruntu());
+    if (gecmis.length > GECMIS_MAKS) gecmis.shift();
+    gelecek = [];
+}
+function durumGeriYukle(veri) {
+    elementler = veri.elementler;
+    tuvalW = veri.tuvalW;
+    tuvalH = veri.tuvalH;
+    arkaplan = veri.arkaplan;
+    seciliSet = new Set();
+    seciliId = null;
+    tuvalCerceveGuncelle();
+    render();
+}
+function geriAl() {
+    if (!gecmis.length) return;
+    gelecek.push(anlikGoruntu());
+    durumGeriYukle(JSON.parse(gecmis.pop()));
+    durumYaz('↩ Geri alındı');
+}
+function ileriAl() {
+    if (!gelecek.length) return;
+    gecmis.push(anlikGoruntu());
+    durumGeriYukle(JSON.parse(gelecek.pop()));
+    durumYaz('↪ Yinelendi');
+}
 
 function uid() { return 'el_' + Math.random().toString(36).slice(2, 10); }
 
+function elementEkle(nesne) {
+    gecmiseKaydet();
+    elementler.push(nesne);
+    secTekli(nesne.id);
+    render();
+}
+
 function butonEkle(x, y) {
-    elementler.push({
+    elementEkle({
         id: uid(), type: 'button',
         x: Math.max(0, x - 60), y: Math.max(0, y - 22), w: 120, h: 44,
         label: 'Buton', tag_id: null, mod: 'toggle',
@@ -400,22 +484,19 @@ function butonEkle(x, y) {
         renk_acik: '#2ecc71', renk_kapali: '#e74c3c', renk_yazi: '#ffffff',
         _onizleme: 'kapali', custom_css: ''
     });
-    seciliId = elementler[elementler.length - 1].id;
-    render();
 }
 
 function etiketEkle(x, y) {
-    elementler.push({
+    elementEkle({
         id: uid(), type: 'label',
         x: Math.max(0, x - 50), y: Math.max(0, y - 12), w: 140, h: 28,
-        label: 'Metin', renk_yazi: '#e8eef4', renk_arkaplan: 'transparent', font_boyutu: 16, custom_css: ''
+        label: 'Metin', tag_id: null, renk_yazi: '#e8eef4', renk_arkaplan: 'transparent',
+        font_boyutu: 16, custom_css: ''
     });
-    seciliId = elementler[elementler.length - 1].id;
-    render();
 }
 
 function sekilEkle(x, y) {
-    elementler.push({
+    elementEkle({
         id: uid(), type: 'sekil',
         x: Math.max(0, x - 60), y: Math.max(0, y - 40), w: 120, h: 80,
         sekil_dolgu: '#2e9ed9', sekil_kenarlik: '#1f7bb0', sekil_kenarlik_kalinlik: 0,
@@ -423,20 +504,24 @@ function sekilEkle(x, y) {
         sekil_gradient_aktif: false, sekil_gradient_renk1: '#2e9ed9', sekil_gradient_renk2: '#8e44ad',
         sekil_gradient_yon: 'to right', custom_css: ''
     });
-    seciliId = elementler[elementler.length - 1].id;
-    render();
 }
 
 function resimEkle(x, y) {
-    elementler.push({
+    elementEkle({
         id: uid(), type: 'resim',
         x: Math.max(0, x - 75), y: Math.max(0, y - 50), w: 150, h: 100,
         resim_url: '', resim_sigdirma: 'cover',
         resim_kose_solust: 0, resim_kose_sagust: 0, resim_kose_solalt: 0, resim_kose_sagalt: 0,
         custom_css: ''
     });
-    seciliId = elementler[elementler.length - 1].id;
-    render();
+}
+
+function cizgiEkle(x, y) {
+    elementEkle({
+        id: uid(), type: 'cizgi',
+        x: Math.max(0, x - 60), y: Math.max(0, y - 2), w: 120, h: 4,
+        cizgi_renk: '#e8eef4', custom_css: ''
+    });
 }
 
 function bul(id) { return elementler.find(e => e.id === id); }
@@ -463,7 +548,7 @@ function render() {
     tuval.innerHTML = '';
     elementler.forEach(el => {
         const div = document.createElement('div');
-        div.className = 'el-ogesi el-tipi-' + el.type + (el.id === seciliId ? ' secili' : '');
+        div.className = 'el-ogesi el-tipi-' + el.type + (seciliSet.has(el.id) ? ' secili' : '');
         div.dataset.elId = el.id;
         div.style.left = el.x + 'px';
         div.style.top = el.y + 'px';
@@ -475,7 +560,9 @@ function render() {
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.fontWeight = '500';
             div.style.color = el.renk_yazi;
-            div.textContent = el.label;
+            div.textContent = el.tag_id ? (el.label ? el.label + ': ' : '') + '(canlı değer)' : el.label;
+        } else if (el.type === 'cizgi') {
+            div.style.background = el.cizgi_renk || '#e8eef4';
         } else if (el.type === 'sekil') {
             div.style.background = sekilArkaplanCSS(el);
             div.style.border = `${el.sekil_kenarlik_kalinlik || 0}px solid ${el.sekil_kenarlik || 'transparent'}`;
@@ -507,89 +594,152 @@ function render() {
         }
 
         div.addEventListener('mousedown', (e) => baslaSurukle(e, el.id));
-        div.addEventListener('click', (e) => { e.stopPropagation(); sec(el.id); });
-        div.addEventListener('dblclick', (e) => { e.stopPropagation(); sec(el.id); ozellikAc(); });
-        div.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); sec(el.id); elementBaglamMenusu(e, el.id); });
+        div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (e.shiftKey || e.ctrlKey || e.metaKey) secEkle(el.id); else secTekli(el.id);
+        });
+        div.addEventListener('dblclick', (e) => { e.stopPropagation(); secTekli(el.id); ozellikAc(); });
+        div.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            if (!seciliSet.has(el.id)) secTekli(el.id);
+            elementBaglamMenusu(e, el.id);
+        });
 
-        if (el.id === seciliId) {
-            const tutamac = document.createElement('div');
-            tutamac.className = 'resize-tutamac';
-            tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, el.id));
-            div.appendChild(tutamac);
-        }
         tuval.appendChild(div);
     });
+    // Boyutlandırma tutamacı sadece TEK element seçiliyken gösterilir
+    // (çoklu seçimde grup taşıma var ama grup boyutlandırma yok).
+    if (seciliSet.size === 1) {
+        const tekId = [...seciliSet][0];
+        const div = document.querySelector(`[data-el-id="${tekId}"]`);
+        if (div) {
+            const tutamac = document.createElement('div');
+            tutamac.className = 'resize-tutamac';
+            tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, tekId));
+            div.appendChild(tutamac);
+        }
+    }
 }
 
+// ---------- Seçim (tek / çoklu) ----------
 // Seçim değişince artık tüm tuvali yeniden çizmiyoruz (render()) — bu, DOM
 // düğümlerini yok edip yeniden oluşturduğu için tarayıcının çift tıklama
 // algısını (aynı düğüm üzerinde iki click) bozuyordu. Bunun yerine sadece
-// eski/yeni elementin sınıfını ve boyutlandırma tutamacını güncelliyoruz.
-function guncelSecimGorunumu(eskiId, yeniId) {
-    if (eskiId) {
-        const eskiDiv = document.querySelector(`[data-el-id="${eskiId}"]`);
-        if (eskiDiv) {
-            eskiDiv.classList.remove('secili');
-            const tutamac = eskiDiv.querySelector('.resize-tutamac');
-            if (tutamac) tutamac.remove();
-        }
-    }
-    if (yeniId) {
-        const yeniDiv = document.querySelector(`[data-el-id="${yeniId}"]`);
-        if (yeniDiv) {
-            yeniDiv.classList.add('secili');
-            if (!yeniDiv.querySelector('.resize-tutamac')) {
-                const tutamac = document.createElement('div');
-                tutamac.className = 'resize-tutamac';
-                tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, yeniId));
-                yeniDiv.appendChild(tutamac);
-            }
+// ilgili elementlerin sınıfını / boyutlandırma tutamacını güncelliyoruz.
+function selectionGorunumunuTazele(eskiSet, yeniSet) {
+    document.querySelectorAll('.el-ogesi.secili').forEach(d => {
+        if (!yeniSet.has(d.dataset.elId)) d.classList.remove('secili');
+    });
+    yeniSet.forEach(id => {
+        const d = document.querySelector(`[data-el-id="${id}"]`);
+        if (d) d.classList.add('secili');
+    });
+    document.querySelectorAll('.resize-tutamac').forEach(h => h.remove());
+    if (yeniSet.size === 1) {
+        const tekId = [...yeniSet][0];
+        const d = document.querySelector(`[data-el-id="${tekId}"]`);
+        if (d) {
+            const tutamac = document.createElement('div');
+            tutamac.className = 'resize-tutamac';
+            tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, tekId));
+            d.appendChild(tutamac);
         }
     }
 }
 
-function sec(id) {
-    const eski = seciliId;
-    if (eski === id) return;
+function secTekli(id) {
+    const eski = new Set(seciliSet);
+    seciliSet = id != null ? new Set([id]) : new Set();
     seciliId = id;
-    guncelSecimGorunumu(eski, id);
+    selectionGorunumunuTazele(eski, seciliSet);
+}
+function secEkle(id) {
+    const eski = new Set(seciliSet);
+    if (seciliSet.has(id)) seciliSet.delete(id); else seciliSet.add(id);
+    seciliId = seciliSet.size ? [...seciliSet][seciliSet.size - 1] : null;
+    selectionGorunumunuTazele(eski, seciliSet);
+}
+function secTumu() {
+    const eski = new Set(seciliSet);
+    seciliSet = new Set(elementler.map(e => e.id));
+    seciliId = elementler.length ? elementler[elementler.length - 1].id : null;
+    selectionGorunumunuTazele(eski, seciliSet);
+    durumYaz(`${elementler.length} element seçildi`);
+}
+function secTemizle() {
+    const eski = new Set(seciliSet);
+    seciliSet = new Set();
+    seciliId = null;
+    selectionGorunumunuTazele(eski, seciliSet);
 }
 
-document.getElementById('tuval').addEventListener('click', () => { sec(null); });
+document.getElementById('tuval').addEventListener('click', (e) => {
+    if (e.target.id !== 'tuval') return;
+    if (marqueeHareketEtti) { marqueeHareketEtti = false; return; }
+    secTemizle();
+});
 document.getElementById('tuval').addEventListener('contextmenu', (e) => {
     if (e.target.id !== 'tuval') return;
     e.preventDefault();
     tuvalBaglamMenusu(e);
 });
 
+// ---------- Dikdörtgen (rubber-band) çoklu seçim ----------
+document.getElementById('tuval').addEventListener('mousedown', (e) => {
+    if (e.target.id !== 'tuval' || e.button !== 0) return;
+    const rect = document.getElementById('tuval').getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoom, y = (e.clientY - rect.top) / zoom;
+    marquee = { x1: x, y1: y, x2: x, y2: y };
+    marqueeHareketEtti = false;
+    if (!e.shiftKey && !e.ctrlKey && !e.metaKey) secTemizle();
+    marqueeDiv = document.createElement('div');
+    marqueeDiv.style.cssText = 'position:absolute;border:1px dashed var(--accent);background:rgba(46,158,217,0.15);pointer-events:none;z-index:50;';
+    document.getElementById('tuval').appendChild(marqueeDiv);
+});
+
+function marqueeDivGuncelle() {
+    const x1 = Math.min(marquee.x1, marquee.x2), x2 = Math.max(marquee.x1, marquee.x2);
+    const y1 = Math.min(marquee.y1, marquee.y2), y2 = Math.max(marquee.y1, marquee.y2);
+    marqueeDiv.style.left = x1 + 'px'; marqueeDiv.style.top = y1 + 'px';
+    marqueeDiv.style.width = (x2 - x1) + 'px'; marqueeDiv.style.height = (y2 - y1) + 'px';
+}
+
 function baslaSurukle(e, id) {
     if (e.button !== 0) return;
     e.preventDefault();
-    const el = bul(id);
+    e.stopPropagation();
+    if (!seciliSet.has(id)) {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) secEkle(id); else secTekli(id);
+    }
+    gecmiseKaydet();
     const rect = document.getElementById('tuval').getBoundingClientRect();
-    surukleniyor = {
-        id,
-        offsetX: (e.clientX - rect.left) / zoom - el.x,
-        offsetY: (e.clientY - rect.top) / zoom - el.y
-    };
-    sec(id);
+    const mx = (e.clientX - rect.left) / zoom, my = (e.clientY - rect.top) / zoom;
+    surukleGrubu = [...seciliSet].map(sid => {
+        const el = bul(sid);
+        return { id: sid, offsetX: mx - el.x, offsetY: my - el.y };
+    });
 }
 
 function baslaBoyutlandir(e, id) {
     e.preventDefault();
     e.stopPropagation();
+    gecmiseKaydet();
     const el = bul(id);
     boyutlandiriliyor = { id, startX: e.clientX, startY: e.clientY, startW: el.w, startH: el.h };
 }
 
 document.addEventListener('mousemove', (e) => {
-    if (surukleniyor) {
-        const el = bul(surukleniyor.id);
+    if (surukleGrubu) {
         const rect = document.getElementById('tuval').getBoundingClientRect();
-        el.x = Math.max(0, Math.min(tuvalW - el.w, Math.round((e.clientX - rect.left) / zoom - surukleniyor.offsetX)));
-        el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round((e.clientY - rect.top) / zoom - surukleniyor.offsetY)));
-        const div = document.querySelector(`[data-el-id="${el.id}"]`);
-        if (div) { div.style.left = el.x + 'px'; div.style.top = el.y + 'px'; }
+        const mx = (e.clientX - rect.left) / zoom, my = (e.clientY - rect.top) / zoom;
+        surukleGrubu.forEach(g => {
+            const el = bul(g.id);
+            if (!el) return;
+            el.x = Math.max(0, Math.min(tuvalW - el.w, Math.round(mx - g.offsetX)));
+            el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(my - g.offsetY)));
+            const div = document.querySelector(`[data-el-id="${el.id}"]`);
+            if (div) { div.style.left = el.x + 'px'; div.style.top = el.y + 'px'; }
+        });
     } else if (boyutlandiriliyor) {
         const el = bul(boyutlandiriliyor.id);
         const dx = (e.clientX - boyutlandiriliyor.startX) / zoom;
@@ -598,9 +748,118 @@ document.addEventListener('mousemove', (e) => {
         el.h = Math.max(24, Math.min(tuvalH - el.y, Math.round(boyutlandiriliyor.startH + dy)));
         const div = document.querySelector(`[data-el-id="${el.id}"]`);
         if (div) { div.style.width = el.w + 'px'; div.style.height = el.h + 'px'; }
+    } else if (marquee) {
+        marqueeHareketEtti = true;
+        const rect = document.getElementById('tuval').getBoundingClientRect();
+        marquee.x2 = (e.clientX - rect.left) / zoom;
+        marquee.y2 = (e.clientY - rect.top) / zoom;
+        marqueeDivGuncelle();
     }
 });
-document.addEventListener('mouseup', () => { surukleniyor = null; boyutlandiriliyor = null; });
+document.addEventListener('mouseup', () => {
+    surukleGrubu = null;
+    boyutlandiriliyor = null;
+    if (marquee) {
+        const x1 = Math.min(marquee.x1, marquee.x2), x2 = Math.max(marquee.x1, marquee.x2);
+        const y1 = Math.min(marquee.y1, marquee.y2), y2 = Math.max(marquee.y1, marquee.y2);
+        const eski = new Set(seciliSet);
+        elementler.forEach(el => {
+            const kesisir = el.x < x2 && el.x + el.w > x1 && el.y < y2 && el.y + el.h > y1;
+            if (kesisir) seciliSet.add(el.id);
+        });
+        seciliId = seciliSet.size ? [...seciliSet][seciliSet.size - 1] : null;
+        selectionGorunumunuTazele(eski, seciliSet);
+        if (marqueeDiv) { marqueeDiv.remove(); marqueeDiv = null; }
+        marquee = null;
+    }
+});
+
+// ---------- Çoğalt / Kopyala / Yapıştır ----------
+function cogalt() {
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    const yeniIdler = [];
+    [...seciliSet].forEach(id => {
+        const kaynak = bul(id);
+        if (!kaynak) return;
+        const yeni = Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
+            id: uid(),
+            x: Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16),
+            y: Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16),
+        });
+        elementler.push(yeni);
+        yeniIdler.push(yeni.id);
+    });
+    const eski = new Set(seciliSet);
+    seciliSet = new Set(yeniIdler);
+    seciliId = yeniIdler[yeniIdler.length - 1] || null;
+    render();
+    durumYaz('⧉ Çoğaltıldı');
+}
+function kopyala() {
+    if (!seciliSet.size) return;
+    pano = [...seciliSet].map(id => JSON.parse(JSON.stringify(bul(id)))).filter(Boolean);
+    durumYaz(`📋 ${pano.length} element kopyalandı`);
+}
+function yapistir() {
+    if (!pano.length) return;
+    gecmiseKaydet();
+    const yeniIdler = [];
+    pano.forEach(kaynak => {
+        const yeni = Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
+            id: uid(),
+            x: Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16),
+            y: Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16),
+        });
+        elementler.push(yeni);
+        yeniIdler.push(yeni.id);
+    });
+    seciliSet = new Set(yeniIdler);
+    seciliId = yeniIdler[yeniIdler.length - 1] || null;
+    render();
+    durumYaz('📋 Yapıştırıldı');
+}
+
+// ---------- Hizalama (2+ element seçiliyken) ----------
+function hizala(mod) {
+    if (seciliSet.size < 2) return;
+    gecmiseKaydet();
+    const secElemanlar = [...seciliSet].map(bul).filter(Boolean);
+    const minX = Math.min(...secElemanlar.map(e => e.x));
+    const maxX = Math.max(...secElemanlar.map(e => e.x + e.w));
+    const minY = Math.min(...secElemanlar.map(e => e.y));
+    const maxY = Math.max(...secElemanlar.map(e => e.y + e.h));
+    secElemanlar.forEach(el => {
+        if (mod === 'sol') el.x = minX;
+        else if (mod === 'sag') el.x = maxX - el.w;
+        else if (mod === 'ust') el.y = minY;
+        else if (mod === 'alt') el.y = maxY - el.h;
+        else if (mod === 'yatay-orta') el.x = Math.round((minX + maxX) / 2 - el.w / 2);
+        else if (mod === 'dikey-orta') el.y = Math.round((minY + maxY) / 2 - el.h / 2);
+    });
+    render();
+    durumYaz('↔ Hizalandı');
+}
+
+// ---------- Klavye kısayolları ----------
+document.addEventListener('keydown', (e) => {
+    const aktifEtiket = document.activeElement ? document.activeElement.tagName : '';
+    const modalAcikMi = document.getElementById('element-ozellik-modal').style.display === 'block'
+        || document.getElementById('sayfa-ozellik-modal').style.display === 'block'
+        || document.getElementById('sablon-modal').style.display === 'block';
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(aktifEtiket) || modalAcikMi) return;
+
+    const ctrl = e.ctrlKey || e.metaKey;
+    const tus = e.key.toLowerCase();
+    if (ctrl && tus === 'z') { e.preventDefault(); if (e.shiftKey) ileriAl(); else geriAl(); }
+    else if (ctrl && tus === 'y') { e.preventDefault(); ileriAl(); }
+    else if (ctrl && tus === 'c') { e.preventDefault(); kopyala(); }
+    else if (ctrl && tus === 'v') { e.preventDefault(); yapistir(); }
+    else if (ctrl && tus === 'd') { e.preventDefault(); cogalt(); }
+    else if (ctrl && tus === 'a') { e.preventDefault(); secTumu(); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); elementSil(); }
+    else if (e.key === 'Escape') { secTemizle(); }
+});
 
 // ---------- Bağlam (sağ tık) menüleri ----------
 function baglamMenuKapat() {
@@ -612,23 +871,40 @@ function tuvalBaglamMenusu(e) {
     const rect = document.getElementById('tuval').getBoundingClientRect();
     const tuvalX = Math.round((e.clientX - rect.left) / zoom);
     const tuvalY = Math.round((e.clientY - rect.top) / zoom);
-    baglamMenuGoster(e.clientX, e.clientY, [
+    const maddeler = [
         { etiket: '+ Buton Ekle', aksiyon: () => butonEkle(tuvalX, tuvalY) },
         { etiket: '+ Etiket Ekle', aksiyon: () => etiketEkle(tuvalX, tuvalY) },
         { etiket: '+ Dikdörtgen/Kare Ekle', aksiyon: () => sekilEkle(tuvalX, tuvalY) },
+        { etiket: '+ Çizgi Ekle', aksiyon: () => cizgiEkle(tuvalX, tuvalY) },
         { etiket: '+ Resim Ekle', aksiyon: () => resimEkle(tuvalX, tuvalY) },
         { ayrac: true },
-        { etiket: '📥 Şablon Uygula', aksiyon: sablonAc },
-        { etiket: '⚙ Sayfa Özellikleri', aksiyon: sayfaOzellikAc },
-    ]);
+    ];
+    if (pano.length) maddeler.push({ etiket: '📋 Yapıştır (Ctrl+V)', aksiyon: yapistir });
+    maddeler.push({ etiket: '🔲 Tümünü Seç (Ctrl+A)', aksiyon: secTumu });
+    maddeler.push({ ayrac: true });
+    maddeler.push({ etiket: '📥 Şablon Uygula', aksiyon: sablonAc });
+    maddeler.push({ etiket: '⚙ Sayfa Özellikleri', aksiyon: sayfaOzellikAc });
+    baglamMenuGoster(e.clientX, e.clientY, maddeler);
 }
 
 function elementBaglamMenusu(e, id) {
-    baglamMenuGoster(e.clientX, e.clientY, [
-        { etiket: '✎ Özellikler', aksiyon: () => { sec(id); ozellikAc(); } },
-        { ayrac: true },
-        { etiket: '🗑 Sil', tehlike: true, aksiyon: () => { seciliId = id; elementSil(); } },
-    ]);
+    const maddeler = [
+        { etiket: '✎ Özellikler', aksiyon: () => { secTekli(id); ozellikAc(); } },
+        { etiket: '⧉ Çoğalt (Ctrl+D)', aksiyon: cogalt },
+        { etiket: '📋 Kopyala (Ctrl+C)', aksiyon: kopyala },
+    ];
+    if (seciliSet.size > 1) {
+        maddeler.push({ ayrac: true });
+        maddeler.push({ etiket: '⇤ Sola Hizala', aksiyon: () => hizala('sol') });
+        maddeler.push({ etiket: '⇥ Sağa Hizala', aksiyon: () => hizala('sag') });
+        maddeler.push({ etiket: '⇧ Üste Hizala', aksiyon: () => hizala('ust') });
+        maddeler.push({ etiket: '⇩ Alta Hizala', aksiyon: () => hizala('alt') });
+        maddeler.push({ etiket: '↔ Yatayda Ortala', aksiyon: () => hizala('yatay-orta') });
+        maddeler.push({ etiket: '↕ Dikeyde Ortala', aksiyon: () => hizala('dikey-orta') });
+    }
+    maddeler.push({ ayrac: true });
+    maddeler.push({ etiket: '🗑 Sil (Del)', tehlike: true, aksiyon: elementSil });
+    baglamMenuGoster(e.clientX, e.clientY, maddeler);
 }
 
 function baglamMenuGoster(x, y, maddeler) {
@@ -677,6 +953,7 @@ function guncellePanel() {
     document.getElementById('ozAlanEtiket').classList.toggle('gorunur', el.type === 'label');
     document.getElementById('ozAlanSekil').classList.toggle('gorunur', el.type === 'sekil');
     document.getElementById('ozAlanResim').classList.toggle('gorunur', el.type === 'resim');
+    document.getElementById('ozAlanCizgi').classList.toggle('gorunur', el.type === 'cizgi');
 
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
@@ -691,6 +968,9 @@ function guncellePanel() {
         const seffaf = !el.renk_arkaplan || el.renk_arkaplan === 'transparent';
         document.getElementById('ozSeffaf').checked = seffaf;
         document.getElementById('ozRenkArkaplan').value = seffaf ? '#1e2d3d' : el.renk_arkaplan;
+        document.getElementById('ozEtiketTag').value = el.tag_id || '';
+    } else if (el.type === 'cizgi') {
+        document.getElementById('ozCizgiRenk').value = el.cizgi_renk || '#e8eef4';
     } else if (el.type === 'button') {
         document.getElementById('ozTag').value = el.tag_id || '';
         document.getElementById('ozMod').value = el.mod;
@@ -734,6 +1014,7 @@ function gradientAlanGuncelle() {
 function uygula() {
     const el = bul(seciliId);
     if (!el) return;
+    gecmiseKaydet();
     el.w = parseInt(document.getElementById('ozW').value) || 120;
     el.h = parseInt(document.getElementById('ozH').value) || 44;
 
@@ -745,6 +1026,9 @@ function uygula() {
     if (el.type === 'label') {
         el.font_boyutu = parseInt(document.getElementById('ozFontBoyutu').value) || 16;
         el.renk_arkaplan = document.getElementById('ozSeffaf').checked ? 'transparent' : document.getElementById('ozRenkArkaplan').value;
+        el.tag_id = document.getElementById('ozEtiketTag').value ? parseInt(document.getElementById('ozEtiketTag').value) : null;
+    } else if (el.type === 'cizgi') {
+        el.cizgi_renk = document.getElementById('ozCizgiRenk').value;
     } else if (el.type === 'button') {
         el.tag_id = document.getElementById('ozTag').value ? parseInt(document.getElementById('ozTag').value) : null;
         el.mod = document.getElementById('ozMod').value;
@@ -799,9 +1083,13 @@ document.getElementById('ozResimDosya').addEventListener('change', async (e) => 
 });
 
 function elementSil() {
-    elementler = elementler.filter(e => e.id !== seciliId);
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    elementler = elementler.filter(e => !seciliSet.has(e.id));
+    seciliSet = new Set();
     seciliId = null;
     render();
+    durumYaz('🗑 Silindi');
 }
 
 async function kaydet() {

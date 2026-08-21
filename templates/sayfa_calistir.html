@@ -26,6 +26,8 @@
         flex-shrink: 0;
     }
     #sayfa-nav a.aktif { background: var(--accent); color: #fff; }
+    #sayfa-nav a.geri { background: transparent; color: var(--text-secondary); padding: 6px 8px; font-size: 16px; }
+    #sayfa-nav .sayfa-nav-ayrac { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; margin: 0 2px; }
 
     #cerceve {
         width: 100%;
@@ -63,17 +65,23 @@
     .el-sekil { position: absolute; box-sizing: border-box; pointer-events: none; }
     .el-resim { position: absolute; overflow: hidden; pointer-events: none; }
     .el-resim img { width: 100%; height: 100%; }
+    .el-cizgi { position: absolute; pointer-events: none; }
 </style>
 {% endblock %}
 {% block content %}
-{% if sayfalar and sayfalar|length > 1 %}
+{# Kullanıcı isteği: bu sayfadan nasıl çıkılacağı belli değildi (ne
+   masaüstünde ne mobilde geri butonu yoktu) — artık her zaman görünen bir
+   geri/çıkış oku var. #}
 <div id="sayfa-nav">
+    <a class="geri" title="Cihaz paneline dön" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}">&larr;</a>
+    {% if sayfalar and sayfalar|length > 1 %}
+    <span class="sayfa-nav-ayrac"></span>
     {% for s in sayfalar %}
     <a href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}"
        class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</a>
     {% endfor %}
+    {% endif %}
 </div>
-{% endif %}
 
 <div id="cerceve"><div id="tuval"></div></div>
 
@@ -109,6 +117,19 @@ function tuvalCiz() {
             div.className = 'el-etiket';
             div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
+            // Etiket bir tag'e bağlıysa canlı değeri gösterir (statik metnini değil).
+            if (el.tag_id && degerler[el.tag_id]) {
+                div.textContent = degerler[el.tag_id].deger ?? '—';
+            }
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'cizgi') {
+            div.className = 'el-cizgi';
+            div.style.background = el.cizgi_renk || '#e8eef4';
+            div.textContent = '';
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             tuval.appendChild(div);
             return;
