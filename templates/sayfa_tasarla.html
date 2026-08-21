@@ -31,11 +31,27 @@
         background: var(--accent); border: 1px solid #fff;
         cursor: nwse-resize;
     }
-    .hedef-tab {
-        padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
-        background: var(--panel2); color: var(--text-secondary); text-decoration: none; display: inline-block;
+    #mini-toolbar {
+        display: flex; align-items: center; gap: 4px;
+        background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+        padding: 6px 10px; margin-bottom: 10px; flex-wrap: nowrap; overflow-x: auto;
     }
-    .hedef-tab.aktif { background: var(--accent); color: #fff; }
+    #mini-baslik {
+        font-size: 13px; font-weight: 600; color: var(--text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
+    }
+    .mini-ayrac { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+    .mini-ikon {
+        width: 32px; height: 32px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 6px; background: var(--panel2); color: var(--text-secondary);
+        text-decoration: none; border: none; cursor: pointer; font-size: 15px;
+    }
+    .mini-ikon:hover { background: var(--border); }
+    .mini-ikon.aktif { background: var(--accent); color: #fff; }
+    .mini-ikon.vurgulu { background: var(--green); color: #0f1720; }
+    .mini-bilgi { font-size: 11px; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0; cursor: default; }
+    #durum { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 
     /* Sag tik baglam menusu */
     #baglam-menu {
@@ -75,27 +91,25 @@
 </style>
 {% endblock %}
 {% block content %}
-<p><a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}">&larr; {{ cihaz.ad }}</a></p>
-
-<div class="card">
-    <h2>Sayfa Tasarımı — {{ sayfa_ad }}</h2>
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
-        <a class="hedef-tab {% if hedef == 'masaustu' %}aktif{% endif %}" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='masaustu') }}">🖥️ Masaüstü</a>
-        <a class="hedef-tab {% if hedef == 'mobil' %}aktif{% endif %}" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='mobil') }}">📱 Mobil</a>
-        <button type="button" onclick="kaydet()" style="background:var(--green);">Kaydet</button>
-        {% if diger_var_mi %}
-        <form method="POST" action="{{ url_for('sayfa.sayfa_kopyala', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}" onsubmit="return confirm('{{ diger_hedef }} düzenindeki elementler buraya kopyalanacak, mevcut içerik silinecek. Emin misin?');" style="display:inline;">
-            <button type="submit" style="background:var(--panel2);">{{ 'Mobil' if diger_hedef=='mobil' else 'Masaüstü' }} Düzenden Kopyala</button>
-        </form>
-        {% endif %}
-        <span id="durum" style="font-size:12px;color:var(--text-secondary);"></span>
-    </div>
-    <p style="font-size:12px;color:var(--text-secondary);">
-        Tuval boyutu: <span id="tuvalBoyutYazi">{{ tuval_w }}×{{ tuval_h }}</span>px — element eklemek/sayfa ayarları için tuvalde <b>sağ tıkla</b>, bir elementi düzenlemek için <b>çift tıkla</b>.
-        {% if not diger_var_mi %}
-            Diğer düzen ({{ 'mobil' if hedef == 'masaustu' else 'masaüstü' }}) henüz tanımlı değil — runtime'da bu düzen ölçeklenerek kullanılır.
-        {% endif %}
-    </p>
+<div id="mini-toolbar">
+    <a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}" title="{{ cihaz.ad }}'a dön">&larr;</a>
+    <span id="mini-baslik" title="{{ sayfa_ad }}">{{ sayfa_ad }}</span>
+    <span class="mini-ayrac"></span>
+    <a class="mini-ikon {{ 'aktif' if hedef == 'masaustu' else '' }}" title="Masaüstü Düzeni"
+       href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='masaustu') }}">🖥️</a>
+    <a class="mini-ikon {{ 'aktif' if hedef == 'mobil' else '' }}" title="Mobil Düzeni"
+       href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='mobil') }}">📱</a>
+    <span class="mini-ayrac"></span>
+    <button type="button" class="mini-ikon vurgulu" title="Kaydet" onclick="kaydet()">💾</button>
+    {% if diger_var_mi %}
+    <form method="POST" action="{{ url_for('sayfa.sayfa_kopyala', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}" onsubmit="return confirm('{{ diger_hedef }} düzenindeki elementler buraya kopyalanacak, mevcut içerik silinecek. Emin misin?');" style="display:inline;">
+        <button type="submit" class="mini-ikon" title="{{ 'Mobil' if diger_hedef=='mobil' else 'Masaüstü' }} Düzenden Kopyala">⧉</button>
+    </form>
+    {% endif %}
+    <span class="mini-ayrac"></span>
+    <span class="mini-bilgi" title="Tuval boyutu">📐 <span id="tuvalBoyutYazi">{{ tuval_w }}×{{ tuval_h }}</span></span>
+    <span class="mini-bilgi" title="Element eklemek/sayfa ayarları için tuvalde sağ tıkla, düzenlemek için çift tıkla">❓</span>
+    <span id="durum"></span>
 </div>
 
 {% if sayfalar and sayfalar|length > 1 and cihaz.nav_stili in ('ust_sekme', 'sandvic') %}
