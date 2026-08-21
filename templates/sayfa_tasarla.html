@@ -219,7 +219,7 @@
 <div id="sablon-modal" class="modal-kutu">
     <h2 style="color:var(--accent);font-size:15px;margin-bottom:6px;">📥 Şablon Uygula</h2>
     <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
-        Bir sayfayı bir kez uygulayabilirsin — farklı sayfaları birlikte kullanabilirsin, ama AYNI sayfayı tekrar tekrar ekleyemezsin. Uygulanmış bir sayfaya tekrar tıklarsan KALDIRILIR.
+        Bir sayfayı bir kez uygulayabilirsin — farklı sayfaları birlikte kullanabilirsin, ama AYNI sayfayı tekrar tekrar ekleyemezsin. Uygulanmış bir şablonda kaynak sayfada değişiklik yaptıysan 🔄 Güncelle ile taze hâliyle yenile, ya da 🗑 Kaldır ile tamamen çıkar.
     </p>
     <div id="sablon-liste"></div>
     <button type="button" onclick="sablonKapat()" style="background:var(--panel2);width:100%;margin-top:8px;">Kapat</button>
@@ -521,18 +521,34 @@ function sablonAc() {
     }
     secilebilirSayfalar.forEach(s => {
         // Kullanıcı isteği: aynı şablon sayfası tekrar tekrar eklenemesin —
-        // bir kez uygulanır, tekrar tıklanırsa KALDIRILIR (toggle).
+        // bir kez uygulanır. Uygulanmışsa artık iki ayrı eylem var: 🔄
+        // Güncelle (kaynaktaki en güncel hâliyle kaldır+yeniden ekle — tek
+        // tıkla, ayrı ayrı kaldır/ekle yapmana gerek kalmadan) ve 🗑 Kaldır.
         const kaynakKey = s.cihaz_id + ':' + s.sayfa_ad;
         const uygulanmisMi = elementler.some(el => el.sablon_kaynagi === kaynakKey);
         const div = document.createElement('div');
         div.className = 'sablon-satir' + (uygulanmisMi ? ' uygulandi' : '');
-        div.innerHTML = uygulanmisMi
-            ? `✓ ${s.sayfa_ad}<small>${s.cihaz_ad} — uygulandı, kaldırmak için tıkla</small>`
-            : `${s.sayfa_ad}<small>${s.cihaz_ad}</small>`;
-        div.addEventListener('click', () => {
-            if (uygulanmisMi) sablonKaldirBu(s.cihaz_id, s.sayfa_ad);
-            else sablonUygula(s.cihaz_id, s.sayfa_ad);
-        });
+        if (uygulanmisMi) {
+            div.innerHTML = `✓ ${s.sayfa_ad}<small>${s.cihaz_ad} — uygulandı</small>`;
+            const eylemler = document.createElement('div');
+            eylemler.style.cssText = 'display:flex;gap:6px;margin-top:6px;';
+            const guncelleBtn = document.createElement('button');
+            guncelleBtn.type = 'button';
+            guncelleBtn.textContent = '🔄 Güncelle';
+            guncelleBtn.style.cssText = 'flex:1;font-size:11px;padding:5px 6px;background:var(--accent);';
+            guncelleBtn.addEventListener('click', (ev) => { ev.stopPropagation(); sablonGuncelle(s.cihaz_id, s.sayfa_ad); });
+            const kaldirBtn = document.createElement('button');
+            kaldirBtn.type = 'button';
+            kaldirBtn.textContent = '🗑 Kaldır';
+            kaldirBtn.style.cssText = 'flex:1;font-size:11px;padding:5px 6px;background:var(--red);';
+            kaldirBtn.addEventListener('click', (ev) => { ev.stopPropagation(); sablonKaldirBu(s.cihaz_id, s.sayfa_ad); });
+            eylemler.appendChild(guncelleBtn);
+            eylemler.appendChild(kaldirBtn);
+            div.appendChild(eylemler);
+        } else {
+            div.innerHTML = `${s.sayfa_ad}<small>${s.cihaz_ad}</small>`;
+            div.addEventListener('click', () => sablonUygula(s.cihaz_id, s.sayfa_ad));
+        }
         liste.appendChild(div);
     });
     document.getElementById('sablon-perde').style.display = 'block';
@@ -617,6 +633,18 @@ function sablonKaldirBu(kaynakCihazId, kaynakSayfaAd) {
     yanPanelGuncelle();
     sablonKapat();
     durumYaz('🗑 Şablon kaldırıldı — Kaydet\'i unutma');
+}
+
+// Kullanıcı isteği: kaynak sayfada yapılan değişikliklerin yansıtılan
+// sayfaya gelmesi için önce elle "Kaldır", sonra elle tekrar "Uygula"
+// yapmak zorunda kalmasın — tek tıkla eskiyi kaldırıp kaynaktan TAZE
+// veriyle yeniden ekler.
+async function sablonGuncelle(kaynakCihazId, kaynakSayfaAd) {
+    const kaynakKey = kaynakCihazId + ':' + kaynakSayfaAd;
+    gecmiseKaydet();
+    elementler = elementler.filter(el => el.sablon_kaynagi !== kaynakKey);
+    await sablonUygula(kaynakCihazId, kaynakSayfaAd);
+    durumYaz('🔄 Şablon güncellendi (kaynaktaki son hâliyle) — Kaydet\'i unutma');
 }
 
 // seciliId: özellik panelinde gösterilecek "birincil" element (son tıklanan).
