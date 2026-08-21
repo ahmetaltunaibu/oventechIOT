@@ -109,23 +109,25 @@ function tuvalCiz() {
             div.className = 'el-etiket';
             div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             tuval.appendChild(div);
             return;
         }
 
         if (el.type === 'sekil') {
             div.className = 'el-sekil';
-            div.style.background = el.sekil_dolgu || '#2e9ed9';
+            div.style.background = sekilArkaplanCSS(el);
             div.style.border = `${el.sekil_kenarlik_kalinlik || 0}px solid ${el.sekil_kenarlik || 'transparent'}`;
-            div.style.borderRadius = (el.sekil_kose || 0) + 'px';
+            div.style.borderRadius = koseCSS(el, 'sekil_kose');
             div.textContent = '';
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             tuval.appendChild(div);
             return;
         }
 
         if (el.type === 'resim') {
             div.className = 'el-resim';
-            div.style.borderRadius = (el.resim_kose || 0) + 'px';
+            div.style.borderRadius = koseCSS(el, 'resim_kose');
             div.textContent = '';
             if (el.resim_url) {
                 const img = document.createElement('img');
@@ -133,12 +135,14 @@ function tuvalCiz() {
                 img.style.objectFit = el.resim_sigdirma || 'cover';
                 div.appendChild(img);
             }
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             tuval.appendChild(div);
             return;
         }
 
         div.className = 'el-buton';
         renkGuncelle(div, el);
+        if (el.custom_css) div.style.cssText += ';' + el.custom_css;
 
         if (el.mod === 'momentary') {
             div.addEventListener('mousedown', () => yaz(el, el.acik_deger));
@@ -151,6 +155,21 @@ function tuvalCiz() {
         tuval.appendChild(div);
     });
     olcekle();
+}
+
+function koseCSS(el, on) {
+    const tl = el[on + '_solust'] || 0;
+    const tr = el[on + '_sagust'] || 0;
+    const br = el[on + '_sagalt'] || 0;
+    const bl = el[on + '_solalt'] || 0;
+    return `${tl}px ${tr}px ${br}px ${bl}px`;
+}
+
+function sekilArkaplanCSS(el) {
+    if (el.sekil_gradient_aktif) {
+        return `linear-gradient(${el.sekil_gradient_yon || 'to right'}, ${el.sekil_gradient_renk1 || '#2e9ed9'}, ${el.sekil_gradient_renk2 || '#8e44ad'})`;
+    }
+    return el.sekil_dolgu || '#2e9ed9';
 }
 
 function olcekle() {

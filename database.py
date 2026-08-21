@@ -152,6 +152,20 @@ def init_db():
     if sayfa_kolonlari and 'arkaplan' not in sayfa_kolonlari:
         cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan TEXT NOT NULL DEFAULT '#1e2d3d'")
 
+    # Resim elementi icin yuklenen dosyalar — DB icinde BLOB olarak saklanir
+    # (Render'in diski deploy'da sifirlaniyor, ama tum .db zaten yedekleniyor
+    # — boylece yuklenen resimler de yedekle birlikte tasinir).
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS medya (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cihaz_id INTEGER NOT NULL REFERENCES cihazlar(id) ON DELETE CASCADE,
+            dosya_adi TEXT NOT NULL,
+            mime_tipi TEXT NOT NULL,
+            veri BLOB NOT NULL,
+            olusturma_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     # Migration: eski kullanicilar tablosu UNIQUE(proje_id, kullanici_adi)
     # ile olusmus olabilir (kod hala proje_kodu istiyordu) - artik kullanici
     # adi TUM SISTEMDE benzersiz olmali (proje kodu olmadan giris icin).
@@ -445,6 +459,32 @@ def cihaz_tagleri(cihaz_id: int):
         conn.close()
 
 
+# ============================================================
+# MEDYA (Resim elementi icin yuklenen dosyalar)
+# ============================================================
+
+def medya_yukle(cihaz_id: int, dosya_adi: str, mime_tipi: str, veri: bytes):
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            'INSERT INTO medya (cihaz_id, dosya_adi, mime_tipi, veri) VALUES (?, ?, ?, ?)',
+            (cihaz_id, dosya_adi, mime_tipi, veri)
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def medya_getir(medya_id: int):
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT * FROM medya WHERE id = ?', (medya_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
 def tag_sil(tag_id: int):
     conn = get_db()
     try:
@@ -589,6 +629,63 @@ def cihaz_sayfalari(cihaz_id: int):
         return sorted(gruplar.values(), key=lambda g: g['ad'])
     finally:
         conn.close()
+
+
+def demo_veri_olustur():
+    """Uygulama her başlatıldığında (app.py -> init_db() sonrası) çağrılır.
+    Render'ın diski her deploy'da sıfırlanıyor, .db dosyası da onunla
+    birlikte gidiyor — kullanıcı her seferinde elle test projesi/cihaz/
+    kullanıcı/sayfa oluşturmak zorunda kalmasın diye örnek bir demo proje
+    otomatik oluşturulur. Zaten varsa (kod='demo') hiçbir şeye dokunmaz,
+    yani var olan gerçek veriler asla ezilmez — bu SADECE eksikse eklenen
+    ayrı bir örnek projedir, gerçek verinin yerine geçmez."""
+    if proje_getir_kod('demo'):
+        return
+
+    ok, proje_id = proje_ekle('demo', 'Demo Proje (Test / Şablon)')
+    if not ok:
+        return
+
+    kullanici_ekle(proje_id, 'demo', 'demo123', 'Demo Kullanıcı', rol='tasarimci')
+
+    ok, cihaz_bilgi = cihaz_ekle(proje_id, 'Demo Fırın')
+    if not ok:
+        return
+    cihaz_id = cihaz_bilgi['id']
+
+    _, isitici_tag_id = tag_ekle(cihaz_id, 'Isıtıcı', '0', 'bool', 'readwrite')
+    tag_ekle(cihaz_id, 'Sıcaklık', '1', 'float', 'read')
+
+    elementler = [
+        {
+            'id': 'el_demo_baslik', 'type': 'label',
+            'x': 40, 'y': 30, 'w': 340, 'h': 40,
+            'label': 'Demo Fırın Kontrol Paneli', 'renk_yazi': '#e8eef4',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 22, 'custom_css': ''
+        },
+        {
+            'id': 'el_demo_panel', 'type': 'sekil',
+            'x': 40, 'y': 90, 'w': 380, 'h': 220,
+            'sekil_dolgu': '#22384d', 'sekil_kenarlik': '#2e9ed9', 'sekil_kenarlik_kalinlik': 2,
+            'sekil_kose_solust': 12, 'sekil_kose_sagust': 12, 'sekil_kose_solalt': 12, 'sekil_kose_sagalt': 12,
+            'sekil_gradient_aktif': False, 'sekil_gradient_renk1': '#2e9ed9', 'sekil_gradient_renk2': '#8e44ad',
+            'sekil_gradient_yon': 'to right', 'custom_css': ''
+        },
+        {
+            'id': 'el_demo_buton', 'type': 'button',
+            'x': 70, 'y': 130, 'w': 140, 'h': 48,
+            'label': 'Isıtıcı', 'tag_id': isitici_tag_id, 'mod': 'toggle',
+            'acik_deger': '1', 'kapali_deger': '0',
+            'renk_acik': '#2ecc71', 'renk_kapali': '#e74c3c', 'renk_yazi': '#ffffff', 'custom_css': ''
+        },
+        {
+            'id': 'el_demo_not', 'type': 'label',
+            'x': 70, 'y': 200, 'w': 300, 'h': 60,
+            'label': "Bu sayfa örnek/şablon olarak eklendi. Sağ tık > Şablon Uygula ile kendi sayfalarına kopyalayabilirsin.",
+            'renk_yazi': '#9fb3c8', 'renk_arkaplan': 'transparent', 'font_boyutu': 13, 'custom_css': ''
+        },
+    ]
+    sayfa_kaydet(cihaz_id, 'Ana Sayfa', elementler, hedef='masaustu', tuval_w=1280, tuval_h=800, arkaplan='#1e2d3d')
 
 
 def proje_tum_sayfalari(proje_id: int):

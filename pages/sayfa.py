@@ -12,13 +12,15 @@ seçilir; mobil düzen tanımlanmamışsa masaüstü düzeni ölçeklenerek kull
 mod: 'set_on' | 'set_off' | 'toggle' | 'momentary'
 """
 import json
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify, Response
 from pages.login import login_required, tasarimci_required
 import database
 
 sayfa_bp = Blueprint('sayfa', __name__)
 
 HEDEFLER = ('masaustu', 'mobil')
+_IZINLI_MIME = {'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'}
+_MAKS_BOYUT = 4 * 1024 * 1024  # 4 MB — DB'ye BLOB olarak yaziliyor, cok buyumesin
 
 
 def _cihaz_dogrula(cihaz_id):
@@ -209,6 +211,40 @@ def api_sablon_elementleri(kaynak_cihaz_id, sayfa_ad):
     if not sayfa:
         return jsonify({'error': 'Sayfa bulunamadı'}), 404
     return jsonify({'elementler': sayfa['elementler']})
+
+
+@sayfa_bp.route('/cihaz/<int:cihaz_id>/medya-yukle', methods=['POST'])
+@tasarimci_required
+def medya_yukle(cihaz_id):
+    """Resim elementi için gerçek dosya yükleme — kullanıcı isteği: sadece
+    dış URL girmek yeterli değildi, kendi resmini yükleyebilmeli. Dosya
+    DB'ye BLOB olarak yazılır (Render'ın diski deploy'da sıfırlanıyor,
+    ama .db zaten yedekleniyor — böylece yüklenen resimler de o yedekle
+    birlikte korunur)."""
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    dosya = request.files.get('dosya')
+    if not dosya or dosya.filename == '':
+        return jsonify({'error': 'Dosya gönderilmedi'}), 400
+    mime_tipi = dosya.mimetype or 'application/octet-stream'
+    if mime_tipi not in _IZINLI_MIME:
+        return jsonify({'error': f'Desteklenmeyen dosya türü: {mime_tipi}. İzin verilenler: PNG, JPEG, GIF, WEBP, SVG.'}), 400
+    veri = dosya.read()
+    if len(veri) > _MAKS_BOYUT:
+        return jsonify({'error': 'Dosya çok büyük (maksimum 4 MB).'}), 400
+    medya_id = database.medya_yukle(cihaz_id, dosya.filename, mime_tipi, veri)
+    return jsonify({'success': True, 'url': url_for('sayfa.medya_goster', medya_id=medya_id)})
+
+
+@sayfa_bp.route('/medya/<int:medya_id>')
+@login_required
+def medya_goster(medya_id):
+    kayit = database.medya_getir(medya_id)
+    if not kayit:
+        return jsonify({'error': 'Bulunamadı'}), 404
+    if not _cihaz_dogrula(kayit['cihaz_id']):
+        return jsonify({'error': 'Yetkisiz'}), 403
+    return Response(kayit['veri'], mimetype=kayit['mime_tipi'])
 
 
 # ============================================================
