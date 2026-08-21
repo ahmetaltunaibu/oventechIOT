@@ -123,6 +123,13 @@
         transition: filter 0.1s;
     }
     .el-buton:active { filter: brightness(0.85); }
+    .el-etiket {
+        position: absolute;
+        font-weight: 500;
+        user-select: none;
+        display: flex; align-items: center; justify-content: center;
+        pointer-events: none;
+    }
 </style>
 {% endblock %}
 {% block content %}
@@ -190,13 +197,22 @@ function tuvalCiz() {
     tuval.innerHTML = '';
     aktifSayfa.elementler.forEach(el => {
         const div = document.createElement('div');
-        div.className = 'el-buton';
         div.style.left = el.x + 'px';
         div.style.top = el.y + 'px';
         div.style.width = el.w + 'px';
         div.style.height = el.h + 'px';
         div.style.color = el.renk_yazi;
         div.textContent = el.label;
+
+        if (el.type === 'label') {
+            div.className = 'el-etiket';
+            div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
+            div.style.fontSize = (el.font_boyutu || 16) + 'px';
+            tuval.appendChild(div);
+            return;
+        }
+
+        div.className = 'el-buton';
         renkGuncelle(div, el);
 
         if (el.mod === 'momentary') {

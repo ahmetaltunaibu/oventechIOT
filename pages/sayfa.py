@@ -121,10 +121,11 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
 
     tagler = database.cihaz_tagleri(cihaz_id)
     sayfalar = database.cihaz_sayfalari(cihaz_id)
+    proje_sayfalari = database.proje_tum_sayfalari(session['proje_id'])
     return render_template(
         'sayfa_tasarla.html',
         cihaz=cihaz, sayfa_ad=sayfa_ad, hedef=hedef, diger_hedef=diger_hedef, diger_var_mi=diger_var_mi,
-        sayfalar=sayfalar,
+        sayfalar=sayfalar, proje_sayfalari=proje_sayfalari,
         tuval_w=sayfa.get('tuval_w') or varsayilan_w,
         tuval_h=sayfa.get('tuval_h') or varsayilan_h,
         arkaplan=sayfa.get('arkaplan') or '#1e2d3d',
@@ -192,6 +193,22 @@ def sayfa_calistir(cihaz_id, sayfa_ad):
         masaustu_json=paket(masaustu), mobil_json=paket(mobil),
         sayfalar=database.cihaz_sayfalari(cihaz_id),
     )
+
+
+@sayfa_bp.route('/api/sablon-elementleri/<int:kaynak_cihaz_id>/<sayfa_ad>')
+@tasarimci_required
+def api_sablon_elementleri(kaynak_cihaz_id, sayfa_ad):
+    """Kullanıcı isteği: örnek bir sayfa oluşturduktan sonra o sayfanın
+    elementlerini istediği ZAMAN, VAR OLAN başka bir sayfaya da EKLEYEBİLMELİ
+    (sadece sayfa oluştururken değil) — birden fazla şablonu aynı sayfada
+    birleştirebilmesi için bu EKLEME (üzerine yazmadan) olarak yapılır."""
+    if not _cihaz_dogrula(kaynak_cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    sayfa = database.sayfa_getir(kaynak_cihaz_id, sayfa_ad, 'masaustu') \
+        or database.sayfa_getir(kaynak_cihaz_id, sayfa_ad, 'mobil')
+    if not sayfa:
+        return jsonify({'error': 'Sayfa bulunamadı'}), 404
+    return jsonify({'elementler': sayfa['elementler']})
 
 
 # ============================================================
