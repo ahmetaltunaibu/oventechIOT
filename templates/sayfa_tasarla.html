@@ -92,6 +92,8 @@
         background: var(--panel2); margin-bottom: 6px;
     }
     .sablon-satir:hover { background: var(--border); }
+    .sablon-satir.uygulandi { background: rgba(46,204,113,0.15); border: 1px solid var(--green); }
+    .sablon-satir.uygulandi:hover { background: rgba(231,76,60,0.15); border-color: var(--red); }
     .ikon-hucre {
         display: flex; flex-direction: column; align-items: center; gap: 4px;
         padding: 6px 2px; border-radius: 6px; cursor: pointer; background: var(--panel2);
@@ -146,8 +148,8 @@
     <button type="button" class="mini-ikon coklu-gerekli" title="Sağa Hizala" onclick="hizala('sag')">⇥</button>
     <button type="button" class="mini-ikon coklu-gerekli" title="Üste Hizala" onclick="hizala('ust')">⇧</button>
     <button type="button" class="mini-ikon coklu-gerekli" title="Alta Hizala" onclick="hizala('alt')">⇩</button>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Yatayda Ortala" onclick="hizala('yatay-orta')">↔</button>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Dikeyde Ortala" onclick="hizala('dikey-orta')">↕</button>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Yatayda Dağıt (aralarındaki boşluğu eşitle, en az 3 element)" onclick="hizala('yatay-orta')">↔</button>
+    <button type="button" class="mini-ikon coklu-gerekli" title="Dikeyde Dağıt (aralarındaki boşluğu eşitle, en az 3 element)" onclick="hizala('dikey-orta')">↕</button>
     <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
     <button type="button" class="mini-ikon coklu-gerekli" title="Genişliği Eşitle" onclick="boyutEsitle('genislik')">W=</button>
     <button type="button" class="mini-ikon coklu-gerekli" title="Yüksekliği Eşitle" onclick="boyutEsitle('yukseklik')">H=</button>
@@ -159,8 +161,7 @@
     <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
     <button type="button" class="mini-ikon coklu-gerekli" title="Grupla" onclick="grupla()">🔗</button>
     <button type="button" id="btnGrubuCoz" class="mini-ikon" title="Grubu Çöz" onclick="grubuCoz()" style="display:none;">✂</button>
-    <button type="button" class="mini-ikon" title="Kilitle" onclick="topluKilitle(true)">🔒</button>
-    <button type="button" class="mini-ikon" title="Kilidi Aç" onclick="topluKilitle(false)">🔓</button>
+    <button type="button" id="btnKilitToggle" class="mini-ikon" title="Kilitle" onclick="kilitToggle()">🔒</button>
 </div>
 
 <!-- Sayfa Ozellikleri modali -->
@@ -218,7 +219,7 @@
 <div id="sablon-modal" class="modal-kutu">
     <h2 style="color:var(--accent);font-size:15px;margin-bottom:6px;">📥 Şablon Uygula</h2>
     <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
-        Seçtiğin sayfanın elementleri, MEVCUT elementlerin ÜZERİNE EKLENİR (silinmez) — birden fazla şablonu art arda uygulayabilirsin.
+        Bir sayfayı bir kez uygulayabilirsin — farklı sayfaları birlikte kullanabilirsin, ama AYNI sayfayı tekrar tekrar ekleyemezsin. Uygulanmış bir sayfaya tekrar tıklarsan KALDIRILIR.
     </p>
     <div id="sablon-liste"></div>
     <button type="button" onclick="sablonKapat()" style="background:var(--panel2);width:100%;margin-top:8px;">Kapat</button>
@@ -519,10 +520,19 @@ function sablonAc() {
         liste.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">Bu projede henüz başka sayfa yok.</p>';
     }
     secilebilirSayfalar.forEach(s => {
+        // Kullanıcı isteği: aynı şablon sayfası tekrar tekrar eklenemesin —
+        // bir kez uygulanır, tekrar tıklanırsa KALDIRILIR (toggle).
+        const kaynakKey = s.cihaz_id + ':' + s.sayfa_ad;
+        const uygulanmisMi = elementler.some(el => el.sablon_kaynagi === kaynakKey);
         const div = document.createElement('div');
-        div.className = 'sablon-satir';
-        div.innerHTML = `${s.sayfa_ad}<small>${s.cihaz_ad}</small>`;
-        div.addEventListener('click', () => sablonUygula(s.cihaz_id, s.sayfa_ad));
+        div.className = 'sablon-satir' + (uygulanmisMi ? ' uygulandi' : '');
+        div.innerHTML = uygulanmisMi
+            ? `✓ ${s.sayfa_ad}<small>${s.cihaz_ad} — uygulandı, kaldırmak için tıkla</small>`
+            : `${s.sayfa_ad}<small>${s.cihaz_ad}</small>`;
+        div.addEventListener('click', () => {
+            if (uygulanmisMi) sablonKaldirBu(s.cihaz_id, s.sayfa_ad);
+            else sablonUygula(s.cihaz_id, s.sayfa_ad);
+        });
         liste.appendChild(div);
     });
     document.getElementById('sablon-perde').style.display = 'block';
@@ -542,13 +552,27 @@ async function sablonUygula(kaynakCihazId, kaynakSayfaAd) {
         const data = await res.json();
         if (!res.ok) { alert(data.error || 'Şablon alınamadı'); return; }
         gecmiseKaydet();
+        const kaynakKey = kaynakCihazId + ':' + kaynakSayfaAd;
         // Kopyalanan elementlere YENİ id verilir (çakışma olmasın) — küçük bir
-        // ofsetle yerleştirilir ki üst üste tam binmesin.
+        // ofsetle yerleştirilir ki üst üste tam binmesin. Kullanıcı isteği:
+        // yansıtılan şablon elementleri bu sayfada TAŞINMASIN/tıklanmasın —
+        // varsayılan olarak KİLİTLİ eklenir (istersen normal kilit açma
+        // yoluyla açabilirsin). sablon_kaynagi ile hangi kaynaktan geldiği
+        // işaretlenir — aynı kaynağın tekrar eklenmesini engellemek ve
+        // "Kaldır" ile toplu geri almak için kullanılıyor.
         data.elementler.forEach((kaynakEl, i) => {
+            // BUG FIX: kaynak element hedef tuvalden GENİŞ/YÜKSEKSE (ör.
+            // masaüstünde tasarlanmış geniş bir şekil mobil 420px tuvale
+            // ekleniyorsa) Math.min tek başına NEGATİF x/y üretip elementi
+            // tuvalin dışına (görünmez) yerleştiriyordu — "mobilde şablon
+            // çalışmıyor" bug'ının kök sebebi buydu. Math.max(0, ...) ile
+            // sıfırın altına inmesi engellendi.
             const yeni = Object.assign({}, kaynakEl, {
                 id: uid(),
-                x: Math.min(tuvalW - (kaynakEl.w || 100), (kaynakEl.x || 0) + 16),
-                y: Math.min(tuvalH - (kaynakEl.h || 40), (kaynakEl.y || 0) + 16),
+                x: Math.max(0, Math.min(tuvalW - (kaynakEl.w || 100), (kaynakEl.x || 0) + 16)),
+                y: Math.max(0, Math.min(tuvalH - (kaynakEl.h || 40), (kaynakEl.y || 0) + 16)),
+                kilitli: true,
+                sablon_kaynagi: kaynakKey,
             });
             elementler.push(yeni);
         });
@@ -565,6 +589,22 @@ async function sablonUygula(kaynakCihazId, kaynakSayfaAd) {
     }
 }
 function istenenHedefAdi(h) { return h === 'mobil' ? 'mobil' : 'masaüstü'; }
+
+// Daha önce uygulanmış bir şablonun TÜMÜNÜ kaldırır (sablon_kaynagi ile
+// işaretlenmiş elementler) — "📥 Şablon Uygula" listesinde uygulanmış bir
+// sayfaya tekrar tıklanınca çağrılır.
+function sablonKaldirBu(kaynakCihazId, kaynakSayfaAd) {
+    const kaynakKey = kaynakCihazId + ':' + kaynakSayfaAd;
+    gecmiseKaydet();
+    const kalanIdler = new Set(elementler.filter(el => el.sablon_kaynagi !== kaynakKey).map(el => el.id));
+    elementler = elementler.filter(el => el.sablon_kaynagi !== kaynakKey);
+    seciliSet = new Set([...seciliSet].filter(id => kalanIdler.has(id)));
+    seciliId = seciliSet.size ? [...seciliSet][seciliSet.size - 1] : null;
+    render();
+    yanPanelGuncelle();
+    sablonKapat();
+    durumYaz('🗑 Şablon kaldırıldı — Kaydet\'i unutma');
+}
 
 // seciliId: özellik panelinde gösterilecek "birincil" element (son tıklanan).
 // seciliSet: tuvalde vurgulanan / birlikte taşınan TÜM seçili elementler
@@ -643,6 +683,7 @@ function durumGeriYukle(veri) {
     seciliId = null;
     tuvalCerceveGuncelle();
     render();
+    yanPanelGuncelle();
 }
 function geriAl() {
     if (!gecmis.length) return;
@@ -917,6 +958,19 @@ function yanPanelGuncelle() {
         const digerGruplu = [...seciliSet].some(sid => { const e = bul(sid); return e && e.grup_id; });
         grubuCozBtn.style.display = digerGruplu ? 'flex' : 'none';
     }
+    const kilitBtn = document.getElementById('btnKilitToggle');
+    if (kilitBtn) {
+        const digerKilitli = [...seciliSet].some(sid => { const e = bul(sid); return e && e.kilitli; });
+        kilitBtn.textContent = digerKilitli ? '🔓' : '🔒';
+        kilitBtn.title = digerKilitli ? 'Kilidi Aç' : 'Kilitle';
+    }
+}
+
+// Kullanıcı isteği: Kilitle/Kilidi Aç ayrı iki buton yerine Grupla/Grubu Çöz
+// gibi TEK bir toggle buton olsun.
+function kilitToggle() {
+    const digerKilitli = [...seciliSet].some(sid => { const e = bul(sid); return e && e.kilitli; });
+    topluKilitle(!digerKilitli);
 }
 
 function selectionGorunumunuTazele(eskiSet, yeniSet) {
@@ -1171,8 +1225,8 @@ function cogalt() {
         if (!kaynak) return;
         const yeni = _grupIdEslestir(Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
             id: uid(),
-            x: Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16),
-            y: Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16),
+            x: Math.max(0, Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16)),
+            y: Math.max(0, Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16)),
         }), harita);
         elementler.push(yeni);
         yeniIdler.push(yeni.id);
@@ -1180,6 +1234,7 @@ function cogalt() {
     seciliSet = new Set(yeniIdler);
     seciliId = yeniIdler[yeniIdler.length - 1] || null;
     render();
+    yanPanelGuncelle();
     durumYaz('⧉ Çoğaltıldı');
 }
 function kopyala() {
@@ -1195,8 +1250,8 @@ function yapistir() {
     pano.forEach(kaynak => {
         const yeni = _grupIdEslestir(Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
             id: uid(),
-            x: Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16),
-            y: Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16),
+            x: Math.max(0, Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16)),
+            y: Math.max(0, Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16)),
         }), harita);
         elementler.push(yeni);
         yeniIdler.push(yeni.id);
@@ -1204,11 +1259,19 @@ function yapistir() {
     seciliSet = new Set(yeniIdler);
     seciliId = yeniIdler[yeniIdler.length - 1] || null;
     render();
+    yanPanelGuncelle();
     durumYaz('📋 Yapıştırıldı');
 }
 
 // ---------- Hizalama (2+ element seçiliyken, kilitli elementler hariç) ----------
 function hizala(mod) {
+    // Kullanıcı isteği: "Yatayda/Dikeyde Ortala" düğmeleri ortalamak değil,
+    // elementler ARASI BOŞLUĞU EŞİTLEMELİ ("dağıt") — bu yüzden bu iki mod
+    // ayrı dagit() fonksiyonuna yönlendiriliyor, en az 3 element gerektirir.
+    if (mod === 'yatay-orta' || mod === 'dikey-orta') {
+        dagit(mod === 'yatay-orta' ? 'yatay' : 'dikey');
+        return;
+    }
     const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
     if (secElemanlar.length < 2) return;
     gecmiseKaydet();
@@ -1221,11 +1284,43 @@ function hizala(mod) {
         else if (mod === 'sag') el.x = maxX - el.w;
         else if (mod === 'ust') el.y = minY;
         else if (mod === 'alt') el.y = maxY - el.h;
-        else if (mod === 'yatay-orta') el.x = Math.round((minX + maxX) / 2 - el.w / 2);
-        else if (mod === 'dikey-orta') el.y = Math.round((minY + maxY) / 2 - el.h / 2);
     });
     render();
     durumYaz('↔ Hizalandı');
+}
+
+// Elementler arası boşluğu eşitler (Figma/PowerPoint "dağıt" — distribute) —
+// en dıştaki iki eleman yerinde kalır, aradakiler eşit aralıklarla dizilir.
+function dagit(yon) {
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (secElemanlar.length < 3) {
+        durumYaz('Boşluk eşitlemek için en az 3 (kilitsiz) element seçmelisin');
+        return;
+    }
+    gecmiseKaydet();
+    if (yon === 'yatay') {
+        secElemanlar.sort((a, b) => a.x - b.x);
+        const ilk = secElemanlar[0], son = secElemanlar[secElemanlar.length - 1];
+        const toplamGenislik = secElemanlar.reduce((s, e) => s + e.w, 0);
+        const bosluk = ((son.x + son.w) - ilk.x - toplamGenislik) / (secElemanlar.length - 1);
+        let x = ilk.x + ilk.w + bosluk;
+        for (let i = 1; i < secElemanlar.length - 1; i++) {
+            secElemanlar[i].x = Math.round(x);
+            x += secElemanlar[i].w + bosluk;
+        }
+    } else {
+        secElemanlar.sort((a, b) => a.y - b.y);
+        const ilk = secElemanlar[0], son = secElemanlar[secElemanlar.length - 1];
+        const toplamYukseklik = secElemanlar.reduce((s, e) => s + e.h, 0);
+        const bosluk = ((son.y + son.h) - ilk.y - toplamYukseklik) / (secElemanlar.length - 1);
+        let y = ilk.y + ilk.h + bosluk;
+        for (let i = 1; i < secElemanlar.length - 1; i++) {
+            secElemanlar[i].y = Math.round(y);
+            y += secElemanlar[i].h + bosluk;
+        }
+    }
+    render();
+    durumYaz(yon === 'yatay' ? '↔ Yatayda dağıtıldı (eşit boşluk)' : '↕ Dikeyde dağıtıldı (eşit boşluk)');
 }
 
 // ---------- Katman sırası (öne/arkaya al) — sıra = elementler dizisindeki sıra ----------
@@ -1289,6 +1384,9 @@ function grupla() {
     const grupId = 'grp_' + Math.random().toString(36).slice(2, 10);
     seciliSet.forEach(id => { const el = bul(id); if (el) el.grup_id = grupId; });
     render();
+    yanPanelGuncelle(); // BUG FIX: grup/kilit BUTONUNUN ikonu sadece seçim
+    // değişince değil, işlemin kendisinden sonra da tazelenmeli — render()
+    // tek başına bunu yapmıyordu, buton eski simgede takılı kalıyordu.
     durumYaz('🔗 Gruplandı');
 }
 function grubuCoz() {
@@ -1296,6 +1394,7 @@ function grubuCoz() {
     gecmiseKaydet();
     seciliSet.forEach(id => { const el = bul(id); if (el) delete el.grup_id; });
     render();
+    yanPanelGuncelle();
     durumYaz('🔓 Grup çözüldü');
 }
 
@@ -1305,6 +1404,7 @@ function topluKilitle(kilit) {
     gecmiseKaydet();
     seciliSet.forEach(id => { const el = bul(id); if (el) el.kilitli = kilit; });
     render();
+    yanPanelGuncelle();
     durumYaz(kilit ? '🔒 Kilitlendi' : '🔓 Kilit açıldı');
 }
 
@@ -1548,11 +1648,16 @@ document.getElementById('ozResimDosya').addEventListener('change', async (e) => 
 
 function elementSil() {
     if (!seciliSet.size) return;
+    // Kilitli elementler (ör. şablondan gelenler) yanlışlıkla Del ile
+    // silinmesin — önce kilidi açılmalı.
+    const silinecekler = new Set([...seciliSet].filter(id => { const el = bul(id); return el && !el.kilitli; }));
+    if (!silinecekler.size) { durumYaz('🔒 Seçili element(ler) kilitli, önce kilidi aç'); return; }
     gecmiseKaydet();
-    elementler = elementler.filter(e => !seciliSet.has(e.id));
-    seciliSet = new Set();
-    seciliId = null;
+    elementler = elementler.filter(e => !silinecekler.has(e.id));
+    seciliSet = new Set([...seciliSet].filter(id => !silinecekler.has(id)));
+    seciliId = seciliSet.size ? [...seciliSet][seciliSet.size - 1] : null;
     render();
+    yanPanelGuncelle();
     durumYaz('🗑 Silindi');
 }
 
