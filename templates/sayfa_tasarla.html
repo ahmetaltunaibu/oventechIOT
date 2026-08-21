@@ -92,6 +92,13 @@
         background: var(--panel2); margin-bottom: 6px;
     }
     .sablon-satir:hover { background: var(--border); }
+    .ikon-hucre {
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        padding: 6px 2px; border-radius: 6px; cursor: pointer; background: var(--panel2);
+    }
+    .ikon-hucre:hover { background: var(--border); }
+    .ikon-hucre img { width: 28px; height: 28px; }
+    .ikon-hucre span { font-size: 9px; color: var(--text-secondary); text-align: center; word-break: break-word; }
     .sablon-satir small { display: block; color: var(--text-secondary); font-size: 11px; }
 </style>
 {% endblock %}
@@ -142,6 +149,39 @@
     </div>
     <label>Arka Plan Rengi</label>
     <input type="color" id="sayfaArkaplan" value="{{ arkaplan }}" style="height:38px;">
+
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+        <input type="checkbox" id="sayfaGradientAktif" style="width:auto;margin:0;" onchange="sayfaGradientAlanGuncelle()"> Gradient (Çift Renk) Kullan
+    </label>
+    <div id="sayfaGradientAlan" style="display:none;">
+        <label>Gradient Renk 1</label>
+        <input type="color" id="sayfaGradientRenk1" value="{{ arkaplan_gradient_renk1 }}" style="height:38px;">
+        <label>Gradient Renk 2</label>
+        <input type="color" id="sayfaGradientRenk2" value="{{ arkaplan_gradient_renk2 }}" style="height:38px;">
+        <label>Yön</label>
+        <select id="sayfaGradientYon">
+            <option value="to right">Soldan Sağa</option>
+            <option value="to bottom">Yukarıdan Aşağıya</option>
+            <option value="to bottom right">Çapraz (↘)</option>
+            <option value="to bottom left">Çapraz (↙)</option>
+        </select>
+    </div>
+
+    <label>Arka Plan Resmi (opsiyonel — resim renk/gradientin üzerine gelir)</label>
+    <input type="file" id="sayfaArkaplanResimDosya" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
+    <div id="sayfaArkaplanResimDurum" style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;"></div>
+    <input type="hidden" id="sayfaArkaplanResimUrl" value="{{ arkaplan_resim }}">
+    <div id="sayfaArkaplanResimOnizleme" style="display:{{ 'block' if arkaplan_resim else 'none' }};margin-bottom:8px;">
+        <img id="sayfaArkaplanResimImg" src="{{ arkaplan_resim }}" style="max-width:100%;max-height:100px;border-radius:6px;border:1px solid var(--border);display:block;margin-bottom:6px;">
+        <button type="button" onclick="arkaplanResimKaldir()" style="background:var(--red);width:100%;">Resmi Kaldır</button>
+    </div>
+    <label>Resim Sığdırma</label>
+    <select id="sayfaArkaplanSigdirma">
+        <option value="cover" {{ 'selected' if arkaplan_sigdirma == 'cover' }}>Kapla (kırpılabilir)</option>
+        <option value="contain" {{ 'selected' if arkaplan_sigdirma == 'contain' }}>Sığdır (boşluk kalabilir)</option>
+        <option value="repeat" {{ 'selected' if arkaplan_sigdirma == 'repeat' }}>Tekrarla (döşe)</option>
+    </select>
+
     <div style="display:flex;gap:8px;margin-top:6px;">
         <button type="button" onclick="sayfaOzellikUygula()">Tuvala Uygula</button>
         <button type="button" onclick="sayfaOzellikKapat()" style="background:var(--panel2);">Kapat</button>
@@ -157,6 +197,27 @@
     </p>
     <div id="sablon-liste"></div>
     <button type="button" onclick="sablonKapat()" style="background:var(--panel2);width:100%;margin-top:8px;">Kapat</button>
+</div>
+
+<!-- Hizli Baglanti modali (tuvaldeki kucuk 🔗 rozetiyle acilir) -->
+<div id="baglanti-perde" class="modal-perde" onclick="baglantiKapat()"></div>
+<div id="baglanti-modal" class="modal-kutu" style="width:260px;">
+    <h2 style="color:var(--accent);font-size:15px;margin-bottom:14px;">🔗 Tag Bağlantısı</h2>
+    <label>Bağlı Tag</label>
+    <select id="baglantiTagSecim"></select>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+        <button type="button" onclick="baglantiUygula()">Uygula</button>
+        <button type="button" onclick="baglantiKapat()" style="background:var(--panel2);">Kapat</button>
+    </div>
+</div>
+
+<!-- Ikon Kutuphanesi modali -->
+<div id="ikon-perde" class="modal-perde" onclick="ikonKapat()"></div>
+<div id="ikon-modal" class="modal-kutu" style="width:360px;">
+    <h2 style="color:var(--accent);font-size:15px;margin-bottom:10px;">🧩 İkon Kütüphanesi</h2>
+    <input type="text" id="ikonArama" placeholder="Ara... (örn. pompa, vana, motor)" oninput="ikonListesiCiz()">
+    <div id="ikon-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:340px;overflow-y:auto;margin-top:10px;"></div>
+    <button type="button" onclick="ikonKapat()" style="background:var(--panel2);width:100%;margin-top:10px;">Kapat</button>
 </div>
 
 <!-- Element Ozellikleri modali -->
@@ -262,6 +323,7 @@
         <input type="text" id="ozResimUrl" placeholder="https://...">
         <label>Ya da Bilgisayardan Yükle</label>
         <input type="file" id="ozResimDosya" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
+        <button type="button" onclick="ikonAc('element')" style="background:var(--panel2);width:100%;margin-top:6px;">🧩 İkon Kütüphanesinden Seç</button>
         <div id="ozResimYukleDurum" style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;"></div>
         <label>Sığdırma</label>
         <select id="ozResimSigdirma">
@@ -305,6 +367,12 @@ const projeSayfalari = {{ proje_sayfalari | tojson }};
 let tuvalW = {{ tuval_w }};
 let tuvalH = {{ tuval_h }};
 let arkaplan = "{{ arkaplan }}";
+let arkaplanResim = {{ (arkaplan_resim or '') | tojson }};
+let arkaplanSigdirma = {{ (arkaplan_sigdirma or 'cover') | tojson }};
+let arkaplanGradientAktif = {{ arkaplan_gradient_aktif | tojson }};
+let arkaplanGradientRenk1 = {{ (arkaplan_gradient_renk1 or '#1e2d3d') | tojson }};
+let arkaplanGradientRenk2 = {{ (arkaplan_gradient_renk2 or '#0f1720') | tojson }};
+let arkaplanGradientYon = {{ (arkaplan_gradient_yon or 'to bottom') | tojson }};
 const hedef = "{{ hedef }}";
 const cihazId = {{ cihaz.id }};
 
@@ -314,7 +382,25 @@ function tuvalCerceveGuncelle() {
     const tuval = document.getElementById('tuval');
     tuval.style.width = tuvalW + 'px';
     tuval.style.height = tuvalH + 'px';
-    tuval.style.background = arkaplan;
+    tuval.style.background = arkaplanGradientAktif
+        ? `linear-gradient(${arkaplanGradientYon || 'to bottom'}, ${arkaplanGradientRenk1}, ${arkaplanGradientRenk2})`
+        : arkaplan;
+    if (arkaplanResim) {
+        tuval.style.backgroundImage = `url("${arkaplanResim}")`;
+        if (arkaplanSigdirma === 'repeat') {
+            tuval.style.backgroundRepeat = 'repeat';
+            tuval.style.backgroundSize = 'auto';
+        } else {
+            tuval.style.backgroundRepeat = 'no-repeat';
+            tuval.style.backgroundPosition = 'center';
+            tuval.style.backgroundSize = arkaplanSigdirma;
+        }
+    } else if (!arkaplanGradientAktif) {
+        // Gradient CSS shorthand'da background-image alanına yazılıyor —
+        // resim yoksa ve gradient aktifse burayı 'none' yapıp gradienti
+        // silmemeliyiz.
+        tuval.style.backgroundImage = 'none';
+    }
     document.getElementById('tuvalBoyutYazi').textContent = tuvalW + '×' + tuvalH;
     zoomUygula();
 }
@@ -336,19 +422,58 @@ function zoomUygula() {
 }
 
 function sayfaOzellikAc() {
+    document.getElementById('sayfaArkaplanResimUrl').value = arkaplanResim || '';
+    document.getElementById('sayfaArkaplanSigdirma').value = arkaplanSigdirma || 'cover';
+    document.getElementById('sayfaArkaplanResimOnizleme').style.display = arkaplanResim ? 'block' : 'none';
+    if (arkaplanResim) document.getElementById('sayfaArkaplanResimImg').src = arkaplanResim;
+    document.getElementById('sayfaArkaplanResimDurum').textContent = '';
+    document.getElementById('sayfaGradientAktif').checked = !!arkaplanGradientAktif;
+    document.getElementById('sayfaGradientRenk1').value = arkaplanGradientRenk1 || '#1e2d3d';
+    document.getElementById('sayfaGradientRenk2').value = arkaplanGradientRenk2 || '#0f1720';
+    document.getElementById('sayfaGradientYon').value = arkaplanGradientYon || 'to bottom';
+    sayfaGradientAlanGuncelle();
     document.getElementById('sayfa-ozellik-perde').style.display = 'block';
     document.getElementById('sayfa-ozellik-modal').style.display = 'block';
     baglamMenuKapat();
+}
+function sayfaGradientAlanGuncelle() {
+    document.getElementById('sayfaGradientAlan').style.display =
+        document.getElementById('sayfaGradientAktif').checked ? 'block' : 'none';
 }
 function sayfaOzellikKapat() {
     document.getElementById('sayfa-ozellik-perde').style.display = 'none';
     document.getElementById('sayfa-ozellik-modal').style.display = 'none';
 }
+function arkaplanResimKaldir() {
+    document.getElementById('sayfaArkaplanResimUrl').value = '';
+    document.getElementById('sayfaArkaplanResimOnizleme').style.display = 'none';
+}
+document.getElementById('sayfaArkaplanResimDosya').addEventListener('change', async (e) => {
+    const dosya = e.target.files[0];
+    if (!dosya) return;
+    const durum = document.getElementById('sayfaArkaplanResimDurum');
+    durum.textContent = 'Yükleniyor...';
+    const fd = new FormData();
+    fd.append('dosya', dosya);
+    try {
+        const res = await fetch("{{ url_for('sayfa.medya_yukle', cihaz_id=cihaz.id) }}", { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) { durum.textContent = '❌ ' + (data.error || 'Yükleme hatası'); return; }
+        document.getElementById('sayfaArkaplanResimUrl').value = data.url;
+        document.getElementById('sayfaArkaplanResimImg').src = data.url;
+        document.getElementById('sayfaArkaplanResimOnizleme').style.display = 'block';
+        durum.textContent = '✅ Yüklendi — "Tuvala Uygula" ile onaylamayı unutma';
+    } catch (err) {
+        durum.textContent = '❌ İstek başarısız';
+    }
+});
 function sayfaOzellikUygula() {
     gecmiseKaydet();
     tuvalW = parseInt(document.getElementById('sayfaW').value) || tuvalW;
     tuvalH = parseInt(document.getElementById('sayfaH').value) || tuvalH;
     arkaplan = document.getElementById('sayfaArkaplan').value;
+    arkaplanResim = document.getElementById('sayfaArkaplanResimUrl').value.trim();
+    arkaplanSigdirma = document.getElementById('sayfaArkaplanSigdirma').value;
     tuvalCerceveGuncelle();
     sayfaOzellikKapat();
 }
@@ -429,6 +554,31 @@ function tagSecenekleriDoldur(selectEl, ilkSecenekMetni) {
 }
 tagSecenekleriDoldur(document.getElementById('ozTag'), '— seçilmedi —');
 tagSecenekleriDoldur(document.getElementById('ozEtiketTag'), '— bağlama, sabit metin göster —');
+
+// ---------- Hızlı Bağlantı modalı (tuvaldeki 🔗 rozeti) ----------
+let baglantiElementId = null;
+function baglantiAc(id) {
+    baglantiElementId = id;
+    const el = bul(id);
+    if (!el) return;
+    tagSecenekleriDoldur(document.getElementById('baglantiTagSecim'), '— bağlama —');
+    document.getElementById('baglantiTagSecim').value = el.tag_id || '';
+    document.getElementById('baglanti-perde').style.display = 'block';
+    document.getElementById('baglanti-modal').style.display = 'block';
+}
+function baglantiKapat() {
+    document.getElementById('baglanti-perde').style.display = 'none';
+    document.getElementById('baglanti-modal').style.display = 'none';
+}
+function baglantiUygula() {
+    const el = bul(baglantiElementId);
+    if (!el) return;
+    gecmiseKaydet();
+    el.tag_id = document.getElementById('baglantiTagSecim').value ? parseInt(document.getElementById('baglantiTagSecim').value) : null;
+    render();
+    baglantiKapat();
+    durumYaz('🔗 Bağlantı güncellendi');
+}
 
 // ---------- Geri Al / Yinele (Ctrl+Z / Ctrl+Y) ----------
 let gecmis = [];
@@ -516,6 +666,65 @@ function resimEkle(x, y) {
     });
 }
 
+// ---------- İkon Kütüphanesi (scada/assets/icon_library'den derlenen hazır SCADA ikonları) ----------
+const IKON_LISTESI = [
+    'add','alarm','arrow_down','arrow_up','back','battery','battery_full','battery_low','calendar','chart',
+    'check','circuit_breaker_off','circuit_breaker_on','clock','close_icon','cloud','collapse','compressor_off',
+    'compressor_on','conveyor_off','conveyor_on','critical','damper_closed','damper_open','delete','document',
+    'edit','emergency_stop','error','ethernet','expand','export','fan_off','fan_on','filter_icon','fire','flow',
+    'flow_meter','flow_sensor','forward','fuse_blown','fuse_ok','gas_leak','gauge','generator_off','generator_on',
+    'home','humidity_sensor','import_icon','info','key','lamp_off','lamp_on','lamp_red','level_high','level_low',
+    'level_ok','level_sensor','lock','maintenance','menu','minus','mixer_off','mixer_on','motor_off','motor_on',
+    'offline','ok','online','pause','ph_sensor','pipe','play','plc','plug_in','plug_out','plus','power_off',
+    'power_on','pressure_sensor','proximity_sensor','pump_off','pump_on','refresh','reset','save','search',
+    'sensor','server','settings','shield','signal','socket','stop','switch_off','switch_on','tank_empty',
+    'tank_full','tank_half','thermometer','transformer','unlock','user','valve_closed','valve_open','warning',
+    'wifi','zoom_in','zoom_out'
+];
+let ikonModu = 'yeni'; // 'yeni' = tuvale yeni resim elementi ekle, 'element' = secili resim elementinin URL'sini degistir
+let ikonEklemeKonumu = { x: 100, y: 100 };
+
+function ikonAc(mod) {
+    ikonModu = mod;
+    document.getElementById('ikonArama').value = '';
+    ikonListesiCiz();
+    document.getElementById('ikon-perde').style.display = 'block';
+    document.getElementById('ikon-modal').style.display = 'block';
+    baglamMenuKapat();
+}
+function ikonKapat() {
+    document.getElementById('ikon-perde').style.display = 'none';
+    document.getElementById('ikon-modal').style.display = 'none';
+}
+function ikonListesiCiz() {
+    const arama = document.getElementById('ikonArama').value.trim().toLowerCase();
+    const grid = document.getElementById('ikon-grid');
+    grid.innerHTML = '';
+    IKON_LISTESI.filter(ad => !arama || ad.includes(arama.replace(/ /g, '_'))).forEach(ad => {
+        const hucre = document.createElement('div');
+        hucre.className = 'ikon-hucre';
+        const url = "{{ url_for('static', filename='icons/') }}" + ad + '.png';
+        hucre.innerHTML = `<img src="${url}" loading="lazy"><span>${ad.replace(/_/g, ' ')}</span>`;
+        hucre.addEventListener('click', () => ikonSec(url));
+        grid.appendChild(hucre);
+    });
+}
+function ikonSec(url) {
+    if (ikonModu === 'element' && seciliId) {
+        document.getElementById('ozResimUrl').value = url;
+        uygula();
+    } else {
+        resimEkle(ikonEklemeKonumu.x, ikonEklemeKonumu.y);
+        const yeni = elementler[elementler.length - 1];
+        yeni.resim_url = url;
+        yeni.resim_sigdirma = 'contain';
+        yeni.w = 48; yeni.h = 48;
+        render();
+    }
+    ikonKapat();
+    durumYaz('🧩 İkon eklendi');
+}
+
 function cizgiEkle(x, y) {
     elementEkle({
         id: uid(), type: 'cizgi',
@@ -525,6 +734,7 @@ function cizgiEkle(x, y) {
 }
 
 function bul(id) { return elementler.find(e => e.id === id); }
+function grupUyeleri(grupId) { return elementler.filter(e => e.grup_id === grupId).map(e => e.id); }
 
 // Köşe yarıçapı: her köşe ayrı ayarlanabilir — CSS border-radius sırası
 // top-left top-right bottom-right bottom-left.
@@ -593,26 +803,55 @@ function render() {
             div.style.cssText += ';' + el.custom_css;
         }
 
+        if (el.kilitli) {
+            div.style.cursor = 'not-allowed';
+            const rozet = document.createElement('div');
+            rozet.textContent = '🔒';
+            rozet.style.cssText = 'position:absolute;top:-9px;left:-9px;font-size:11px;line-height:1;'
+                + 'background:var(--panel);border-radius:50%;padding:2px;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.5);';
+            div.appendChild(rozet);
+        }
+
+        // Kullanıcı isteği: tuvalde küçük bir bağlantı simgesi — tıklayınca
+        // tam özellikler modalını açmadan hızlıca tag seçilebilsin.
+        if (el.type === 'button' || el.type === 'label') {
+            const baglanti = document.createElement('div');
+            baglanti.textContent = '🔗';
+            baglanti.title = 'Tag bağlantısı';
+            baglanti.style.cssText = 'position:absolute;top:-9px;right:-9px;font-size:10px;line-height:1;'
+                + 'width:16px;height:16px;display:flex;align-items:center;justify-content:center;'
+                + 'background:' + (el.tag_id ? 'var(--accent)' : 'var(--panel2)') + ';border-radius:50%;cursor:pointer;'
+                + 'box-shadow:0 1px 3px rgba(0,0,0,0.5);z-index:10;';
+            baglanti.addEventListener('mousedown', (e) => e.stopPropagation());
+            baglanti.addEventListener('click', (e) => { e.stopPropagation(); baglantiAc(el.id); });
+            div.appendChild(baglanti);
+        }
+
         div.addEventListener('mousedown', (e) => baslaSurukle(e, el.id));
         div.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (e.shiftKey || e.ctrlKey || e.metaKey) secEkle(el.id); else secTekli(el.id);
+            const hedefIdler = el.grup_id ? grupUyeleri(el.grup_id) : [el.id];
+            if (e.shiftKey || e.ctrlKey || e.metaKey) hedefIdler.forEach(hid => secEkle(hid));
+            else secCoklu(hedefIdler);
         });
         div.addEventListener('dblclick', (e) => { e.stopPropagation(); secTekli(el.id); ozellikAc(); });
         div.addEventListener('contextmenu', (e) => {
             e.preventDefault(); e.stopPropagation();
-            if (!seciliSet.has(el.id)) secTekli(el.id);
+            if (!seciliSet.has(el.id)) {
+                secCoklu(el.grup_id ? grupUyeleri(el.grup_id) : [el.id]);
+            }
             elementBaglamMenusu(e, el.id);
         });
 
         tuval.appendChild(div);
     });
-    // Boyutlandırma tutamacı sadece TEK element seçiliyken gösterilir
-    // (çoklu seçimde grup taşıma var ama grup boyutlandırma yok).
+    // Boyutlandırma tutamacı sadece TEK (ve kilitsiz) element seçiliyken
+    // gösterilir — çoklu seçimde grup taşıma var ama grup boyutlandırma yok.
     if (seciliSet.size === 1) {
         const tekId = [...seciliSet][0];
+        const tekEl = bul(tekId);
         const div = document.querySelector(`[data-el-id="${tekId}"]`);
-        if (div) {
+        if (div && tekEl && !tekEl.kilitli) {
             const tutamac = document.createElement('div');
             tutamac.className = 'resize-tutamac';
             tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, tekId));
@@ -637,8 +876,9 @@ function selectionGorunumunuTazele(eskiSet, yeniSet) {
     document.querySelectorAll('.resize-tutamac').forEach(h => h.remove());
     if (yeniSet.size === 1) {
         const tekId = [...yeniSet][0];
+        const tekEl = bul(tekId);
         const d = document.querySelector(`[data-el-id="${tekId}"]`);
-        if (d) {
+        if (d && tekEl && !tekEl.kilitli) {
             const tutamac = document.createElement('div');
             tutamac.className = 'resize-tutamac';
             tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, tekId));
@@ -657,6 +897,14 @@ function secEkle(id) {
     const eski = new Set(seciliSet);
     if (seciliSet.has(id)) seciliSet.delete(id); else seciliSet.add(id);
     seciliId = seciliSet.size ? [...seciliSet][seciliSet.size - 1] : null;
+    selectionGorunumunuTazele(eski, seciliSet);
+}
+// Belirli bir id listesini (ör. bir grubun tüm üyelerini) TEK seçim gibi
+// atar — grup elemanlarından birine tıklandığında tüm grup seçilsin diye.
+function secCoklu(idler) {
+    const eski = new Set(seciliSet);
+    seciliSet = new Set(idler);
+    seciliId = idler.length ? idler[idler.length - 1] : null;
     selectionGorunumunuTazele(eski, seciliSet);
 }
 function secTumu() {
@@ -708,13 +956,17 @@ function baslaSurukle(e, id) {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    if (!seciliSet.has(id)) {
-        if (e.shiftKey || e.ctrlKey || e.metaKey) secEkle(id); else secTekli(id);
+    const tiklananEl = bul(id);
+    const hedefIdler = (tiklananEl && tiklananEl.grup_id) ? grupUyeleri(tiklananEl.grup_id) : [id];
+    if (!hedefIdler.every(hid => seciliSet.has(hid)) || seciliSet.size !== hedefIdler.length) {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) hedefIdler.forEach(hid => secEkle(hid));
+        else secCoklu(hedefIdler);
     }
+    if (tiklananEl && tiklananEl.kilitli) return; // kilitli element sürüklenemez, sadece seçilir
     gecmiseKaydet();
     const rect = document.getElementById('tuval').getBoundingClientRect();
     const mx = (e.clientX - rect.left) / zoom, my = (e.clientY - rect.top) / zoom;
-    surukleGrubu = [...seciliSet].map(sid => {
+    surukleGrubu = [...seciliSet].filter(sid => { const el = bul(sid); return el && !el.kilitli; }).map(sid => {
         const el = bul(sid);
         return { id: sid, offsetX: mx - el.x, offsetY: my - el.y };
     });
@@ -728,6 +980,65 @@ function baslaBoyutlandir(e, id) {
     boyutlandiriliyor = { id, startX: e.clientX, startY: e.clientY, startW: el.w, startH: el.h };
 }
 
+// ---------- Hizalama kılavuz çizgileri (Figma tarzı "smart guide") ----------
+// Tek element sürüklenirken diğer elementlerin kenar/orta çizgilerine
+// yaklaşınca hem görsel bir çizgi gösterir hem de o çizgiye "snap" eder.
+function hizaKilavuzUygula(el) {
+    const esik = 6;
+    let enYakinX = null, enYakinXFark = esik;
+    let enYakinY = null, enYakinYFark = esik;
+    const dLeft = el.x, dRight = el.x + el.w, dCenterX = el.x + el.w / 2;
+    const dTop = el.y, dBottom = el.y + el.h, dCenterY = el.y + el.h / 2;
+
+    elementler.forEach(other => {
+        if (other.id === el.id) return;
+        const oLeft = other.x, oRight = other.x + other.w, oCenterX = other.x + other.w / 2;
+        const oTop = other.y, oBottom = other.y + other.h, oCenterY = other.y + other.h / 2;
+        [[dLeft, oLeft], [dRight, oRight], [dCenterX, oCenterX], [dLeft, oRight], [dRight, oLeft]].forEach(([ref, hedef]) => {
+            const fark = hedef - ref;
+            if (Math.abs(fark) < enYakinXFark) { enYakinXFark = Math.abs(fark); enYakinX = { hedef, deltaX: fark }; }
+        });
+        [[dTop, oTop], [dBottom, oBottom], [dCenterY, oCenterY], [dTop, oBottom], [dBottom, oTop]].forEach(([ref, hedef]) => {
+            const fark = hedef - ref;
+            if (Math.abs(fark) < enYakinYFark) { enYakinYFark = Math.abs(fark); enYakinY = { hedef, deltaY: fark }; }
+        });
+    });
+
+    if (enYakinX) {
+        el.x = Math.max(0, Math.min(tuvalW - el.w, Math.round(el.x + enYakinX.deltaX)));
+        hizaCizgiGoster('v', enYakinX.hedef);
+    } else {
+        hizaCizgiGizle('v');
+    }
+    if (enYakinY) {
+        el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(el.y + enYakinY.deltaY)));
+        hizaCizgiGoster('h', enYakinY.hedef);
+    } else {
+        hizaCizgiGizle('h');
+    }
+}
+function hizaCizgiGoster(yon, konum) {
+    let cizgi = document.getElementById('hiza-cizgi-' + yon);
+    if (!cizgi) {
+        cizgi = document.createElement('div');
+        cizgi.id = 'hiza-cizgi-' + yon;
+        cizgi.style.cssText = 'position:absolute;background:#ff4d6d;pointer-events:none;z-index:60;';
+        document.getElementById('tuval').appendChild(cizgi);
+    }
+    if (yon === 'v') {
+        cizgi.style.left = konum + 'px'; cizgi.style.top = '0px';
+        cizgi.style.width = '1px'; cizgi.style.height = tuvalH + 'px';
+    } else {
+        cizgi.style.top = konum + 'px'; cizgi.style.left = '0px';
+        cizgi.style.height = '1px'; cizgi.style.width = tuvalW + 'px';
+    }
+}
+function hizaCizgiGizle(yon) {
+    const cizgi = document.getElementById('hiza-cizgi-' + yon);
+    if (cizgi) cizgi.remove();
+}
+function tumHizaCizgileriGizle() { hizaCizgiGizle('v'); hizaCizgiGizle('h'); }
+
 document.addEventListener('mousemove', (e) => {
     if (surukleGrubu) {
         const rect = document.getElementById('tuval').getBoundingClientRect();
@@ -737,8 +1048,17 @@ document.addEventListener('mousemove', (e) => {
             if (!el) return;
             el.x = Math.max(0, Math.min(tuvalW - el.w, Math.round(mx - g.offsetX)));
             el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(my - g.offsetY)));
-            const div = document.querySelector(`[data-el-id="${el.id}"]`);
-            if (div) { div.style.left = el.x + 'px'; div.style.top = el.y + 'px'; }
+        });
+        if (surukleGrubu.length === 1) {
+            const tekEl = bul(surukleGrubu[0].id);
+            if (tekEl) hizaKilavuzUygula(tekEl);
+        } else {
+            tumHizaCizgileriGizle();
+        }
+        surukleGrubu.forEach(g => {
+            const el = bul(g.id);
+            const div = document.querySelector(`[data-el-id="${g.id}"]`);
+            if (div && el) { div.style.left = el.x + 'px'; div.style.top = el.y + 'px'; }
         });
     } else if (boyutlandiriliyor) {
         const el = bul(boyutlandiriliyor.id);
@@ -759,6 +1079,7 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => {
     surukleGrubu = null;
     boyutlandiriliyor = null;
+    tumHizaCizgileriGizle();
     if (marquee) {
         const x1 = Math.min(marquee.x1, marquee.x2), x2 = Math.max(marquee.x1, marquee.x2);
         const y1 = Math.min(marquee.y1, marquee.y2), y2 = Math.max(marquee.y1, marquee.y2);
@@ -775,22 +1096,32 @@ document.addEventListener('mouseup', () => {
 });
 
 // ---------- Çoğalt / Kopyala / Yapıştır ----------
+// Kopyalanan/çoğaltılan elementler bir gruba aitse, kopyalar ORİJİNAL grupla
+// karışmasın diye kendi YENİ bir grup id'sini alır (eşleme haritasıyla).
+function _grupIdEslestir(nesne, harita) {
+    if (nesne.grup_id) {
+        if (!harita[nesne.grup_id]) harita[nesne.grup_id] = 'grp_' + Math.random().toString(36).slice(2, 10);
+        nesne.grup_id = harita[nesne.grup_id];
+    }
+    return nesne;
+}
+
 function cogalt() {
     if (!seciliSet.size) return;
     gecmiseKaydet();
+    const harita = {};
     const yeniIdler = [];
     [...seciliSet].forEach(id => {
         const kaynak = bul(id);
         if (!kaynak) return;
-        const yeni = Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
+        const yeni = _grupIdEslestir(Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
             id: uid(),
             x: Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16),
             y: Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16),
-        });
+        }), harita);
         elementler.push(yeni);
         yeniIdler.push(yeni.id);
     });
-    const eski = new Set(seciliSet);
     seciliSet = new Set(yeniIdler);
     seciliId = yeniIdler[yeniIdler.length - 1] || null;
     render();
@@ -804,13 +1135,14 @@ function kopyala() {
 function yapistir() {
     if (!pano.length) return;
     gecmiseKaydet();
+    const harita = {};
     const yeniIdler = [];
     pano.forEach(kaynak => {
-        const yeni = Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
+        const yeni = _grupIdEslestir(Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
             id: uid(),
             x: Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16),
             y: Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16),
-        });
+        }), harita);
         elementler.push(yeni);
         yeniIdler.push(yeni.id);
     });
@@ -820,11 +1152,11 @@ function yapistir() {
     durumYaz('📋 Yapıştırıldı');
 }
 
-// ---------- Hizalama (2+ element seçiliyken) ----------
+// ---------- Hizalama (2+ element seçiliyken, kilitli elementler hariç) ----------
 function hizala(mod) {
-    if (seciliSet.size < 2) return;
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (secElemanlar.length < 2) return;
     gecmiseKaydet();
-    const secElemanlar = [...seciliSet].map(bul).filter(Boolean);
     const minX = Math.min(...secElemanlar.map(e => e.x));
     const maxX = Math.max(...secElemanlar.map(e => e.x + e.w));
     const minY = Math.min(...secElemanlar.map(e => e.y));
@@ -841,12 +1173,94 @@ function hizala(mod) {
     durumYaz('↔ Hizalandı');
 }
 
+// ---------- Katman sırası (öne/arkaya al) — sıra = elementler dizisindeki sıra ----------
+function enUsteGetir() {
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    const secilenler = elementler.filter(e => seciliSet.has(e.id));
+    elementler = elementler.filter(e => !seciliSet.has(e.id)).concat(secilenler);
+    render();
+    durumYaz('⤒ En üste getirildi');
+}
+function enAltaGonder() {
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    const secilenler = elementler.filter(e => seciliSet.has(e.id));
+    elementler = secilenler.concat(elementler.filter(e => !seciliSet.has(e.id)));
+    render();
+    durumYaz('⤓ En alta gönderildi');
+}
+function usteGetir() {
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    for (let i = elementler.length - 2; i >= 0; i--) {
+        if (seciliSet.has(elementler[i].id) && !seciliSet.has(elementler[i + 1].id)) {
+            [elementler[i], elementler[i + 1]] = [elementler[i + 1], elementler[i]];
+        }
+    }
+    render();
+    durumYaz('↑ Üste getirildi');
+}
+function altaGonder() {
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    for (let i = 1; i < elementler.length; i++) {
+        if (seciliSet.has(elementler[i].id) && !seciliSet.has(elementler[i - 1].id)) {
+            [elementler[i], elementler[i - 1]] = [elementler[i - 1], elementler[i]];
+        }
+    }
+    render();
+    durumYaz('↓ Alta gönderildi');
+}
+
+// ---------- Boyut Eşitleme (2+ element seçiliyken, referans = son seçilen) ----------
+function boyutEsitle(mod) {
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (secElemanlar.length < 2) return;
+    const referans = bul(seciliId) || secElemanlar[secElemanlar.length - 1];
+    gecmiseKaydet();
+    secElemanlar.forEach(el => {
+        if (mod === 'genislik' || mod === 'ikisi') el.w = Math.min(referans.w, tuvalW - el.x);
+        if (mod === 'yukseklik' || mod === 'ikisi') el.h = Math.min(referans.h, tuvalH - el.y);
+    });
+    render();
+    durumYaz('📐 Boyut eşitlendi');
+}
+
+// ---------- Gruplama ----------
+function grupla() {
+    if (seciliSet.size < 2) return;
+    gecmiseKaydet();
+    const grupId = 'grp_' + Math.random().toString(36).slice(2, 10);
+    seciliSet.forEach(id => { const el = bul(id); if (el) el.grup_id = grupId; });
+    render();
+    durumYaz('🔗 Gruplandı');
+}
+function grubuCoz() {
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    seciliSet.forEach(id => { const el = bul(id); if (el) delete el.grup_id; });
+    render();
+    durumYaz('🔓 Grup çözüldü');
+}
+
+// ---------- Kilitleme ----------
+function topluKilitle(kilit) {
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    seciliSet.forEach(id => { const el = bul(id); if (el) el.kilitli = kilit; });
+    render();
+    durumYaz(kilit ? '🔒 Kilitlendi' : '🔓 Kilit açıldı');
+}
+
 // ---------- Klavye kısayolları ----------
 document.addEventListener('keydown', (e) => {
     const aktifEtiket = document.activeElement ? document.activeElement.tagName : '';
     const modalAcikMi = document.getElementById('element-ozellik-modal').style.display === 'block'
         || document.getElementById('sayfa-ozellik-modal').style.display === 'block'
-        || document.getElementById('sablon-modal').style.display === 'block';
+        || document.getElementById('sablon-modal').style.display === 'block'
+        || document.getElementById('baglanti-modal').style.display === 'block'
+        || document.getElementById('ikon-modal').style.display === 'block';
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(aktifEtiket) || modalAcikMi) return;
 
     const ctrl = e.ctrlKey || e.metaKey;
@@ -877,6 +1291,7 @@ function tuvalBaglamMenusu(e) {
         { etiket: '+ Dikdörtgen/Kare Ekle', aksiyon: () => sekilEkle(tuvalX, tuvalY) },
         { etiket: '+ Çizgi Ekle', aksiyon: () => cizgiEkle(tuvalX, tuvalY) },
         { etiket: '+ Resim Ekle', aksiyon: () => resimEkle(tuvalX, tuvalY) },
+        { etiket: '🧩 İkon Ekle', aksiyon: () => { ikonEklemeKonumu = { x: tuvalX, y: tuvalY }; ikonAc('yeni'); } },
         { ayrac: true },
     ];
     if (pano.length) maddeler.push({ etiket: '📋 Yapıştır (Ctrl+V)', aksiyon: yapistir });
@@ -892,6 +1307,11 @@ function elementBaglamMenusu(e, id) {
         { etiket: '✎ Özellikler', aksiyon: () => { secTekli(id); ozellikAc(); } },
         { etiket: '⧉ Çoğalt (Ctrl+D)', aksiyon: cogalt },
         { etiket: '📋 Kopyala (Ctrl+C)', aksiyon: kopyala },
+        { ayrac: true },
+        { etiket: '⤒ En Üste Getir', aksiyon: enUsteGetir },
+        { etiket: '↑ Üste Getir', aksiyon: usteGetir },
+        { etiket: '↓ Alta Gönder', aksiyon: altaGonder },
+        { etiket: '⤓ En Alta Gönder', aksiyon: enAltaGonder },
     ];
     if (seciliSet.size > 1) {
         maddeler.push({ ayrac: true });
@@ -901,7 +1321,20 @@ function elementBaglamMenusu(e, id) {
         maddeler.push({ etiket: '⇩ Alta Hizala', aksiyon: () => hizala('alt') });
         maddeler.push({ etiket: '↔ Yatayda Ortala', aksiyon: () => hizala('yatay-orta') });
         maddeler.push({ etiket: '↕ Dikeyde Ortala', aksiyon: () => hizala('dikey-orta') });
+        maddeler.push({ ayrac: true });
+        maddeler.push({ etiket: '📐 Genişliği Eşitle', aksiyon: () => boyutEsitle('genislik') });
+        maddeler.push({ etiket: '📐 Yüksekliği Eşitle', aksiyon: () => boyutEsitle('yukseklik') });
+        maddeler.push({ etiket: '📐 İkisini de Eşitle', aksiyon: () => boyutEsitle('ikisi') });
+        maddeler.push({ ayrac: true });
+        maddeler.push({ etiket: '🔗 Grupla', aksiyon: grupla });
     }
+    const digerGruplu = [...seciliSet].some(sid => { const e2 = bul(sid); return e2 && e2.grup_id; });
+    if (digerGruplu) {
+        maddeler.push({ etiket: '🔓 Grubu Çöz', aksiyon: grubuCoz });
+    }
+    maddeler.push({ ayrac: true });
+    maddeler.push({ etiket: '🔒 Kilitle', aksiyon: () => topluKilitle(true) });
+    maddeler.push({ etiket: '🔓 Kilidi Aç', aksiyon: () => topluKilitle(false) });
     maddeler.push({ ayrac: true });
     maddeler.push({ etiket: '🗑 Sil (Del)', tehlike: true, aksiyon: elementSil });
     baglamMenuGoster(e.clientX, e.clientY, maddeler);
@@ -1102,7 +1535,10 @@ async function kaydet() {
         const res = await fetch("{{ url_for('sayfa.sayfa_kaydet', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ elementler: temiz, tuval_w: tuvalW, tuval_h: tuvalH, arkaplan: arkaplan })
+            body: JSON.stringify({
+                elementler: temiz, tuval_w: tuvalW, tuval_h: tuvalH, arkaplan: arkaplan,
+                arkaplan_resim: arkaplanResim, arkaplan_sigdirma: arkaplanSigdirma
+            })
         });
         const data = await res.json();
         durum.textContent = res.ok ? '✅ Kaydedildi' : ('❌ ' + (data.error || 'Hata'));

@@ -152,6 +152,26 @@ def init_db():
     if sayfa_kolonlari and 'arkaplan' not in sayfa_kolonlari:
         cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan TEXT NOT NULL DEFAULT '#1e2d3d'")
 
+    # Migration: arka plan RESMİ (kullanıcı isteği — sadece düz renk değil,
+    # sayfaya resim de koyabilmeli). URL olarak saklanır (medya tablosundaki
+    # bir /medya/<id> yolu ya da dış URL olabilir).
+    sayfa_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(sayfalar)").fetchall()}
+    if sayfa_kolonlari and 'arkaplan_resim' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan_resim TEXT")
+    if sayfa_kolonlari and 'arkaplan_sigdirma' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan_sigdirma TEXT NOT NULL DEFAULT 'cover'")
+
+    # Migration: sayfa arka planı için çift renk gradient seçeneği.
+    sayfa_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(sayfalar)").fetchall()}
+    if sayfa_kolonlari and 'arkaplan_gradient_aktif' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan_gradient_aktif INTEGER NOT NULL DEFAULT 0")
+    if sayfa_kolonlari and 'arkaplan_gradient_renk1' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan_gradient_renk1 TEXT NOT NULL DEFAULT '#1e2d3d'")
+    if sayfa_kolonlari and 'arkaplan_gradient_renk2' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan_gradient_renk2 TEXT NOT NULL DEFAULT '#0f1720'")
+    if sayfa_kolonlari and 'arkaplan_gradient_yon' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN arkaplan_gradient_yon TEXT NOT NULL DEFAULT 'to bottom'")
+
     # Resim elementi icin yuklenen dosyalar — DB icinde BLOB olarak saklanir
     # (Render'in diski deploy'da sifirlaniyor, ama tum .db zaten yedekleniyor
     # — boylece yuklenen resimler de yedekle birlikte tasinir).
@@ -551,22 +571,36 @@ def cihaz_tag_degerleri(cihaz_id: int):
 # ============================================================
 
 def sayfa_kaydet(cihaz_id: int, ad: str, elementler: list, hedef: str = 'masaustu',
-                  tuval_w: int = None, tuval_h: int = None, arkaplan: str = None):
+                  tuval_w: int = None, tuval_h: int = None, arkaplan: str = None,
+                  arkaplan_resim: str = None, arkaplan_sigdirma: str = None,
+                  arkaplan_gradient_aktif: bool = None, arkaplan_gradient_renk1: str = None,
+                  arkaplan_gradient_renk2: str = None, arkaplan_gradient_yon: str = None):
     varsayilan_w = 1280 if hedef == 'masaustu' else 420
     varsayilan_h = 800 if hedef == 'masaustu' else 860
     conn = get_db()
     try:
         conn.execute('''
-            INSERT INTO sayfalar (cihaz_id, ad, hedef, tuval_w, tuval_h, arkaplan, elementler, guncelleme_zamani)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '+3 hours'))
+            INSERT INTO sayfalar (cihaz_id, ad, hedef, tuval_w, tuval_h, arkaplan, arkaplan_resim, arkaplan_sigdirma,
+                                   arkaplan_gradient_aktif, arkaplan_gradient_renk1, arkaplan_gradient_renk2, arkaplan_gradient_yon,
+                                   elementler, guncelleme_zamani)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+3 hours'))
             ON CONFLICT(cihaz_id, ad, hedef) DO UPDATE SET
                 elementler = excluded.elementler,
                 tuval_w = excluded.tuval_w,
                 tuval_h = excluded.tuval_h,
                 arkaplan = excluded.arkaplan,
+                arkaplan_resim = excluded.arkaplan_resim,
+                arkaplan_sigdirma = excluded.arkaplan_sigdirma,
+                arkaplan_gradient_aktif = excluded.arkaplan_gradient_aktif,
+                arkaplan_gradient_renk1 = excluded.arkaplan_gradient_renk1,
+                arkaplan_gradient_renk2 = excluded.arkaplan_gradient_renk2,
+                arkaplan_gradient_yon = excluded.arkaplan_gradient_yon,
                 guncelleme_zamani = datetime('now', '+3 hours')
         ''', (cihaz_id, ad.strip(), hedef, tuval_w or varsayilan_w, tuval_h or varsayilan_h,
-              arkaplan or '#1e2d3d', json.dumps(elementler, ensure_ascii=False)))
+              arkaplan or '#1e2d3d', (arkaplan_resim or None), arkaplan_sigdirma or 'cover',
+              1 if arkaplan_gradient_aktif else 0, arkaplan_gradient_renk1 or '#1e2d3d',
+              arkaplan_gradient_renk2 or '#0f1720', arkaplan_gradient_yon or 'to bottom',
+              json.dumps(elementler, ensure_ascii=False)))
         conn.commit()
         return True
     finally:

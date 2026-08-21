@@ -51,10 +51,15 @@
         font-size: 13px; font-weight: 600;
         cursor: pointer; user-select: none;
         display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-        transition: filter 0.1s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        transition: filter 0.08s ease, transform 0.08s ease, box-shadow 0.08s ease;
+        -webkit-tap-highlight-color: transparent;
     }
-    .el-buton:active { filter: brightness(0.85); }
+    .el-buton:active, .el-buton.basili {
+        filter: brightness(0.8);
+        transform: scale(0.95);
+        box-shadow: 0 0 2px rgba(0,0,0,0.4) inset;
+    }
     .el-etiket {
         position: absolute;
         font-weight: 500;
@@ -102,7 +107,23 @@ function tuvalCiz() {
     const tuval = document.getElementById('tuval');
     tuval.style.width = aktifSayfa.tuval_w + 'px';
     tuval.style.height = aktifSayfa.tuval_h + 'px';
-    tuval.style.background = aktifSayfa.arkaplan || '#1e2d3d';
+    tuval.style.background = aktifSayfa.arkaplan_gradient_aktif
+        ? `linear-gradient(${aktifSayfa.arkaplan_gradient_yon || 'to bottom'}, ${aktifSayfa.arkaplan_gradient_renk1 || '#1e2d3d'}, ${aktifSayfa.arkaplan_gradient_renk2 || '#0f1720'})`
+        : (aktifSayfa.arkaplan || '#1e2d3d');
+    if (aktifSayfa.arkaplan_resim) {
+        tuval.style.backgroundImage = `url("${aktifSayfa.arkaplan_resim}")`;
+        const sigdirma = aktifSayfa.arkaplan_sigdirma || 'cover';
+        if (sigdirma === 'repeat') {
+            tuval.style.backgroundRepeat = 'repeat';
+            tuval.style.backgroundSize = 'auto';
+        } else {
+            tuval.style.backgroundRepeat = 'no-repeat';
+            tuval.style.backgroundPosition = 'center';
+            tuval.style.backgroundSize = sigdirma;
+        }
+    } else if (!aktifSayfa.arkaplan_gradient_aktif) {
+        tuval.style.backgroundImage = 'none';
+    }
     tuval.innerHTML = '';
     aktifSayfa.elementler.forEach(el => {
         const div = document.createElement('div');
@@ -164,6 +185,17 @@ function tuvalCiz() {
         div.className = 'el-buton';
         renkGuncelle(div, el);
         if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+
+        // Basma efekti — dokunmatikte :active her zaman güvenilir tetiklenmediği
+        // için .basili sınıfını elle ekleyip çıkarıyoruz.
+        const basiliEkle = () => div.classList.add('basili');
+        const basiliCikar = () => div.classList.remove('basili');
+        div.addEventListener('mousedown', basiliEkle);
+        div.addEventListener('touchstart', basiliEkle, { passive: true });
+        div.addEventListener('mouseup', basiliCikar);
+        div.addEventListener('mouseleave', basiliCikar);
+        div.addEventListener('touchend', basiliCikar);
+        div.addEventListener('touchcancel', basiliCikar);
 
         if (el.mod === 'momentary') {
             div.addEventListener('mousedown', () => yaz(el, el.acik_deger));

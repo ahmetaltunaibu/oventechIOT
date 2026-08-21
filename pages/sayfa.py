@@ -60,6 +60,12 @@ def sayfa_olustur(cihaz_id):
                         cihaz_id, ad, kaynak_sayfa['elementler'], hedef=hedef,
                         tuval_w=kaynak_sayfa['tuval_w'], tuval_h=kaynak_sayfa['tuval_h'],
                         arkaplan=kaynak_sayfa['arkaplan'],
+                        arkaplan_resim=kaynak_sayfa.get('arkaplan_resim'),
+                        arkaplan_sigdirma=kaynak_sayfa.get('arkaplan_sigdirma'),
+                        arkaplan_gradient_aktif=kaynak_sayfa.get('arkaplan_gradient_aktif'),
+                        arkaplan_gradient_renk1=kaynak_sayfa.get('arkaplan_gradient_renk1'),
+                        arkaplan_gradient_renk2=kaynak_sayfa.get('arkaplan_gradient_renk2'),
+                        arkaplan_gradient_yon=kaynak_sayfa.get('arkaplan_gradient_yon'),
                     )
                     kopyalandi = True
             if kopyalandi:
@@ -131,6 +137,12 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
         tuval_w=sayfa.get('tuval_w') or varsayilan_w,
         tuval_h=sayfa.get('tuval_h') or varsayilan_h,
         arkaplan=sayfa.get('arkaplan') or '#1e2d3d',
+        arkaplan_resim=sayfa.get('arkaplan_resim') or '',
+        arkaplan_sigdirma=sayfa.get('arkaplan_sigdirma') or 'cover',
+        arkaplan_gradient_aktif=bool(sayfa.get('arkaplan_gradient_aktif')),
+        arkaplan_gradient_renk1=sayfa.get('arkaplan_gradient_renk1') or '#1e2d3d',
+        arkaplan_gradient_renk2=sayfa.get('arkaplan_gradient_renk2') or '#0f1720',
+        arkaplan_gradient_yon=sayfa.get('arkaplan_gradient_yon') or 'to bottom',
         elementler_json=json.dumps(sayfa['elementler'], ensure_ascii=False),
         tagler_json=json.dumps(tagler, ensure_ascii=False),
     )
@@ -147,7 +159,12 @@ def sayfa_kopyala(cihaz_id, sayfa_ad, hedef):
     if not diger:
         flash('Kopyalanacak diğer düzen bulunamadı.', 'danger')
     else:
-        database.sayfa_kaydet(cihaz_id, sayfa_ad, diger['elementler'], hedef=hedef, arkaplan=diger['arkaplan'])
+        database.sayfa_kaydet(cihaz_id, sayfa_ad, diger['elementler'], hedef=hedef, arkaplan=diger['arkaplan'],
+                               arkaplan_resim=diger.get('arkaplan_resim'), arkaplan_sigdirma=diger.get('arkaplan_sigdirma'),
+                               arkaplan_gradient_aktif=diger.get('arkaplan_gradient_aktif'),
+                               arkaplan_gradient_renk1=diger.get('arkaplan_gradient_renk1'),
+                               arkaplan_gradient_renk2=diger.get('arkaplan_gradient_renk2'),
+                               arkaplan_gradient_yon=diger.get('arkaplan_gradient_yon'))
         flash('Diğer düzenden kopyalandı — konumları yeni tuvala göre ayarlamayı unutma.', 'success')
     return redirect(url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz_id, sayfa_ad=sayfa_ad, hedef=hedef))
 
@@ -162,7 +179,12 @@ def sayfa_kaydet(cihaz_id, sayfa_ad, hedef):
         return jsonify({'error': 'Geçersiz veri'}), 400
     database.sayfa_kaydet(
         cihaz_id, sayfa_ad, veri['elementler'], hedef=hedef,
-        tuval_w=veri.get('tuval_w'), tuval_h=veri.get('tuval_h'), arkaplan=veri.get('arkaplan')
+        tuval_w=veri.get('tuval_w'), tuval_h=veri.get('tuval_h'), arkaplan=veri.get('arkaplan'),
+        arkaplan_resim=veri.get('arkaplan_resim'), arkaplan_sigdirma=veri.get('arkaplan_sigdirma'),
+        arkaplan_gradient_aktif=veri.get('arkaplan_gradient_aktif'),
+        arkaplan_gradient_renk1=veri.get('arkaplan_gradient_renk1'),
+        arkaplan_gradient_renk2=veri.get('arkaplan_gradient_renk2'),
+        arkaplan_gradient_yon=veri.get('arkaplan_gradient_yon')
     )
     return jsonify({'success': True})
 
@@ -186,7 +208,12 @@ def sayfa_calistir(cihaz_id, sayfa_ad):
             return 'null'
         return json.dumps({
             'elementler': s['elementler'], 'tuval_w': s['tuval_w'], 'tuval_h': s['tuval_h'],
-            'arkaplan': s['arkaplan']
+            'arkaplan': s['arkaplan'], 'arkaplan_resim': s.get('arkaplan_resim'),
+            'arkaplan_sigdirma': s.get('arkaplan_sigdirma') or 'cover',
+            'arkaplan_gradient_aktif': bool(s.get('arkaplan_gradient_aktif')),
+            'arkaplan_gradient_renk1': s.get('arkaplan_gradient_renk1') or '#1e2d3d',
+            'arkaplan_gradient_renk2': s.get('arkaplan_gradient_renk2') or '#0f1720',
+            'arkaplan_gradient_yon': s.get('arkaplan_gradient_yon') or 'to bottom',
         }, ensure_ascii=False)
 
     return render_template(
