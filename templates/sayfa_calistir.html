@@ -26,6 +26,77 @@
         flex-shrink: 0;
     }
     #sayfa-nav a.aktif { background: var(--accent); color: #fff; }
+
+    /* Alt Nav Bar — mobil uygulama tarzı, ekranın altına sabit */
+    #alt-navbar {
+        display: flex;
+        background: var(--panel);
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+        overflow-x: auto;
+    }
+    #alt-navbar a {
+        flex: 1;
+        min-width: 72px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 8px 4px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-decoration: none;
+    }
+    #alt-navbar a .nokta { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+    #alt-navbar a.aktif { color: var(--accent); }
+    #alt-navbar a.aktif .nokta { background: var(--accent); }
+
+    /* Sandviç (aç/kapa) menü */
+    #sandvic-btn {
+        position: fixed;
+        top: 72px; right: 16px;
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        font-size: 18px;
+        cursor: pointer;
+        z-index: 50;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    #sandvic-panel {
+        position: fixed;
+        top: 0; right: -260px;
+        width: 240px; height: 100%;
+        background: var(--panel);
+        border-left: 1px solid var(--border);
+        padding: 70px 14px 14px;
+        transition: right 0.2s ease;
+        z-index: 49;
+        overflow-y: auto;
+    }
+    #sandvic-panel.acik { right: 0; }
+    #sandvic-panel a {
+        display: block;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        background: var(--panel2);
+        text-decoration: none;
+    }
+    #sandvic-panel a.aktif { background: var(--accent); color: #fff; }
+    #sandvic-perde {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+        z-index: 48; display: none;
+    }
+    #sandvic-perde.acik { display: block; }
+
     #cerceve {
         width: 100%;
         flex: 1;
@@ -55,7 +126,10 @@
 </style>
 {% endblock %}
 {% block content %}
-{% if sayfalar and sayfalar|length > 1 %}
+{% set coklu_sayfa = sayfalar and sayfalar|length > 1 %}
+{% set nav_stili = cihaz.nav_stili or 'ust_sekme' %}
+
+{% if coklu_sayfa and nav_stili == 'ust_sekme' %}
 <div id="sayfa-nav">
     {% for s in sayfalar %}
     <a href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}"
@@ -63,7 +137,37 @@
     {% endfor %}
 </div>
 {% endif %}
+
+{% if coklu_sayfa and nav_stili == 'sandvic' %}
+<button id="sandvic-btn" onclick="sandvicAcKapa()">☰</button>
+<div id="sandvic-perde" onclick="sandvicAcKapa()"></div>
+<div id="sandvic-panel">
+    {% for s in sayfalar %}
+    <a href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}"
+       class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+
 <div id="cerceve"><div id="tuval"></div></div>
+
+{% if coklu_sayfa and nav_stili == 'alt_navbar' %}
+<div id="alt-navbar">
+    {% for s in sayfalar %}
+    <a href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}"
+       class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">
+        <span class="nokta"></span>{{ s.ad }}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+<script>
+function sandvicAcKapa() {
+    document.getElementById('sandvic-panel').classList.toggle('acik');
+    document.getElementById('sandvic-perde').classList.toggle('acik');
+}
+</script>
 
 <script>
 const masaustu = {{ masaustu_json | safe }};

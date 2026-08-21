@@ -65,9 +65,15 @@ def init_db():
             cihaz_kimlik TEXT UNIQUE NOT NULL,   -- ESP32'nin sunucuya kendini tanıttığı token
             ad TEXT NOT NULL,
             son_gorulme TIMESTAMP,
+            nav_stili TEXT NOT NULL DEFAULT 'ust_sekme',  -- 'ust_sekme' | 'alt_navbar' | 'sandvic' | 'yok'
             olusturma_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    # Migration: eski cihazlar tablosunda nav_stili kolonu yoksa ekle.
+    cihaz_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(cihazlar)").fetchall()}
+    if cihaz_kolonlari and 'nav_stili' not in cihaz_kolonlari:
+        cursor.execute("ALTER TABLE cihazlar ADD COLUMN nav_stili TEXT NOT NULL DEFAULT 'ust_sekme'")
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tagler (
@@ -365,6 +371,21 @@ def cihaz_yeniden_adlandir(cihaz_id: int, yeni_ad: str):
     conn = get_db()
     try:
         conn.execute('UPDATE cihazlar SET ad = ? WHERE id = ?', (yeni_ad.strip(), cihaz_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+NAV_STILLERI = ('ust_sekme', 'alt_navbar', 'sandvic', 'yok')
+
+
+def cihaz_nav_stili_guncelle(cihaz_id: int, nav_stili: str):
+    if nav_stili not in NAV_STILLERI:
+        nav_stili = 'ust_sekme'
+    conn = get_db()
+    try:
+        conn.execute('UPDATE cihazlar SET nav_stili = ? WHERE id = ?', (nav_stili, cihaz_id))
         conn.commit()
         return True
     finally:
