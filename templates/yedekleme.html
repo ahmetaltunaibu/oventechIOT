@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Yedekleme - OventechIOT{% endblock %}
+{% block content %}
+{% if session.get('platform_admin') %}
+<p><a class="item-link" href="{{ url_for('admin.admin_page') }}">&larr; Admin Panel</a></p>
+{% endif %}
+
+<div class="card">
+    <h2>📥 Yedek İndir</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
+        Deploy ÖNCESİ buradan tüm veritabanını (tüm projeler) indir — Render'ın diski deploy'da sıfırlanıyor.
+    </p>
+    <label>Platform Anahtarı</label>
+    <input type="password" id="anahtarIndir">
+    <button onclick="indir()">İndir</button>
+</div>
+
+<div class="card">
+    <h2>📤 Yedek Yükle (Geri Yükle)</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
+        Deploy SONRASI, indirdiğin yedeği buradan geri yükle.
+    </p>
+    <label>Platform Anahtarı</label>
+    <input type="password" id="anahtarYukle">
+    <label>Yedek Dosyası (.db)</label>
+    <input type="file" id="dosya" accept=".db">
+    <button onclick="yukle()">Yükle</button>
+    <div id="sonuc" style="margin-top:10px;font-size:13px;"></div>
+</div>
+
+<script>
+function indir() {
+    const anahtar = document.getElementById('anahtarIndir').value.trim();
+    if (!anahtar) { alert('Anahtar gerekli.'); return; }
+    window.location.href = '{{ url_for("yedekleme.yedek_indir") }}?anahtar=' + encodeURIComponent(anahtar);
+}
+
+async function yukle() {
+    const anahtar = document.getElementById('anahtarYukle').value.trim();
+    const dosyaInput = document.getElementById('dosya');
+    const sonucEl = document.getElementById('sonuc');
+    if (!anahtar) { alert('Anahtar gerekli.'); return; }
+    if (!dosyaInput.files.length) { alert('Dosya seç.'); return; }
+
+    const fd = new FormData();
+    fd.append('dosya', dosyaInput.files[0]);
+    fd.append('anahtar', anahtar);
+
+    sonucEl.textContent = 'Yükleniyor...';
+    try {
+        const res = await fetch('{{ url_for("yedekleme.yedek_yukle") }}', { method: 'POST', body: fd });
+        const data = await res.json();
+        sonucEl.textContent = res.ok ? ('✅ ' + data.mesaj) : ('❌ ' + (data.error || 'Hata'));
+    } catch (e) {
+        sonucEl.textContent = '❌ İstek başarısız: ' + e;
+    }
+}
+</script>
+{% endblock %}

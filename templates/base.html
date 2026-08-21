@@ -101,6 +101,7 @@
         <div class="right">
             {% if session.get('platform_admin') %}
                 <a class="item-link" href="{{ url_for('admin.admin_page') }}">Admin Panel</a>
+                <a class="item-link" href="{{ url_for('yedekleme.yedek_sayfasi') }}">💾 Yedekleme</a>
                 <span>{{ session.get('kullanici_adi') }} (platform admin)</span>
                 <a class="logout" href="{{ url_for('admin.admin_logout') }}">Çıkış</a>
             {% else %}
