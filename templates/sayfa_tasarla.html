@@ -553,24 +553,37 @@ async function sablonUygula(kaynakCihazId, kaynakSayfaAd) {
         if (!res.ok) { alert(data.error || 'Şablon alınamadı'); return; }
         gecmiseKaydet();
         const kaynakKey = kaynakCihazId + ':' + kaynakSayfaAd;
-        // Kopyalanan elementlere YENİ id verilir (çakışma olmasın) — küçük bir
-        // ofsetle yerleştirilir ki üst üste tam binmesin. Kullanıcı isteği:
-        // yansıtılan şablon elementleri bu sayfada TAŞINMASIN/tıklanmasın —
-        // varsayılan olarak KİLİTLİ eklenir (istersen normal kilit açma
-        // yoluyla açabilirsin). sablon_kaynagi ile hangi kaynaktan geldiği
-        // işaretlenir — aynı kaynağın tekrar eklenmesini engellemek ve
-        // "Kaldır" ile toplu geri almak için kullanılıyor.
+        // BUG FIX (asıl kök sebep): kaynak sayfanın tuvali (ör. masaüstü
+        // 1280×800) hedef tuvalden (ör. mobil 420×860) FARKLI BOYUTTAYSA,
+        // elementlerin x/y/w/h'ını OLDUĞU GİBİ kopyalamak (sadece negatif
+        // olmayacak şekilde kırpmak) yanlıştı — mobil canvas'a sığmayan,
+        // kenardan taşan/orantısız bir yerleşim ortaya çıkıyordu (üstte
+        // boşluk/kayma, kenarlarda taşma). Artık kaynak/tuval oranına göre
+        // TÜM konum ve boyutlar ORANTILI olarak ölçekleniyor.
+        const kaynakTuvalW = data.tuval_w || tuvalW;
+        const kaynakTuvalH = data.tuval_h || tuvalH;
+        const olcekX = tuvalW / kaynakTuvalW;
+        const olcekY = tuvalH / kaynakTuvalH;
+        // Kopyalanan elementlere YENİ id verilir (çakışma olmasın). Kullanıcı
+        // isteği: aynı şablon bir kez uygulanabildiği için (yeniden
+        // uygulamak artık KALDIRIR, tekrar eklemez) üst üste binme riski
+        // yok — bu yüzden eskiden eklenen +16px ofset KALDIRILDI, elementler
+        // kaynaktaki (ölçeklenmiş) TAM konumuna yerleştiriliyor, gereksiz
+        // bir "üst kenar boşluğu" oluşmuyor. Yansıtılan elementler bu
+        // sayfada TAŞINMASIN/tıklanmasın diye varsayılan olarak KİLİTLİ
+        // eklenir (istersen normal kilit açma yoluyla açabilirsin).
+        // sablon_kaynagi ile hangi kaynaktan geldiği işaretlenir.
         data.elementler.forEach((kaynakEl, i) => {
-            // BUG FIX: kaynak element hedef tuvalden GENİŞ/YÜKSEKSE (ör.
-            // masaüstünde tasarlanmış geniş bir şekil mobil 420px tuvale
-            // ekleniyorsa) Math.min tek başına NEGATİF x/y üretip elementi
-            // tuvalin dışına (görünmez) yerleştiriyordu — "mobilde şablon
-            // çalışmıyor" bug'ının kök sebebi buydu. Math.max(0, ...) ile
-            // sıfırın altına inmesi engellendi.
+            const olcekliW = Math.max(8, Math.round((kaynakEl.w || 100) * olcekX));
+            const olcekliH = Math.max(8, Math.round((kaynakEl.h || 40) * olcekY));
+            const olcekliX = Math.round((kaynakEl.x || 0) * olcekX);
+            const olcekliY = Math.round((kaynakEl.y || 0) * olcekY);
             const yeni = Object.assign({}, kaynakEl, {
                 id: uid(),
-                x: Math.max(0, Math.min(tuvalW - (kaynakEl.w || 100), (kaynakEl.x || 0) + 16)),
-                y: Math.max(0, Math.min(tuvalH - (kaynakEl.h || 40), (kaynakEl.y || 0) + 16)),
+                w: olcekliW,
+                h: olcekliH,
+                x: Math.max(0, Math.min(tuvalW - olcekliW, olcekliX)),
+                y: Math.max(0, Math.min(tuvalH - olcekliH, olcekliY)),
                 kilitli: true,
                 sablon_kaynagi: kaynakKey,
             });

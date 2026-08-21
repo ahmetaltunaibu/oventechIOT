@@ -227,6 +227,8 @@ def api_sablon_elementleri(kaynak_cihaz_id, sayfa_ad):
         return jsonify({'error': 'Sayfa bulunamadı'}), 404
     return jsonify({
         'elementler': sayfa['elementler'],
+        'tuval_w': sayfa['tuval_w'],
+        'tuval_h': sayfa['tuval_h'],
         'hedef_kullanilan': hedef_kullanilan,
         'istenen_hedef': istenen_hedef,
     })
