@@ -204,14 +204,32 @@ def api_sablon_elementleri(kaynak_cihaz_id, sayfa_ad):
     """Kullanıcı isteği: örnek bir sayfa oluşturduktan sonra o sayfanın
     elementlerini istediği ZAMAN, VAR OLAN başka bir sayfaya da EKLEYEBİLMELİ
     (sadece sayfa oluştururken değil) — birden fazla şablonu aynı sayfada
-    birleştirebilmesi için bu EKLEME (üzerine yazmadan) olarak yapılır."""
+    birleştirebilmesi için bu EKLEME (üzerine yazmadan) olarak yapılır.
+
+    Kullanıcı isteği (bug fix): şablon MOBİL düzen tasarlanırken uygulanıyorsa
+    kaynağın MOBİL elementleri, MASAÜSTÜ tasarlanırken kaynağın MASAÜSTÜ
+    elementleri gelmeli — önceden her zaman masaüstü tercih ediliyordu.
+    ?hedef=masaustu|mobil ile hangi düzenin isteneceği belirtilir; o düzen
+    kaynakta yoksa (sadece o zaman) diğerine düşülür."""
     if not _cihaz_dogrula(kaynak_cihaz_id):
         return jsonify({'error': 'Cihaz bulunamadı'}), 404
-    sayfa = database.sayfa_getir(kaynak_cihaz_id, sayfa_ad, 'masaustu') \
-        or database.sayfa_getir(kaynak_cihaz_id, sayfa_ad, 'mobil')
+    istenen_hedef = request.args.get('hedef', 'masaustu')
+    if istenen_hedef not in HEDEFLER:
+        istenen_hedef = 'masaustu'
+    diger_hedef = 'mobil' if istenen_hedef == 'masaustu' else 'masaustu'
+
+    sayfa = database.sayfa_getir(kaynak_cihaz_id, sayfa_ad, istenen_hedef)
+    hedef_kullanilan = istenen_hedef
+    if not sayfa:
+        sayfa = database.sayfa_getir(kaynak_cihaz_id, sayfa_ad, diger_hedef)
+        hedef_kullanilan = diger_hedef
     if not sayfa:
         return jsonify({'error': 'Sayfa bulunamadı'}), 404
-    return jsonify({'elementler': sayfa['elementler']})
+    return jsonify({
+        'elementler': sayfa['elementler'],
+        'hedef_kullanilan': hedef_kullanilan,
+        'istenen_hedef': istenen_hedef,
+    })
 
 
 @sayfa_bp.route('/cihaz/<int:cihaz_id>/medya-yukle', methods=['POST'])

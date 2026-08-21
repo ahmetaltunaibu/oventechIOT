@@ -535,7 +535,10 @@ function sablonKapat() {
 }
 async function sablonUygula(kaynakCihazId, kaynakSayfaAd) {
     try {
-        const res = await fetch(`/api/sablon-elementleri/${kaynakCihazId}/${encodeURIComponent(kaynakSayfaAd)}`);
+        // Kullanıcı isteği: mobil tasarlarken kaynağın MOBİL düzeni, masaüstü
+        // tasarlarken kaynağın MASAÜSTÜ düzeni gelmeli — o an düzenlenen
+        // "hedef" backend'e gönderiliyor.
+        const res = await fetch(`/api/sablon-elementleri/${kaynakCihazId}/${encodeURIComponent(kaynakSayfaAd)}?hedef=${hedef}`);
         const data = await res.json();
         if (!res.ok) { alert(data.error || 'Şablon alınamadı'); return; }
         gecmiseKaydet();
@@ -551,11 +554,17 @@ async function sablonUygula(kaynakCihazId, kaynakSayfaAd) {
         });
         render();
         sablonKapat();
-        document.getElementById('durum').textContent = '📥 Şablon eklendi — Kaydet\'i unutma';
+        if (data.hedef_kullanilan !== data.istenen_hedef) {
+            document.getElementById('durum').textContent =
+                `📥 Şablon eklendi (kaynakta ${istenenHedefAdi(data.istenen_hedef)} yok, ${istenenHedefAdi(data.hedef_kullanilan)} kullanıldı) — Kaydet'i unutma`;
+        } else {
+            document.getElementById('durum').textContent = '📥 Şablon eklendi — Kaydet\'i unutma';
+        }
     } catch (e) {
         alert('Şablon uygulanamadı: ' + e);
     }
 }
+function istenenHedefAdi(h) { return h === 'mobil' ? 'mobil' : 'masaüstü'; }
 
 // seciliId: özellik panelinde gösterilecek "birincil" element (son tıklanan).
 // seciliSet: tuvalde vurgulanan / birlikte taşınan TÜM seçili elementler
