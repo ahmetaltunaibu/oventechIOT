@@ -120,9 +120,11 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
     diger_var_mi = database.sayfa_getir(cihaz_id, sayfa_ad, diger_hedef) is not None
 
     tagler = database.cihaz_tagleri(cihaz_id)
+    sayfalar = database.cihaz_sayfalari(cihaz_id)
     return render_template(
         'sayfa_tasarla.html',
         cihaz=cihaz, sayfa_ad=sayfa_ad, hedef=hedef, diger_hedef=diger_hedef, diger_var_mi=diger_var_mi,
+        sayfalar=sayfalar,
         tuval_w=sayfa.get('tuval_w') or varsayilan_w,
         tuval_h=sayfa.get('tuval_h') or varsayilan_h,
         arkaplan=sayfa.get('arkaplan') or '#1e2d3d',

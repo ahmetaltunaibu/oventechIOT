@@ -3,7 +3,6 @@
 {% block extra_css %}
 <style>
     .container { max-width: none; }
-    .tasarim-wrap { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
     #tuval-cerceve {
         overflow: auto;
         max-width: 100%;
@@ -32,10 +31,6 @@
         background: var(--accent); border: 1px solid #fff;
         cursor: nwse-resize;
     }
-    #panel { width: 260px; flex-shrink: 0; }
-    #panel .card { position: sticky; top: 16px; }
-    .panel-alan { display: none; }
-    .panel-alan.aktif { display: block; }
     .hedef-tab {
         padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
         background: var(--panel2); color: var(--text-secondary); text-decoration: none; display: inline-block;
@@ -49,23 +44,34 @@
         box-shadow: 0 4px 16px rgba(0,0,0,0.5);
         min-width: 190px; padding: 4px; font-size: 13px;
     }
-    #baglam-menu .madde {
-        padding: 8px 12px; border-radius: 5px; cursor: pointer; color: var(--text);
-    }
+    #baglam-menu .madde { padding: 8px 12px; border-radius: 5px; cursor: pointer; color: var(--text); }
     #baglam-menu .madde:hover { background: var(--panel2); }
     #baglam-menu .madde.tehlike { color: var(--red); }
     #baglam-menu .ayrac { height: 1px; background: var(--border); margin: 4px 6px; }
 
-    /* Sayfa Ozellikleri modal (sag tikla acilir) */
-    #sayfa-ozellik-perde {
+    /* Ortak modal iskeleti (Sayfa Özellikleri + Element Özellikleri) */
+    .modal-perde {
         position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 300; display: none;
     }
-    #sayfa-ozellik-modal {
+    .modal-kutu {
         position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
         z-index: 301; display: none;
         background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-        padding: 20px; width: 320px;
+        padding: 20px; width: 320px; max-height: 86vh; overflow-y: auto;
     }
+
+    /* Tasarim ekranindaki nav stili onizlemesi — runtime'da GORUNECEK olan
+       ust sekme/alt navbar/sandvic'i tasarim sirasinda da gostermek icin. */
+    #nav-onizleme-ust, #nav-onizleme-alt {
+        display: flex; gap: 6px; padding: 6px 10px; margin-bottom: 8px;
+        background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+        font-size: 11px; flex-wrap: wrap;
+    }
+    #nav-onizleme-ust span, #nav-onizleme-alt span {
+        padding: 4px 10px; border-radius: 5px; background: var(--panel2); color: var(--text-secondary);
+    }
+    #nav-onizleme-ust span.aktif, #nav-onizleme-alt span.aktif { background: var(--accent); color: #fff; }
+    #nav-onizleme-etiket { font-size: 11px; color: var(--text-secondary); margin-bottom:4px; }
 </style>
 {% endblock %}
 {% block content %}
@@ -73,86 +79,49 @@
 
 <div class="card">
     <h2>Sayfa Tasarımı — {{ sayfa_ad }}</h2>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
         <a class="hedef-tab {% if hedef == 'masaustu' %}aktif{% endif %}" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='masaustu') }}">🖥️ Masaüstü</a>
         <a class="hedef-tab {% if hedef == 'mobil' %}aktif{% endif %}" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='mobil') }}">📱 Mobil</a>
+        <button type="button" onclick="kaydet()" style="background:var(--green);">Kaydet</button>
+        {% if diger_var_mi %}
+        <form method="POST" action="{{ url_for('sayfa.sayfa_kopyala', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}" onsubmit="return confirm('{{ diger_hedef }} düzenindeki elementler buraya kopyalanacak, mevcut içerik silinecek. Emin misin?');" style="display:inline;">
+            <button type="submit" style="background:var(--panel2);">{{ 'Mobil' if diger_hedef=='mobil' else 'Masaüstü' }} Düzenden Kopyala</button>
+        </form>
+        {% endif %}
+        <span id="durum" style="font-size:12px;color:var(--text-secondary);"></span>
     </div>
-    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
+    <p style="font-size:12px;color:var(--text-secondary);">
         Tuval boyutu: <span id="tuvalBoyutYazi">{{ tuval_w }}×{{ tuval_h }}</span>px — element eklemek/sayfa ayarları için tuvalde <b>sağ tıkla</b>, bir elementi düzenlemek için <b>çift tıkla</b>.
         {% if not diger_var_mi %}
             Diğer düzen ({{ 'mobil' if hedef == 'masaustu' else 'masaüstü' }}) henüz tanımlı değil — runtime'da bu düzen ölçeklenerek kullanılır.
         {% endif %}
     </p>
-    <div style="display:flex;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
-        <button type="button" onclick="kaydet()" style="background:var(--green);">Kaydet</button>
-        {% if diger_var_mi %}
-        <form method="POST" action="{{ url_for('sayfa.sayfa_kopyala', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}" onsubmit="return confirm('{{ diger_hedef }} düzenindeki elementler buraya kopyalanacak, mevcut içerik silinecek. Emin misin?');">
-            <button type="submit" style="background:var(--panel2);">{{ 'Mobil' if diger_hedef=='mobil' else 'Masaüstü' }} Düzenden Kopyala</button>
-        </form>
-        {% endif %}
-        <span id="durum" style="align-self:center;font-size:12px;color:var(--text-secondary);"></span>
-    </div>
 </div>
 
-<div class="tasarim-wrap">
-    <div id="tuval-cerceve">
-        <div id="tuval" style="width:{{ tuval_w }}px;height:{{ tuval_h }}px;"></div>
-    </div>
+{% if sayfalar and sayfalar|length > 1 and cihaz.nav_stili in ('ust_sekme', 'sandvic') %}
+<div id="nav-onizleme-etiket">Runtime önizlemesi — bu cihazda "{{ {'ust_sekme':'Üst Sekmeler','sandvic':'Sandviç Menü'}[cihaz.nav_stili] }}" navigasyonu aktif:</div>
+<div id="nav-onizleme-ust">
+    {% for s in sayfalar %}<span class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</span>{% endfor %}
+</div>
+{% endif %}
 
-    <div id="panel">
-        <div class="card">
-            <h2>Element Özellikleri</h2>
-            <div id="panelBos" class="panel-alan aktif">
-                <p style="font-size:13px;color:var(--text-secondary);">Düzenlemek için bir elemente çift tıkla (ya da sağ tık &rarr; Özellikler).</p>
-            </div>
-            <div id="panelDolu" class="panel-alan">
-                <label>Etiket</label>
-                <input type="text" id="ozLabel">
-
-                <label>Bağlı Tag</label>
-                <select id="ozTag"><option value="">— seçilmedi —</option></select>
-
-                <label>Buton Modu</label>
-                <select id="ozMod">
-                    <option value="toggle">Toggle (durum tersine çevir)</option>
-                    <option value="set_on">Aç (sabit değer yaz)</option>
-                    <option value="set_off">Kapat (sabit değer yaz)</option>
-                    <option value="momentary">Anlık (bas-bırak)</option>
-                </select>
-
-                <label>Açık Değer</label>
-                <input type="text" id="ozAcikDeger" value="1">
-                <label>Kapalı Değer</label>
-                <input type="text" id="ozKapaliDeger" value="0">
-
-                <label>Renk (Açık)</label>
-                <input type="color" id="ozRenkAcik" value="#2ecc71" style="height:38px;">
-                <label>Renk (Kapalı)</label>
-                <input type="color" id="ozRenkKapali" value="#e74c3c" style="height:38px;">
-                <label>Yazı Rengi</label>
-                <input type="color" id="ozRenkYazi" value="#ffffff" style="height:38px;">
-
-                <label>Genişlik / Yükseklik</label>
-                <div style="display:flex;gap:8px;">
-                    <input type="number" id="ozW" value="120">
-                    <input type="number" id="ozH" value="44">
-                </div>
-
-                <div style="display:flex;gap:8px;margin-top:6px;">
-                    <button type="button" onclick="uygula()">Uygula</button>
-                    <button type="button" onclick="elementSil()" style="background:var(--red);">Sil</button>
-                </div>
-            </div>
-        </div>
-    </div>
+<div id="tuval-cerceve">
+    <div id="tuval" style="width:{{ tuval_w }}px;height:{{ tuval_h }}px;"></div>
 </div>
 
-<!-- Sag tik baglam menusu (hem tuval hem element icin ayni div, icerigi JS ile degisir) -->
+{% if sayfalar and sayfalar|length > 1 and cihaz.nav_stili == 'alt_navbar' %}
+<div id="nav-onizleme-etiket" style="margin-top:8px;">Runtime önizlemesi — bu cihazda "Alt Nav Bar" navigasyonu aktif (ekranın altında sabit durur):</div>
+<div id="nav-onizleme-alt">
+    {% for s in sayfalar %}<span class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</span>{% endfor %}
+</div>
+{% endif %}
+
+<!-- Sag tik baglam menusu -->
 <div id="baglam-menu"></div>
 
-<!-- Sayfa Ozellikleri modali (sag tikla acilir) -->
-<div id="sayfa-ozellik-perde" onclick="sayfaOzellikKapat()"></div>
-<div id="sayfa-ozellik-modal">
+<!-- Sayfa Ozellikleri modali -->
+<div id="sayfa-ozellik-perde" class="modal-perde" onclick="sayfaOzellikKapat()"></div>
+<div id="sayfa-ozellik-modal" class="modal-kutu">
     <h2 style="color:var(--accent);font-size:15px;margin-bottom:14px;">Sayfa Özellikleri ({{ 'Masaüstü' if hedef == 'masaustu' else 'Mobil' }})</h2>
     <label>Genişlik / Yükseklik (px)</label>
     <div style="display:flex;gap:8px;">
@@ -164,6 +133,54 @@
     <div style="display:flex;gap:8px;margin-top:6px;">
         <button type="button" onclick="sayfaOzellikUygula()">Tuvala Uygula</button>
         <button type="button" onclick="sayfaOzellikKapat()" style="background:var(--panel2);">Kapat</button>
+    </div>
+</div>
+
+<!-- Element Ozellikleri modali (cift tik / sag tik -> Ozellikler ile acilir) -->
+<div id="element-ozellik-perde" class="modal-perde" onclick="ozellikKapat()"></div>
+<div id="element-ozellik-modal" class="modal-kutu">
+    <h2 style="color:var(--accent);font-size:15px;margin-bottom:14px;">Element Özellikleri</h2>
+    <label>Etiket</label>
+    <input type="text" id="ozLabel">
+
+    <label>Bağlı Tag</label>
+    <select id="ozTag"><option value="">— seçilmedi —</option></select>
+
+    <label>Buton Modu</label>
+    <select id="ozMod">
+        <option value="toggle">Toggle (durum tersine çevir)</option>
+        <option value="set_on">Aç (sabit değer yaz)</option>
+        <option value="set_off">Kapat (sabit değer yaz)</option>
+        <option value="momentary">Anlık (bas-bırak)</option>
+    </select>
+
+    <label>Açık Değer</label>
+    <input type="text" id="ozAcikDeger" value="1">
+    <label>Kapalı Değer</label>
+    <input type="text" id="ozKapaliDeger" value="0">
+
+    <label>Renk (Açık)</label>
+    <input type="color" id="ozRenkAcik" value="#2ecc71" style="height:38px;">
+    <label>Renk (Kapalı)</label>
+    <input type="color" id="ozRenkKapali" value="#e74c3c" style="height:38px;">
+    <label>Yazı Rengi</label>
+    <input type="color" id="ozRenkYazi" value="#ffffff" style="height:38px;">
+
+    <label>Önizleme Durumu (tuvalde hangi renk gösterilsin)</label>
+    <select id="ozOnizlemeDurum" onchange="uygula()">
+        <option value="kapali">Kapalı</option>
+        <option value="acik">Açık</option>
+    </select>
+
+    <label>Genişlik / Yükseklik</label>
+    <div style="display:flex;gap:8px;">
+        <input type="number" id="ozW" value="120">
+        <input type="number" id="ozH" value="44">
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:10px;">
+        <button type="button" onclick="uygula(); ozellikKapat();">Uygula ve Kapat</button>
+        <button type="button" onclick="elementSil(); ozellikKapat();" style="background:var(--red);">Sil</button>
     </div>
 </div>
 
@@ -202,8 +219,8 @@ function sayfaOzellikUygula() {
 tuvalCerceveGuncelle();
 
 let seciliId = null;
-let surukleniyor = null;   // {id, offsetX, offsetY}
-let boyutlandiriliyor = null; // {id, startX, startY, startW, startH}
+let surukleniyor = null;
+let boyutlandiriliyor = null;
 
 const tagSelect = document.getElementById('ozTag');
 tagler.forEach(t => {
@@ -221,7 +238,8 @@ function butonEkle(x, y) {
         x: Math.max(0, x - 60), y: Math.max(0, y - 22), w: 120, h: 44,
         label: 'Buton', tag_id: null, mod: 'toggle',
         acik_deger: '1', kapali_deger: '0',
-        renk_acik: '#2ecc71', renk_kapali: '#e74c3c', renk_yazi: '#ffffff'
+        renk_acik: '#2ecc71', renk_kapali: '#e74c3c', renk_yazi: '#ffffff',
+        _onizleme: 'kapali'
     };
     elementler.push(el);
     seciliId = el.id;
@@ -240,12 +258,14 @@ function render() {
         div.style.top = el.y + 'px';
         div.style.width = el.w + 'px';
         div.style.height = el.h + 'px';
-        div.style.background = el.renk_kapali;
+        // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
+        // — tasarım anında "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
+        div.style.background = (el._onizleme === 'acik') ? el.renk_acik : el.renk_kapali;
         div.style.color = el.renk_yazi;
         div.textContent = el.label;
         div.addEventListener('mousedown', (e) => baslaSurukle(e, el.id));
         div.addEventListener('click', (e) => { e.stopPropagation(); sec(el.id); });
-        div.addEventListener('dblclick', (e) => { e.stopPropagation(); sec(el.id); ozellikleriAc(); });
+        div.addEventListener('dblclick', (e) => { e.stopPropagation(); sec(el.id); ozellikAc(); });
         div.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); sec(el.id); elementBaglamMenusu(e, el.id); });
 
         if (el.id === seciliId) {
@@ -256,7 +276,6 @@ function render() {
         }
         tuval.appendChild(div);
     });
-    guncellePanel();
 }
 
 function sec(id) {
@@ -264,22 +283,15 @@ function sec(id) {
     render();
 }
 
-function ozellikleriAc() {
-    // Panel zaten seciliId'ye gore guncelPanel() ile doluyor - burada sadece
-    // gorunur oldugundan emin olup panele odaklaniyoruz.
-    guncellePanel();
-    document.getElementById('panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
 document.getElementById('tuval').addEventListener('click', () => { seciliId = null; render(); });
 document.getElementById('tuval').addEventListener('contextmenu', (e) => {
-    if (e.target.id !== 'tuval') return; // bos alana degil bir elemente sag tiklandiysa (element kendi handler'ini kullanir)
+    if (e.target.id !== 'tuval') return;
     e.preventDefault();
     tuvalBaglamMenusu(e);
 });
 
 function baslaSurukle(e, id) {
-    if (e.button !== 0) return; // sadece sol tik ile surukle
+    if (e.button !== 0) return;
     e.preventDefault();
     const el = bul(id);
     const rect = document.getElementById('tuval').getBoundingClientRect();
@@ -331,7 +343,7 @@ function tuvalBaglamMenusu(e) {
 
 function elementBaglamMenusu(e, id) {
     baglamMenuGoster(e.clientX, e.clientY, [
-        { etiket: '✎ Özellikler', aksiyon: () => { sec(id); ozellikleriAc(); } },
+        { etiket: '✎ Özellikler', aksiyon: () => { sec(id); ozellikAc(); } },
         { ayrac: true },
         { etiket: '🗑 Sil', tehlike: true, aksiyon: () => { seciliId = id; elementSil(); } },
     ]);
@@ -356,22 +368,26 @@ function baglamMenuGoster(x, y, maddeler) {
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
     menu.style.display = 'block';
-    // Ekran disina taşarsa sola/yukari yasla
     const boundRect = menu.getBoundingClientRect();
     if (boundRect.right > window.innerWidth) menu.style.left = (window.innerWidth - boundRect.width - 8) + 'px';
     if (boundRect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - boundRect.height - 8) + 'px';
 }
 
-// ---------- Özellik paneli ----------
+// ---------- Element Özellikleri modali ----------
+function ozellikAc() {
+    if (!seciliId) return;
+    guncellePanel();
+    document.getElementById('element-ozellik-perde').style.display = 'block';
+    document.getElementById('element-ozellik-modal').style.display = 'block';
+}
+function ozellikKapat() {
+    document.getElementById('element-ozellik-perde').style.display = 'none';
+    document.getElementById('element-ozellik-modal').style.display = 'none';
+}
+
 function guncellePanel() {
-    const bos = document.getElementById('panelBos');
-    const dolu = document.getElementById('panelDolu');
     const el = seciliId ? bul(seciliId) : null;
-    if (!el) {
-        bos.classList.add('aktif'); dolu.classList.remove('aktif');
-        return;
-    }
-    bos.classList.remove('aktif'); dolu.classList.add('aktif');
+    if (!el) return;
     document.getElementById('ozLabel').value = el.label;
     document.getElementById('ozTag').value = el.tag_id || '';
     document.getElementById('ozMod').value = el.mod;
@@ -380,6 +396,7 @@ function guncellePanel() {
     document.getElementById('ozRenkAcik').value = el.renk_acik;
     document.getElementById('ozRenkKapali').value = el.renk_kapali;
     document.getElementById('ozRenkYazi').value = el.renk_yazi;
+    document.getElementById('ozOnizlemeDurum').value = el._onizleme || 'kapali';
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
 }
@@ -395,6 +412,7 @@ function uygula() {
     el.renk_acik = document.getElementById('ozRenkAcik').value;
     el.renk_kapali = document.getElementById('ozRenkKapali').value;
     el.renk_yazi = document.getElementById('ozRenkYazi').value;
+    el._onizleme = document.getElementById('ozOnizlemeDurum').value;
     el.w = parseInt(document.getElementById('ozW').value) || 120;
     el.h = parseInt(document.getElementById('ozH').value) || 44;
     render();
@@ -410,10 +428,13 @@ async function kaydet() {
     const durum = document.getElementById('durum');
     durum.textContent = 'Kaydediliyor...';
     try {
+        // _onizleme sadece tasarim ekrani icin bir yardimci alan - kaydedilen
+        // veriye dahil etmiyoruz (runtime kendi canli deger mantigini kullanir).
+        const temiz = elementler.map(({ _onizleme, ...rest }) => rest);
         const res = await fetch("{{ url_for('sayfa.sayfa_kaydet', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef=hedef) }}", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ elementler: elementler, tuval_w: tuvalW, tuval_h: tuvalH, arkaplan: arkaplan })
+            body: JSON.stringify({ elementler: temiz, tuval_w: tuvalW, tuval_h: tuvalH, arkaplan: arkaplan })
         });
         const data = await res.json();
         durum.textContent = res.ok ? '✅ Kaydedildi' : ('❌ ' + (data.error || 'Hata'));
