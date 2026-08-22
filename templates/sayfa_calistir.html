@@ -354,6 +354,24 @@ function tuvalCiz() {
             return;
         }
 
+        if (el.type === 'alarm') {
+            // Kural sunucuda değerlendiriliyor (bkz. database.alarm_degerlendir,
+            // tarayıcı kapalıyken de çalışır) — burası sadece sayfa açıkken
+            // görünen CANLI göstergedir, aynı mantığı JS tarafında tekrar eder.
+            const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+            const acikMi = alarmTetiklendiMi(el, guncelDeger);
+            div.style.background = acikMi ? (el.renk_acik || '#3a1f22') : (el.renk_kapali || '#1c3326');
+            div.style.color = acikMi ? (el.renk_yazi_acik || '#e74c3c') : (el.renk_yazi_kapali || '#2ecc71');
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+            div.style.borderRadius = '8px'; div.style.fontWeight = '700';
+            div.style.fontSize = (el.font_boyutu || 13) + 'px';
+            div.textContent = acikMi ? (el.metin_acik || '⚠️ Alarm') : (el.metin_kapali || '✅ Normal');
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            hedefKatmanaEkle(div, el, tuval);
+            return;
+        }
+
         if (el.type === 'textbox') {
             div.className = '';
             div.style.background = el.renk_arkaplan || '#17222e';
@@ -730,6 +748,25 @@ function sabitKatmanlariKonumlandir() {
         kat.style.height = aktifSayfa.tuval_h + 'px';
         kat.style.transform = `translateX(-50%) scale(${sonOlcek})`;
     });
+}
+
+// Sunucudaki database._alarm_tetiklendi_mi() ile aynı mantık — sadece
+// sayfa açıkken görünen canlı gösterge burada, GERÇEK alarm kaydı/kararı
+// her zaman sunucuda (ESP32 xchange sırasında) veriliyor.
+function alarmTetiklendiMi(el, deger) {
+    if (deger === null || deger === undefined) return false;
+    if ((el.tip || 'bool') === 'bool') {
+        return String(deger) === String(el.bool_tetik_deger ?? '1');
+    }
+    const sayi = parseFloat(deger), esik = parseFloat(el.esik_deger ?? 0);
+    if (isNaN(sayi) || isNaN(esik)) return false;
+    switch (el.karsilastirma) {
+        case '<': return sayi < esik;
+        case '>=': return sayi >= esik;
+        case '<=': return sayi <= esik;
+        case '==': return sayi === esik;
+        default: return sayi > esik;
+    }
 }
 
 function renkGuncelle(div, el) {

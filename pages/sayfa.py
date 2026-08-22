@@ -208,6 +208,18 @@ def sayfa_kaydet(cihaz_id, sayfa_ad, hedef):
         arkaplan_gradient_yon=veri.get('arkaplan_gradient_yon'),
         sayfa_turu=veri.get('sayfa_turu'), giris_animasyonu=veri.get('giris_animasyonu')
     )
+    # Sayfadaki her "alarm" elementi için sunucu-taraflı bir alarm kuralı
+    # kaydediliyor — tarayıcı kapalı olsa bile ESP32 xchange'inde bu kural
+    # değerlendirilebilsin diye (bkz. database.alarm_degerlendir).
+    for el in veri['elementler']:
+        if el.get('type') == 'alarm' and el.get('tag_id'):
+            database.alarm_kural_kaydet(
+                el['id'], cihaz_id, el['tag_id'], el.get('tip') or 'bool',
+                bool_tetik_deger=el.get('bool_tetik_deger') or '1',
+                karsilastirma=el.get('karsilastirma') or '>',
+                esik_deger=el.get('esik_deger') or 0,
+                mesaj=el.get('mesaj') or '',
+            )
     return jsonify({'success': True})
 
 

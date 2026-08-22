@@ -643,6 +643,61 @@
         <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Grafik gerçek geçmiş verileri sunucudan çeker (tag değerleri güncellendikçe kalıcı olarak biriktirilir) — sayfa yeniden açılınca da geçmiş korunur.</p>
     </div>
 
+    <div id="ozAlanAlarm" class="ozel-alan">
+        <label>Bağlı Tag</label>
+        <select id="ozAlarmTag"></select>
+        <label>Tag Tipi</label>
+        <select id="ozAlarmTip" onchange="alarmTipGuncelle()">
+            <option value="bool">Bool (ON/OFF durumuna göre)</option>
+            <option value="esik">Sayısal (int/real — eşik değerine göre)</option>
+        </select>
+        <div id="ozAlarmBoolAlani">
+            <label>Bu Değere Eşitse Alarm Say (örn. 1 = ON)</label>
+            <input type="text" id="ozAlarmBoolDeger" value="1">
+        </div>
+        <div id="ozAlarmEsikAlani" style="display:none;">
+            <label>Karşılaştırma</label>
+            <select id="ozAlarmKarsilastirma">
+                <option value=">">Büyükse (&gt;)</option>
+                <option value="<">Küçükse (&lt;)</option>
+                <option value=">=">Büyük ya da Eşitse (&ge;)</option>
+                <option value="<=">Küçük ya da Eşitse (&le;)</option>
+                <option value="==">Eşitse (=)</option>
+            </select>
+            <label>Eşik Değeri</label>
+            <input type="number" id="ozAlarmEsikDeger" value="0" step="any">
+        </div>
+        <label>Alarm Mesajı (kayıtlarda görünür)</label>
+        <input type="text" id="ozAlarmMesaj" placeholder="örn. Sıcaklık çok yüksek">
+        <p style="font-size:11px;color:var(--text-secondary);margin:2px 0 8px;">Bu kural SUNUCUDA değerlendirilir — tarayıcı kapalı olsa bile alarm oluşur/kaydedilir. Aşağıdaki renkler/metinler sadece bu element sayfada açıkken görünen canlı göstergedir.</p>
+        <label>Alarm Durumu Metni</label>
+        <input type="text" id="ozAlarmMetinAcik" placeholder="⚠️ Alarm">
+        <label>Normal Durum Metni</label>
+        <input type="text" id="ozAlarmMetinKapali" placeholder="✅ Normal">
+        <div style="display:flex;gap:8px;">
+            <div style="flex:1;">
+                <label>Alarm Arka Plan</label>
+                <input type="color" id="ozAlarmRenkAcik" style="height:38px;">
+            </div>
+            <div style="flex:1;">
+                <label>Normal Arka Plan</label>
+                <input type="color" id="ozAlarmRenkKapali" style="height:38px;">
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <div style="flex:1;">
+                <label>Alarm Yazı Rengi</label>
+                <input type="color" id="ozAlarmRenkYaziAcik" style="height:38px;">
+            </div>
+            <div style="flex:1;">
+                <label>Normal Yazı Rengi</label>
+                <input type="color" id="ozAlarmRenkYaziKapali" style="height:38px;">
+            </div>
+        </div>
+        <label>Font Boyutu</label>
+        <input type="number" id="ozAlarmFont" value="13" min="8">
+    </div>
+
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
     <textarea id="ozCustomCss" rows="3" placeholder="örn. box-shadow: 0 4px 12px #000; transform: rotate(2deg);" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:monospace;padding:8px;margin-bottom:10px;box-sizing:border-box;"></textarea>
 
@@ -971,6 +1026,7 @@ tagSecenekleriDoldur(document.getElementById('ozInputboxTag'), '— seçilmedi �
 tagSecenekleriDoldur(document.getElementById('ozComboboxTag'), '— seçilmedi —');
 tagSecenekleriDoldur(document.getElementById('ozCheckboxTag'), '— seçilmedi —');
 tagSecenekleriDoldur(document.getElementById('ozProgressbarTag'), '— seçilmedi —');
+tagSecenekleriDoldur(document.getElementById('ozAlarmTag'), '— seçilmedi —');
 
 // ---------- Hızlı Bağlantı modalı (tuvaldeki 🔗 rozeti) ----------
 let baglantiElementId = null;
@@ -1338,6 +1394,20 @@ function groupboxEkle(x, y) {
     });
 }
 
+function alarmEkle(x, y) {
+    elementEkle({
+        id: uid(), type: 'alarm',
+        x: Math.max(0, x - 90), y: Math.max(0, y - 20), w: 180, h: 40,
+        tag_id: null,
+        tip: 'bool', bool_tetik_deger: '1', karsilastirma: '>', esik_deger: 0,
+        mesaj: 'Alarm',
+        metin_acik: '⚠️ Alarm', metin_kapali: '✅ Normal',
+        renk_acik: '#3a1f22', renk_kapali: '#1c3326',
+        renk_yazi_acik: '#e74c3c', renk_yazi_kapali: '#2ecc71',
+        font_boyutu: 13, _onizleme: 'kapali', custom_css: ''
+    });
+}
+
 const GRAFIK_RENK_PALETI = ['#2e9ed9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e84393', '#95a5a6'];
 function grafikEkle(x, y) {
     elementEkle({
@@ -1628,6 +1698,16 @@ function render() {
                 div.appendChild(baslikEl);
             }
             div.appendChild(svg);
+        } else if (el.type === 'alarm') {
+            // Tasarımda gerçek tag değeri yok — "Önizleme Durumu" (_onizleme) ile
+            // normal/alarm hâli gösterilebilir (switch/checkbox ile aynı desen).
+            const acikMi = el._onizleme === 'acik';
+            div.style.background = acikMi ? (el.renk_acik || '#3a1f22') : (el.renk_kapali || '#1c3326');
+            div.style.color = acikMi ? (el.renk_yazi_acik || '#e74c3c') : (el.renk_yazi_kapali || '#2ecc71');
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+            div.style.borderRadius = '8px'; div.style.fontWeight = '700';
+            div.style.fontSize = (el.font_boyutu || 13) + 'px';
+            div.textContent = acikMi ? (el.metin_acik || '⚠️ Alarm') : (el.metin_kapali || '✅ Normal');
         } else {
             // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
             // — "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
@@ -2485,6 +2565,7 @@ function tuvalBaglamMenusu(e) {
         { etiket: '📶 İlerleme Çubuğu Ekle', aksiyon: () => progressbarEkle(tuvalX, tuvalY) },
         { etiket: '🖼️ Grup Kutusu / Çerçeve Ekle', aksiyon: () => groupboxEkle(tuvalX, tuvalY) },
         { etiket: '📈 Grafik Ekle', aksiyon: () => grafikEkle(tuvalX, tuvalY) },
+        { etiket: '🚨 Alarm Oluştur', aksiyon: () => alarmEkle(tuvalX, tuvalY) },
         { ayrac: true },
     ];
     if (pano.length) maddeler.push({ etiket: '📋 Yapıştır (Ctrl+V)', aksiyon: yapistir });
@@ -2565,6 +2646,7 @@ function guncellePanel() {
     document.getElementById('ozAlanProgressbar').classList.toggle('gorunur', el.type === 'progressbar');
     document.getElementById('ozAlanGroupbox').classList.toggle('gorunur', el.type === 'groupbox');
     document.getElementById('ozAlanGrafik').classList.toggle('gorunur', el.type === 'grafik');
+    document.getElementById('ozAlanAlarm').classList.toggle('gorunur', el.type === 'alarm');
 
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
@@ -2698,6 +2780,21 @@ function guncellePanel() {
         document.getElementById('ozGrafikArkaplanRengi').value = el.arkaplan_rengi || '#17222e';
         document.getElementById('ozGrafikSeriSayisi').value = el.seriler.length;
         grafikSeriSatirlariCiz();
+    } else if (el.type === 'alarm') {
+        document.getElementById('ozAlarmTag').value = el.tag_id || '';
+        document.getElementById('ozAlarmTip').value = el.tip || 'bool';
+        document.getElementById('ozAlarmBoolDeger').value = el.bool_tetik_deger ?? '1';
+        document.getElementById('ozAlarmKarsilastirma').value = el.karsilastirma || '>';
+        document.getElementById('ozAlarmEsikDeger').value = el.esik_deger ?? 0;
+        document.getElementById('ozAlarmMesaj').value = el.mesaj || '';
+        document.getElementById('ozAlarmMetinAcik').value = el.metin_acik || '';
+        document.getElementById('ozAlarmMetinKapali').value = el.metin_kapali || '';
+        document.getElementById('ozAlarmRenkAcik').value = el.renk_acik || '#3a1f22';
+        document.getElementById('ozAlarmRenkKapali').value = el.renk_kapali || '#1c3326';
+        document.getElementById('ozAlarmRenkYaziAcik').value = el.renk_yazi_acik || '#e74c3c';
+        document.getElementById('ozAlarmRenkYaziKapali').value = el.renk_yazi_kapali || '#2ecc71';
+        document.getElementById('ozAlarmFont').value = el.font_boyutu || 13;
+        alarmTipGuncelle();
     }
 
     document.getElementById('ozCustomCss').value = el.custom_css || '';
@@ -2902,6 +2999,12 @@ function butonModuGuncelle() {
     document.getElementById('ozButonSayfaAlani').style.display = sayfayaGitMi ? 'block' : 'none';
 }
 
+function alarmTipGuncelle() {
+    const esikMi = document.getElementById('ozAlarmTip').value === 'esik';
+    document.getElementById('ozAlarmBoolAlani').style.display = esikMi ? 'none' : 'block';
+    document.getElementById('ozAlarmEsikAlani').style.display = esikMi ? 'block' : 'none';
+}
+
 function gradientAlanGuncelle() {
     const aktif = document.getElementById('ozSekilGradient').checked;
     document.getElementById('ozSekilDuzRenkAlan').style.display = aktif ? 'none' : 'block';
@@ -3006,6 +3109,20 @@ function uygula() {
         el.birim = document.getElementById('ozGrafikBirim').value;
         el.nokta_sayisi = parseInt(document.getElementById('ozGrafikNoktaSayisi').value) || 30;
         el.arkaplan_rengi = document.getElementById('ozGrafikArkaplanRengi').value;
+    } else if (el.type === 'alarm') {
+        el.tag_id = document.getElementById('ozAlarmTag').value ? parseInt(document.getElementById('ozAlarmTag').value) : null;
+        el.tip = document.getElementById('ozAlarmTip').value;
+        el.bool_tetik_deger = document.getElementById('ozAlarmBoolDeger').value;
+        el.karsilastirma = document.getElementById('ozAlarmKarsilastirma').value;
+        el.esik_deger = parseFloat(document.getElementById('ozAlarmEsikDeger').value) || 0;
+        el.mesaj = document.getElementById('ozAlarmMesaj').value;
+        el.metin_acik = document.getElementById('ozAlarmMetinAcik').value;
+        el.metin_kapali = document.getElementById('ozAlarmMetinKapali').value;
+        el.renk_acik = document.getElementById('ozAlarmRenkAcik').value;
+        el.renk_kapali = document.getElementById('ozAlarmRenkKapali').value;
+        el.renk_yazi_acik = document.getElementById('ozAlarmRenkYaziAcik').value;
+        el.renk_yazi_kapali = document.getElementById('ozAlarmRenkYaziKapali').value;
+        el.font_boyutu = parseInt(document.getElementById('ozAlarmFont').value) || 13;
     } else if (el.type === 'sekil') {
         el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;
         el.sekil_kenarlik = document.getElementById('ozSekilKenarlik').value;

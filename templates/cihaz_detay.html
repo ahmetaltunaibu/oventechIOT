@@ -25,6 +25,35 @@
 </div>
 
 <div class="card">
+    <h2>🚨 Alarm Geçmişi
+        {% set aktif_alarmlar = alarmlar | selectattr('giderilme_zamani', 'none') | list %}
+        {% if aktif_alarmlar %}<span class="badge" style="background:var(--red);color:#fff;">{{ aktif_alarmlar|length }} AKTİF</span>{% endif %}
+    </h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:-6px;">
+        Bir sayfaya "🚨 Alarm Oluştur" elementi ekleyip bir tag'e bağladığında, bu kural SUNUCUDA değerlendirilir —
+        tarayıcı kapalı olsa bile ESP32'den gelen her veride kontrol edilir ve burada kayıt altına alınır.
+    </p>
+    {% if alarmlar %}
+    <table>
+        <thead><tr><th>Tag</th><th>Mesaj</th><th>Değer</th><th>Oluşma</th><th>Giderilme</th></tr></thead>
+        <tbody>
+        {% for a in alarmlar %}
+            <tr {% if not a.giderilme_zamani %}style="background:rgba(231,76,60,0.08);"{% endif %}>
+                <td>{{ a.tag_ad or '—' }}</td>
+                <td>{{ a.mesaj or '—' }}</td>
+                <td style="font-family:monospace;">{{ a.deger }}</td>
+                <td>{{ a.olusma_zamani }}</td>
+                <td>{% if a.giderilme_zamani %}{{ a.giderilme_zamani }}{% else %}<span class="badge on" style="background:var(--red);color:#fff;">devam ediyor</span>{% endif %}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-secondary);font-size:14px;">Henüz alarm kaydı yok.</p>
+    {% endif %}
+</div>
+
+<div class="card">
     <h2>Tag'ler</h2>
     {% set tasarimci_mi = session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
     {% if tagler %}

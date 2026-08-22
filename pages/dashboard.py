@@ -52,8 +52,9 @@ def cihaz_detay(cihaz_id):
     tagler = database.cihaz_tagleri(cihaz_id)
     sayfalar = database.cihaz_sayfalari(cihaz_id)
     proje_sayfalari = database.proje_tum_sayfalari(session['proje_id'])
+    alarmlar = database.alarm_kayitlari_listele(cihaz_id, limit=30)
     return render_template('cihaz_detay.html', cihaz=cihaz, tagler=tagler, sayfalar=sayfalar,
-                            proje_sayfalari=proje_sayfalari)
+                            proje_sayfalari=proje_sayfalari, alarmlar=alarmlar)
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/yeniden-adlandir', methods=['POST'])

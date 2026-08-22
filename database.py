@@ -259,6 +259,38 @@ def init_db():
     ''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_gecmis_tag_zaman ON tag_deger_gecmis(tag_id, zaman)')
 
+    # ALARM — "Alarm Oluşturma" elementiyle tanımlanan kurallar (bir tag'in
+    # hangi değerde/eşikte alarm sayılacağı) ve gerçekleşen alarm kayıtları.
+    # Değerlendirme SUNUCU tarafında yapılır (ESP32'den her xchange'de) —
+    # böylece tarayıcı hiç açık olmasa bile alarm sunucuda kayıt altına alınır.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS alarm_kurallari (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            eleman_id TEXT UNIQUE NOT NULL,   -- sayfa üzerindeki "alarm" elementinin id'si
+            cihaz_id INTEGER NOT NULL REFERENCES cihazlar(id) ON DELETE CASCADE,
+            tag_id INTEGER NOT NULL REFERENCES tagler(id) ON DELETE CASCADE,
+            tip TEXT NOT NULL DEFAULT 'bool',     -- 'bool' | 'esik'
+            bool_tetik_deger TEXT DEFAULT '1',    -- bool tip: bu değere eşitse alarm
+            karsilastirma TEXT DEFAULT '>',       -- esik tip: > < >= <= ==
+            esik_deger REAL DEFAULT 0,
+            mesaj TEXT DEFAULT '',
+            guncelleme_zamani TIMESTAMP DEFAULT (datetime('now', '+3 hours'))
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS alarm_kayitlari (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cihaz_id INTEGER NOT NULL REFERENCES cihazlar(id) ON DELETE CASCADE,
+            kural_id INTEGER REFERENCES alarm_kurallari(id) ON DELETE SET NULL,
+            tag_id INTEGER REFERENCES tagler(id) ON DELETE SET NULL,
+            mesaj TEXT,
+            deger TEXT,
+            olusma_zamani TIMESTAMP DEFAULT (datetime('now', '+3 hours')),
+            giderilme_zamani TIMESTAMP
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_alarm_kayit_cihaz ON alarm_kayitlari(cihaz_id, olusma_zamani)')
+
     conn.commit()
     conn.close()
 
@@ -599,20 +631,36 @@ def tag_yaz_iste(tag_id: int, deger):
         conn.close()
 
 
+# Kullanıcı isteği: grafik geçmişine her canlı güncellemede değil, en fazla
+# şu aralıkla bir satır düşsün (10-30sn aralığı istendi, ortası seçildi) —
+# ESP32/simülatör çok daha sık senkron olsa bile veritabanı şişmesin.
+GECMIS_MIN_ARALIK_SN = 20
+
+
 def tag_deger_guncelle(tag_id: int, deger):
     """ESP32'den gelen okunan değeri kaydeder (xchange sırasında kullanılacak).
     Aynı zamanda grafik elementinin okuyabilmesi için bir geçmiş satırı da
-    ekler (tag_deger_gecmis) — her tag için son GECMIS_MAKS_SATIR satır tutulur."""
+    ekler (tag_deger_gecmis) — ama en fazla GECMIS_MIN_ARALIK_SN'de bir kez;
+    her tag için son GECMIS_MAKS_SATIR satır tutulur."""
     conn = get_db()
     try:
         conn.execute(
             "UPDATE tagler SET deger = ?, deger_zamani = datetime('now', '+3 hours') WHERE id = ?",
             (str(deger), tag_id)
         )
-        conn.execute(
-            "INSERT INTO tag_deger_gecmis (tag_id, deger) VALUES (?, ?)",
-            (tag_id, str(deger))
-        )
+        son = conn.execute(
+            "SELECT zaman FROM tag_deger_gecmis WHERE tag_id = ? ORDER BY id DESC LIMIT 1",
+            (tag_id,)
+        ).fetchone()
+        yeterince_eski = (son is None) or conn.execute(
+            "SELECT (julianday(datetime('now', '+3 hours')) - julianday(?)) * 86400 >= ?",
+            (son['zaman'], GECMIS_MIN_ARALIK_SN)
+        ).fetchone()[0]
+        if yeterince_eski:
+            conn.execute(
+                "INSERT INTO tag_deger_gecmis (tag_id, deger) VALUES (?, ?)",
+                (tag_id, str(deger))
+            )
         GECMIS_MAKS_SATIR = 500
         conn.execute('''
             DELETE FROM tag_deger_gecmis WHERE tag_id = ? AND id NOT IN (
@@ -620,9 +668,12 @@ def tag_deger_guncelle(tag_id: int, deger):
             )
         ''', (tag_id, tag_id, GECMIS_MAKS_SATIR))
         conn.commit()
-        return True
     finally:
         conn.close()
+    # Alarm değerlendirmesi ayrı bir bağlantıyla (yukarıdaki commit'ten
+    # SONRA) yapılıyor — tarayıcı hiç açık olmasa bile burada tetiklenir.
+    alarm_degerlendir(tag_id, deger)
+    return True
 
 
 def tag_deger_gecmisi(tag_id: int, limit: int = 100):
@@ -643,6 +694,138 @@ def tagler_deger_gecmisi(tag_idler: list, limit: int = 100):
     """Birden fazla tag için geçmiş değerleri tek seferde döner:
     {tag_id: [{deger, zaman}, ...]} — grafik elementinde çoklu seri desteği için."""
     return {tid: tag_deger_gecmisi(tid, limit) for tid in tag_idler}
+
+
+# ============================================================
+# ALARM — "Alarm Oluşturma" elementiyle tanımlanan kurallar, sunucu
+# tarafında değerlendirilir (tarayıcı açık olmasa bile çalışır).
+# ============================================================
+
+def alarm_kural_kaydet(eleman_id: str, cihaz_id: int, tag_id: int, tip: str,
+                        bool_tetik_deger: str = '1', karsilastirma: str = '>',
+                        esik_deger: float = 0, mesaj: str = ''):
+    """Sayfa kaydedilirken üzerindeki her 'alarm' elementi için çağrılır —
+    eleman_id UNIQUE olduğu için var olan kural güncellenir, yoksa eklenir."""
+    conn = get_db()
+    try:
+        conn.execute('''
+            INSERT INTO alarm_kurallari (eleman_id, cihaz_id, tag_id, tip, bool_tetik_deger, karsilastirma, esik_deger, mesaj, guncelleme_zamani)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+3 hours'))
+            ON CONFLICT(eleman_id) DO UPDATE SET
+                cihaz_id = excluded.cihaz_id, tag_id = excluded.tag_id, tip = excluded.tip,
+                bool_tetik_deger = excluded.bool_tetik_deger, karsilastirma = excluded.karsilastirma,
+                esik_deger = excluded.esik_deger, mesaj = excluded.mesaj,
+                guncelleme_zamani = datetime('now', '+3 hours')
+        ''', (eleman_id, cihaz_id, tag_id, tip, str(bool_tetik_deger), karsilastirma, esik_deger, mesaj))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def alarm_kurallari_temizle_disinda(cihaz_id: int, gecerli_eleman_idler: list):
+    """Sayfa kaydedilirken artık tuvalde olmayan (silinmiş) alarm elementlerinin
+    kurallarını temizler — cihaz bazlı, diğer sayfaların kurallarına dokunmaz
+    olsun diye çağıran taraf o SAYFANIN eleman id'lerini + diğer sayfalardaki
+    kuralları birleştirip göndermeli. Basitlik için: sadece bu fonksiyona
+    verilmeyen VE cihaza ait olan kurallar silinir."""
+    conn = get_db()
+    try:
+        if gecerli_eleman_idler:
+            soru = ','.join('?' * len(gecerli_eleman_idler))
+            conn.execute(
+                f'DELETE FROM alarm_kurallari WHERE cihaz_id = ? AND eleman_id NOT IN ({soru})',
+                [cihaz_id] + gecerli_eleman_idler
+            )
+        else:
+            conn.execute('DELETE FROM alarm_kurallari WHERE cihaz_id = ?', (cihaz_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def alarm_kurallari_tag_icin(tag_id: int):
+    conn = get_db()
+    try:
+        rows = conn.execute('SELECT * FROM alarm_kurallari WHERE tag_id = ?', (tag_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def _alarm_tetiklendi_mi(kural: dict, deger) -> bool:
+    try:
+        if kural['tip'] == 'bool':
+            return str(deger) == str(kural['bool_tetik_deger'])
+        sayi = float(deger)
+        esik = float(kural['esik_deger'])
+        k = kural['karsilastirma']
+        if k == '>': return sayi > esik
+        if k == '<': return sayi < esik
+        if k == '>=': return sayi >= esik
+        if k == '<=': return sayi <= esik
+        if k == '==': return sayi == esik
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+def alarm_degerlendir(tag_id: int, deger):
+    """Bir tag'in değeri güncellenince (ESP32 xchange ya da simülatör) bu tag'e
+    bağlı tüm alarm kurallarını değerlendirir. Alarm YENİ tetiklendiyse
+    (önceden açık bir kaydı yoksa) alarm_kayitlari'na satır ekler; alarm
+    koşulu artık sağlanmıyorsa açık kaydı 'giderildi' olarak kapatır."""
+    kurallar = alarm_kurallari_tag_icin(tag_id)
+    if not kurallar:
+        return
+    conn = get_db()
+    try:
+        for kural in kurallar:
+            tetik = _alarm_tetiklendi_mi(kural, deger)
+            acik = conn.execute(
+                'SELECT id FROM alarm_kayitlari WHERE kural_id = ? AND giderilme_zamani IS NULL ORDER BY id DESC LIMIT 1',
+                (kural['id'],)
+            ).fetchone()
+            if tetik and not acik:
+                conn.execute(
+                    'INSERT INTO alarm_kayitlari (cihaz_id, kural_id, tag_id, mesaj, deger) VALUES (?, ?, ?, ?, ?)',
+                    (kural['cihaz_id'], kural['id'], tag_id, kural['mesaj'] or '', str(deger))
+                )
+            elif not tetik and acik:
+                conn.execute(
+                    "UPDATE alarm_kayitlari SET giderilme_zamani = datetime('now', '+3 hours') WHERE id = ?",
+                    (acik['id'],)
+                )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def alarm_kayitlari_listele(cihaz_id: int, limit: int = 50):
+    """En yeni alarm kayıtlarını (aktif + geçmiş) tag adıyla birlikte döner."""
+    conn = get_db()
+    try:
+        rows = conn.execute('''
+            SELECT ak.*, t.ad AS tag_ad
+            FROM alarm_kayitlari ak
+            LEFT JOIN tagler t ON t.id = ak.tag_id
+            WHERE ak.cihaz_id = ?
+            ORDER BY ak.id DESC LIMIT ?
+        ''', (cihaz_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def alarm_aktif_sayisi(cihaz_id: int) -> int:
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT COUNT(*) AS n FROM alarm_kayitlari WHERE cihaz_id = ? AND giderilme_zamani IS NULL',
+            (cihaz_id,)
+        ).fetchone()
+        return row['n'] if row else 0
+    finally:
+        conn.close()
 
 
 def cihaz_tag_degerleri(cihaz_id: int):
