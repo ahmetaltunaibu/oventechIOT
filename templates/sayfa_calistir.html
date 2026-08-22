@@ -262,6 +262,148 @@ function tuvalCiz() {
             return;
         }
 
+        if (el.type === 'switch') {
+            const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+            const acikMi = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+            div.style.background = acikMi ? el.renk_acik : el.renk_kapali;
+            div.style.borderRadius = (el.h / 2) + 'px';
+            div.style.position = 'relative'; div.style.cursor = 'pointer';
+            div.textContent = '';
+            const metin = document.createElement('span');
+            metin.textContent = acikMi ? (el.metin_acik || 'ON') : (el.metin_kapali || 'OFF');
+            metin.style.cssText = 'position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:11px;font-weight:700;color:#fff;pointer-events:none;'
+                + (acikMi ? 'left:8px;' : 'right:8px;');
+            div.appendChild(metin);
+            const daireBoyut = el.h - 6;
+            const daire = document.createElement('div');
+            daire.style.cssText = `position:absolute;top:3px;width:${daireBoyut}px;height:${daireBoyut}px;border-radius:50%;`
+                + `background:${el.daire_rengi || '#fff'};box-shadow:0 1px 3px rgba(0,0,0,0.4);transition:left 0.2s;pointer-events:none;`
+                + (acikMi ? `left:${el.w - daireBoyut - 3}px;` : 'left:3px;');
+            div.appendChild(daire);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            div.addEventListener('click', () => tikla(el));
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'checkbox') {
+            const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+            const acikMi = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
+            div.style.color = el.renk_yazi || '#e8eef4';
+            div.style.fontSize = (el.font_boyutu || 14) + 'px';
+            div.style.cursor = 'pointer';
+            div.textContent = '';
+            const kutu = document.createElement('div');
+            kutu.style.cssText = `width:18px;height:18px;flex-shrink:0;border-radius:4px;display:flex;align-items:center;justify-content:center;`
+                + `border:2px solid ${acikMi ? (el.renk_acik || '#2ecc71') : '#8aa0b3'};background:${acikMi ? (el.renk_acik || '#2ecc71') : 'transparent'};`;
+            if (acikMi) kutu.innerHTML = '<span style="color:#fff;font-size:12px;line-height:1;">✓</span>';
+            div.appendChild(kutu);
+            const yazi = document.createElement('span');
+            yazi.textContent = el.metin || '';
+            div.appendChild(yazi);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            div.addEventListener('click', () => tikla(el));
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'textbox') {
+            div.className = '';
+            div.style.background = el.renk_arkaplan || '#17222e';
+            div.style.border = `1px solid ${el.renk_kenarlik || '#2a3b4c'}`;
+            div.style.borderRadius = '6px';
+            div.style.color = el.renk_yazi || '#e8eef4';
+            div.style.fontSize = (el.font_boyutu || 16) + 'px';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.padding = '0 10px';
+            div.style.boxSizing = 'border-box';
+            let deger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+            if (deger !== null && el.ondalik >= 0 && !isNaN(parseFloat(deger))) {
+                deger = parseFloat(deger).toFixed(el.ondalik);
+            }
+            div.textContent = (el.on_ek || '') + (deger ?? '—') + (el.son_ek || '');
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'inputbox') {
+            div.className = '';
+            div.style.padding = '0';
+            div.style.background = 'transparent';
+            const input = document.createElement('input');
+            input.type = el.giris_turu === 'sayi' ? 'number' : 'text';
+            input.placeholder = el.placeholder || '';
+            input.style.cssText = `width:100%;height:100%;box-sizing:border-box;padding:0 10px;border-radius:6px;`
+                + `background:${el.renk_arkaplan || '#17222e'};color:${el.renk_yazi || '#e8eef4'};`
+                + `border:1px solid ${el.renk_kenarlik || '#2e9ed9'};font-size:${el.font_boyutu || 16}px;`;
+            const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+            if (guncelDeger !== null && document.activeElement !== input) input.value = guncelDeger;
+            const gonder = () => { if (input.value.trim() !== '') yaz(el, input.value.trim()); };
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { gonder(); input.blur(); } });
+            input.addEventListener('blur', gonder);
+            div.appendChild(input);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'combobox') {
+            div.className = '';
+            div.style.padding = '0';
+            div.style.background = 'transparent';
+            const select = document.createElement('select');
+            select.style.cssText = `width:100%;height:100%;box-sizing:border-box;padding:0 8px;border-radius:6px;`
+                + `background:var(--panel2);color:var(--text);border:1px solid var(--border);font-size:${el.font_boyutu || 14}px;`;
+            (el.secenekler || []).forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.deger; opt.textContent = s.etiket;
+                select.appendChild(opt);
+            });
+            const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+            if (guncelDeger !== null && document.activeElement !== select) select.value = String(guncelDeger);
+            select.addEventListener('change', () => yaz(el, select.value));
+            div.appendChild(select);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'progressbar') {
+            const dikeyMi = el.yon === 'dikey';
+            div.style.background = el.renk_arkaplan || '#17222e';
+            div.style.borderRadius = '6px';
+            div.style.overflow = 'hidden';
+            div.style.position = 'relative';
+            div.textContent = '';
+            const guncelDeger = el.tag_id && degerler[el.tag_id] ? parseFloat(degerler[el.tag_id].deger) : NaN;
+            const minV = el.min_deger ?? 0, maxV = el.max_deger ?? 100;
+            let yuzde = 0;
+            if (!isNaN(guncelDeger) && maxV > minV) {
+                yuzde = Math.max(0, Math.min(100, ((guncelDeger - minV) / (maxV - minV)) * 100));
+            }
+            const dolu = document.createElement('div');
+            dolu.style.cssText = `position:absolute;background:${el.renk_dolgu || '#2e9ed9'};transition:width 0.3s,height 0.3s;`
+                + (dikeyMi ? `bottom:0;left:0;width:100%;height:${yuzde}%;` : `left:0;top:0;height:100%;width:${yuzde}%;`);
+            div.appendChild(dolu);
+            if (el.deger_goster !== false) {
+                const yazi = document.createElement('span');
+                yazi.textContent = (isNaN(guncelDeger) ? '—' : Math.round(guncelDeger)) + (el.birim || '');
+                yazi.style.cssText = 'position:relative;z-index:1;display:flex;align-items:center;justify-content:center;'
+                    + 'width:100%;height:100%;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.6);';
+                div.appendChild(yazi);
+            }
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            tuval.appendChild(div);
+            return;
+        }
+
         div.className = 'el-buton';
         div.textContent = '';
         div.style.flexDirection = 'column'; div.style.gap = '2px';
@@ -421,6 +563,15 @@ async function degerleriYenile() {
         const res = await fetch(`/api/cihaz/${cihazId}/degerler`);
         if (!res.ok) return;
         degerler = await res.json();
+        // Kullanıcı bir giriş kutusuna (inputbox/combobox) yazıyor/seçim
+        // yapıyorken tam yeniden çizim onu kesip odağı/yazdığını
+        // silmesin diye — o an aktif elemansa bu turu atla, bir sonraki
+        // pollde (kutudan çıkınca) normal şekilde güncellenir.
+        const aktif = document.activeElement;
+        if (aktif && document.getElementById('tuval').contains(aktif)
+            && (aktif.tagName === 'INPUT' || aktif.tagName === 'SELECT')) {
+            return;
+        }
         tuvalCiz();
     } catch (e) { /* bağlantı sorunu — sessiz geç */ }
 }
