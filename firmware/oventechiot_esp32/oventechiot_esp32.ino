@@ -248,15 +248,33 @@ bool tagListesiniGetir() {
   return true;
 }
 
+// ModbusMaster hata kodunu okunabilir metne çevirir — "Modbus hatası var
+// mı, varsa hangisi" diye seri porttan kolayca görebilmek için.
+const char* modbusHataMetni(uint8_t kod) {
+  switch (kod) {
+    case ModbusMaster::ku8MBSuccess: return "OK";
+    case ModbusMaster::ku8MBIllegalFunction: return "Gecersiz fonksiyon";
+    case ModbusMaster::ku8MBIllegalDataAddress: return "Gecersiz adres (register PLC'de yok)";
+    case ModbusMaster::ku8MBIllegalDataValue: return "Gecersiz veri degeri";
+    case ModbusMaster::ku8MBSlaveDeviceFailure: return "PLC (slave) hatasi";
+    case ModbusMaster::ku8MBInvalidSlaveID: return "Yanlis Slave ID (MODBUS_SLAVE_ID kontrol et)";
+    case ModbusMaster::ku8MBInvalidFunction: return "Gecersiz fonksiyon kodu";
+    case ModbusMaster::ku8MBResponseTimedOut: return "Zaman asimi (kablo/baudrate/A-B kontrol et)";
+    case ModbusMaster::ku8MBInvalidCRC: return "CRC hatasi (baudrate/parity/stop-bit uyusmuyor olabilir)";
+    default: return "Bilinmeyen hata";
+  }
+}
+
 // ================== MODBUS: TEK BİR TAG'İ PLC'DEN OKU ==================
 // Sonucu string olarak döner ("1"/"0" bool için, sayı float/int için).
-// Okuma başarısızsa boş string döner (o tag bu turda gönderilmez).
+// Okuma başarısızsa boş string döner (o tag bu turda gönderilmez) — hata
+// kodu ayrıca seri porta yazdırılır.
 String tagOku(const TagTanimi &tag) {
   String tip = String(tag.veriTipi); tip.toLowerCase();
 
   if (tip == "bool") {
     uint8_t sonuc = modbus.readCoils(tag.modbusAdres, 1);
-    if (sonuc != modbus.ku8MBSuccess) return "";
+    if (sonuc != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc)); return ""; }
     return (modbus.getResponseBuffer(0) & 0x01) ? "1" : "0";
   }
 
@@ -266,7 +284,7 @@ String tagOku(const TagTanimi &tag) {
 
   if (tag.cift_registerli) {
     uint8_t sonuc = modbus.readHoldingRegisters(tag.modbusAdres, 2);
-    if (sonuc != modbus.ku8MBSuccess) return "";
+    if (sonuc != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc)); return ""; }
     uint32_t ham = ((uint32_t)modbus.getResponseBuffer(0) << 16) | modbus.getResponseBuffer(1);
     if (tip == "float") {
       float f;
@@ -280,7 +298,7 @@ String tagOku(const TagTanimi &tag) {
 
   // Tek register: int/uint/word/byte/sint/usint
   uint8_t sonuc = modbus.readHoldingRegisters(tag.modbusAdres, 1);
-  if (sonuc != modbus.ku8MBSuccess) return "";
+  if (sonuc != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc)); return ""; }
   uint16_t deger = modbus.getResponseBuffer(0);
   if (tip == "int" || tip == "sint") return String((int16_t)deger);
   return String(deger);
@@ -325,6 +343,11 @@ void sunucuIleSenkronOl() {
   for (int i = 0; i < tagSayisi; i++) {
     if (String(tagListesi[i].erisim) == "write") continue; // sadece-yazma tag'i okumaya gerek yok
     String v = tagOku(tagListesi[i]);
+    // Debug: her tag'in Modbus'tan okunan HAM değerini seri porta yazdır —
+    // "deger 0 geliyor ama Modbus hatası da yok" gibi durumları görebilmek için.
+    Serial.printf("  [oku] %-20s adres=%u tip=%-6s -> %s\n",
+      tagListesi[i].ad, tagListesi[i].modbusAdres, tagListesi[i].veriTipi,
+      v.length() > 0 ? v.c_str() : "(OKUNAMADI / Modbus hatasi)");
     if (v.length() > 0) {
       degerler[String(tagListesi[i].id)] = v;
       okunanSayisi++;
