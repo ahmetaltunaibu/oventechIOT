@@ -379,11 +379,24 @@
         <input type="file" id="ozButonResimKapaliDosya" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
         <button type="button" onclick="butonIkonAc('kapali')" style="background:var(--panel2);width:100%;margin:4px 0 6px;">🧩 İkon Kütüphanesinden Seç</button>
 
+        <label>Yazı/İkon Boyutu (px)</label>
+        <input type="number" id="ozButonFontBoyutu" value="13" min="8" max="60">
+
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="ozButonSeffaf" style="width:auto;margin:0;" onchange="uygula()"> Arka Planı Gizle (Şeffaf)
+        </label>
+
         <label>Önizleme Durumu (tuvalde hangi renk/resim gösterilsin)</label>
         <select id="ozOnizlemeDurum" onchange="uygula()">
             <option value="kapali">Kapalı</option>
             <option value="acik">Açık</option>
         </select>
+
+        <hr style="border-color:var(--border);margin:10px 0;">
+        <label>Bu Buton Ne Zaman Gizlensin? (opsiyonel)</label>
+        <select id="ozButonGizleTag"><option value="">— gizleme yok —</option></select>
+        <label>Gizleme Değeri (tag değeri buna eşit olunca buton gizlenir)</label>
+        <input type="text" id="ozButonGizleDeger" placeholder="örn. 1">
     </div>
 
     <div id="ozAlanEtiket" class="ozel-alan">
@@ -483,6 +496,9 @@
 
         <label>Önizleme Durumu (tuvalde hangisi gösterilsin)</label>
         <select id="ozDurumOnizleme" onchange="uygula()"></select>
+
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozDurumKoseYaricapi" value="0" min="0" max="200" onchange="uygula()">
 
         <div id="ozDurumSatirlari" style="margin-top:8px;"></div>
     </div>
@@ -1015,6 +1031,7 @@ function tagSecenekleriDoldur(selectEl, ilkSecenekMetni) {
     });
 }
 tagSecenekleriDoldur(document.getElementById('ozTag'), '— seçilmedi —');
+tagSecenekleriDoldur(document.getElementById('ozButonGizleTag'), '— gizleme yok —');
 tagSecenekleriDoldur(document.getElementById('ozEtiketTag'), '— bağlama, sabit metin göster —');
 // BUG FIX: yeni element tiplerinin (durum, switch, textbox, inputbox,
 // combobox, checkbox, progressbar) "Bağlı Tag" seçim kutuları hiç
@@ -1107,6 +1124,8 @@ function butonEkle(x, y) {
         acik_deger: '1', kapali_deger: '0',
         renk_acik: '#2ecc71', renk_kapali: '#e74c3c', renk_yazi: '#ffffff',
         resim_url_acik: '', resim_url_kapali: '',
+        font_boyutu: 13, seffaf_arkaplan: false,
+        gizle_tag_id: null, gizle_deger: '',
         _onizleme: 'kapali', custom_css: ''
     });
 }
@@ -1309,7 +1328,7 @@ function durumEkle(x, y) {
     elementEkle({
         id: uid(), type: 'durum',
         x: Math.max(0, x - 60), y: Math.max(0, y - 20), w: 140, h: 40,
-        tag_id: null, durum_modu: 'metin', durum_onizleme_index: 0,
+        tag_id: null, durum_modu: 'metin', durum_onizleme_index: 0, kose_yaricapi: 0,
         durumlar: [
             yeniDurum('0', 'Duruyor', '#e74c3c', '#ffffff'),
             yeniDurum('1', 'Çalışıyor', '#2ecc71', '#ffffff'),
@@ -1532,6 +1551,8 @@ function render() {
             const dList = el.durumlar || [];
             const dIdx = Math.min(el.durum_onizleme_index || 0, Math.max(dList.length - 1, 0));
             const durum = dList[dIdx];
+            div.style.borderRadius = (el.kose_yaricapi || 0) + 'px';
+            div.style.overflow = 'hidden';
             if (durum) {
                 if (el.durum_modu === 'resim') {
                     div.style.overflow = 'hidden';
@@ -1711,22 +1732,24 @@ function render() {
         } else {
             // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
             // — "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
-            div.style.background = (el._onizleme === 'acik') ? el.renk_acik : el.renk_kapali;
+            div.style.background = el.seffaf_arkaplan ? 'transparent' : ((el._onizleme === 'acik') ? el.renk_acik : el.renk_kapali);
             div.style.color = el.renk_yazi;
+            div.style.fontSize = (el.font_boyutu || 13) + 'px';
             div.textContent = '';
             div.style.flexDirection = 'column';
             div.style.gap = '2px';
             const butonResimUrl = (el._onizleme === 'acik') ? el.resim_url_acik : el.resim_url_kapali;
             if (butonResimUrl) {
+                const ikonOlcek = (el.font_boyutu || 13) / 13;
                 const img = document.createElement('img');
                 img.src = butonResimUrl;
-                img.style.cssText = 'max-width:70%;max-height:60%;object-fit:contain;pointer-events:none;';
+                img.style.cssText = `max-width:${70 * ikonOlcek}%;max-height:${60 * ikonOlcek}%;object-fit:contain;pointer-events:none;`;
                 div.appendChild(img);
             }
             if (el.label) {
                 const yazi = document.createElement('span');
                 yazi.textContent = el.label;
-                yazi.style.fontSize = butonResimUrl ? '10px' : '';
+                yazi.style.fontSize = butonResimUrl ? (10 * ((el.font_boyutu || 13) / 13)) + 'px' : '';
                 div.appendChild(yazi);
             }
         }
@@ -2673,6 +2696,10 @@ function guncellePanel() {
         document.getElementById('ozRenkKapali').value = el.renk_kapali;
         document.getElementById('ozButonResimAcik').value = el.resim_url_acik || '';
         document.getElementById('ozButonResimKapali').value = el.resim_url_kapali || '';
+        document.getElementById('ozButonFontBoyutu').value = el.font_boyutu || 13;
+        document.getElementById('ozButonSeffaf').checked = !!el.seffaf_arkaplan;
+        document.getElementById('ozButonGizleTag').value = el.gizle_tag_id || '';
+        document.getElementById('ozButonGizleDeger').value = el.gizle_deger || '';
         document.getElementById('ozOnizlemeDurum').value = el._onizleme || 'kapali';
         const hedefSecim = document.getElementById('ozHedefSayfa');
         hedefSecim.innerHTML = '';
@@ -2709,6 +2736,7 @@ function guncellePanel() {
         document.getElementById('ozDurumTag').value = el.tag_id || '';
         document.getElementById('ozDurumModu').value = el.durum_modu || 'metin';
         document.getElementById('ozDurumSayisi').value = (el.durumlar || []).length || 2;
+        document.getElementById('ozDurumKoseYaricapi').value = el.kose_yaricapi || 0;
         durumSatirlariCiz();
     } else if (el.type === 'switch') {
         document.getElementById('ozSwitchTag').value = el.tag_id || '';
@@ -3043,11 +3071,16 @@ function uygula() {
         el._onizleme = document.getElementById('ozOnizlemeDurum').value;
         el.resim_url_acik = document.getElementById('ozButonResimAcik').value.trim();
         el.resim_url_kapali = document.getElementById('ozButonResimKapali').value.trim();
+        el.font_boyutu = parseInt(document.getElementById('ozButonFontBoyutu').value) || 13;
+        el.seffaf_arkaplan = document.getElementById('ozButonSeffaf').checked;
+        el.gizle_tag_id = document.getElementById('ozButonGizleTag').value ? parseInt(document.getElementById('ozButonGizleTag').value) : null;
+        el.gizle_deger = document.getElementById('ozButonGizleDeger').value;
     } else if (el.type === 'durum') {
         el.tag_id = document.getElementById('ozDurumTag').value ? parseInt(document.getElementById('ozDurumTag').value) : null;
         el.durum_modu = document.getElementById('ozDurumModu').value;
         _durumSatirlariniOku(el);
         el.durum_onizleme_index = parseInt(document.getElementById('ozDurumOnizleme').value) || 0;
+        el.kose_yaricapi = parseInt(document.getElementById('ozDurumKoseYaricapi').value) || 0;
     } else if (el.type === 'switch') {
         el.tag_id = document.getElementById('ozSwitchTag').value ? parseInt(document.getElementById('ozSwitchTag').value) : null;
         el.acik_deger = document.getElementById('ozSwitchAcikDeger').value;

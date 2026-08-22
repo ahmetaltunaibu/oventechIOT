@@ -301,6 +301,7 @@ function tuvalCiz() {
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
             let durum = dList.find(d => String(d.deger) === String(guncelDeger));
             if (!durum) durum = dList[0];
+            div.style.borderRadius = (el.kose_yaricapi || 0) + 'px';
             if (durum) {
                 if (el.durum_modu === 'resim') {
                     if (durum.resim_url) {
@@ -604,24 +605,35 @@ function tuvalCiz() {
         div.className = 'el-buton';
         div.textContent = '';
         div.style.flexDirection = 'column'; div.style.gap = '2px';
+        div.style.fontSize = (el.font_boyutu || 13) + 'px';
         renkGuncelle(div, el);
         const guncelDegerBtn = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
         const acikMi = guncelDegerBtn !== null && String(guncelDegerBtn) === String(el.acik_deger);
         const butonResimUrl = acikMi ? el.resim_url_acik : el.resim_url_kapali;
+        const ikonOlcek = (el.font_boyutu || 13) / 13;
         if (butonResimUrl) {
             const img = document.createElement('img');
             img.src = butonResimUrl;
-            img.style.cssText = 'max-width:70%;max-height:60%;object-fit:contain;pointer-events:none;';
+            img.style.cssText = `max-width:${70 * ikonOlcek}%;max-height:${60 * ikonOlcek}%;object-fit:contain;pointer-events:none;`;
             div.appendChild(img);
         }
         if (el.label) {
             const yazi = document.createElement('span');
             yazi.textContent = el.label;
-            if (butonResimUrl) yazi.style.fontSize = '10px';
+            if (butonResimUrl) yazi.style.fontSize = (10 * ikonOlcek) + 'px';
             div.appendChild(yazi);
         }
         elemDonusUygula(div, el);
         if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+
+        // Kullanıcı isteği: belirli bir tag belirli bir değere eşit olunca
+        // butonu tamamen gizle (örn. cihaz offline'ken kumanda butonunu göster me).
+        if (el.gizle_tag_id) {
+            const gizleDeger = degerler[el.gizle_tag_id] ? degerler[el.gizle_tag_id].deger : null;
+            if (gizleDeger !== null && String(gizleDeger) === String(el.gizle_deger)) {
+                div.style.display = 'none';
+            }
+        }
 
         // Basma efekti — dokunmatikte :active her zaman güvenilir tetiklenmediği
         // için .basili sınıfını elle ekleyip çıkarıyoruz.
@@ -809,6 +821,7 @@ function alarmTetiklendiMi(el, deger) {
 }
 
 function renkGuncelle(div, el) {
+    if (el.seffaf_arkaplan) { div.style.background = 'transparent'; return; }
     const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
     const acik = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
     div.style.background = acik ? el.renk_acik : el.renk_kapali;
