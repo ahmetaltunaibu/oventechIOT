@@ -338,7 +338,13 @@ String tagOku(const TagTanimi &tag) {
   if (tag.cift_registerli) {
     uint8_t sonuc = modbus.readHoldingRegisters(tag.modbusAdres, 2);
     if (sonuc != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc)); return ""; }
-    uint32_t ham = ((uint32_t)modbus.getResponseBuffer(0) << 16) | modbus.getResponseBuffer(1);
+    uint16_t reg0 = modbus.getResponseBuffer(0);
+    uint16_t reg1 = modbus.getResponseBuffer(1);
+    // Debug: ham register değerlerini hex olarak yazdır — beklenenden farklı
+    // bir değer okunursa (örn. 145.5 yerine 145.0) word sırası (endianness)
+    // sorunu mu, yoksa PLC'nin yazdığı değer mi diye ayırt edebilmek için.
+    Serial.printf("    [ham] reg0=0x%04X reg1=0x%04X\n", reg0, reg1);
+    uint32_t ham = ((uint32_t)reg0 << 16) | reg1;
     if (tip == "float") {
       float f;
       memcpy(&f, &ham, sizeof(f));
