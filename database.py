@@ -750,6 +750,11 @@ def demo_veri_olustur():
             conn.commit()
         finally:
             conn.close()
+        # '📌 Sabitle' özelliği eklenmeden ÖNCE oluşmuş demo cihazlarda
+        # navbar/FAB elementlerinin sabit_konum alanı hiç yoktu — bu yüzden
+        # canlıda hâlâ kaydırmayla birlikte kayıyorlardı. Var olan demo
+        # sayfalarını burada tek seferlik geriye dönük düzeltiyoruz.
+        _demo_navbar_sabitle_migrasyonu(mevcut_proje['id'])
         return
 
     ok, proje_id = proje_ekle('demo', 'Demo Proje (Test / Şablon)')
@@ -870,6 +875,49 @@ def demo_veri_olustur():
                  tuval_w=420, tuval_h=860, arkaplan='#1e2d3d')
 
 
+def _demo_navbar_sabitle_migrasyonu(proje_id: int):
+    """Var olan demo projesindeki 'Şablon - Alt Menü' (kaynak) ve 'Ana
+    Sayfa'nın mobil düzenindeki (yansıtılmış) navbar/FAB elementlerine
+    sabit_konum='alt' işaretini geriye dönük ekler. 'Şablon - Alt Menü'
+    sayfasında navbar dışında hiçbir şey yok (vitrin metinleri hariç —
+    onlar 'sablon_kaynagi'/geometri ile ayrılır), 'Ana Sayfa'da ise sadece
+    sablon_kaynagi işaretli (yansıtılmış) elementler navbar'a aittir."""
+    try:
+        cihazlar = proje_cihazlari(proje_id)
+    except Exception:
+        return
+    for c in cihazlar:
+        for sayfa_ad, sadece_sablon_kaynakli in (('Şablon - Alt Menü', False), ('Ana Sayfa', True)):
+            sayfa = sayfa_getir(c['id'], sayfa_ad, hedef='mobil')
+            if not sayfa:
+                continue
+            degisti = False
+            for el in sayfa['elementler']:
+                if el.get('sabit_konum'):
+                    continue
+                if sadece_sablon_kaynakli and not el.get('sablon_kaynagi'):
+                    continue
+                if sadece_sablon_kaynakli:
+                    el['sabit_konum'] = 'alt'
+                    degisti = True
+                elif el.get('id', '').startswith('el_sablon_'):
+                    continue  # vitrin başlık/açıklama/kart metinleri — navbar değil
+                else:
+                    el['sabit_konum'] = 'alt'
+                    degisti = True
+            if degisti:
+                sayfa_kaydet(
+                    c['id'], sayfa_ad, sayfa['elementler'], hedef='mobil',
+                    tuval_w=sayfa['tuval_w'], tuval_h=sayfa['tuval_h'], arkaplan=sayfa['arkaplan'],
+                    arkaplan_resim=sayfa.get('arkaplan_resim'), arkaplan_sigdirma=sayfa.get('arkaplan_sigdirma'),
+                    arkaplan_gradient_aktif=sayfa.get('arkaplan_gradient_aktif'),
+                    arkaplan_gradient_renk1=sayfa.get('arkaplan_gradient_renk1'),
+                    arkaplan_gradient_renk2=sayfa.get('arkaplan_gradient_renk2'),
+                    arkaplan_gradient_yon=sayfa.get('arkaplan_gradient_yon'),
+                    sayfa_turu=sayfa.get('sayfa_turu'), giris_animasyonu=sayfa.get('giris_animasyonu'),
+                )
+
+
 def _mobil_navbar_sablonu(sablon_kaynagi: str = None, kilitli: bool = False):
     """gemba projesindeki mobil alt-navbar + '+' speed-dial FAB düzeninden
     esinlenilmiş, oventechIOT'un kendi (koyu lacivert #17222e/#0f1720 +
@@ -893,6 +941,8 @@ def _mobil_navbar_sablonu(sablon_kaynagi: str = None, kilitli: bool = False):
             'sekil_kose_solust': 0, 'sekil_kose_sagust': 0, 'sekil_kose_solalt': 0, 'sekil_kose_sagalt': 0,
             'sekil_gradient_aktif': False, 'sekil_gradient_renk1': '#2e9ed9', 'sekil_gradient_renk2': '#1f7bb0',
             'sekil_gradient_yon': 'to bottom', 'custom_css': '',
+            # Navbar + FAB, kaydırma sırasında ekranda sabit kalmalı.
+            'sabit_konum': 'alt',
         }
         d.update(kw)
         d.update(ekstra)
@@ -902,6 +952,7 @@ def _mobil_navbar_sablonu(sablon_kaynagi: str = None, kilitli: bool = False):
         d = {
             'id': _id(), 'type': 'label', 'tag_id': None,
             'renk_arkaplan': 'transparent', 'custom_css': '',
+            'sabit_konum': 'alt',
         }
         d.update(kw)
         d.update(ekstra)

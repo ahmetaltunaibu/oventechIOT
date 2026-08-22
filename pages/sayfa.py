@@ -196,13 +196,17 @@ def sayfa_calistir(cihaz_id, sayfa_ad):
             'giris_animasyonu': s.get('giris_animasyonu') or 'none',
         }, ensure_ascii=False)
 
+    # Kullanıcı isteği: tam ekran (üst çubuk + sayfa-nav gizli) SADECE
+    # operatör girişinde — admin/tasarımcı eski yapıyı (üst çubuk + sayfa
+    # geçiş çubuğu) test/önizleme amacıyla görmeye devam eder.
+    tam_ekran = session.get('rol') == 'operator'
     return render_template(
         'sayfa_calistir.html',
         cihaz=cihaz, sayfa_ad=sayfa_ad,
         masaustu_json=paket(masaustu), mobil_json=paket(mobil),
         sayfalar=database.cihaz_sayfalari(cihaz_id),
         sayfa_bilgileri_json=json.dumps(database.cihaz_sayfa_bilgileri(cihaz_id), ensure_ascii=False),
-        tam_ekran=True,
+        tam_ekran=tam_ekran,
     )
 
 

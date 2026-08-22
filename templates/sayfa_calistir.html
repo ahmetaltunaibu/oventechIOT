@@ -2,7 +2,7 @@
 {% block title %}{{ sayfa_ad }} - {{ cihaz.ad }}{% endblock %}
 {% block extra_css %}
 <style>
-    .container { max-width: none; padding: 0; display: flex; flex-direction: column; height: calc(100vh - 62px); }
+    .container { max-width: none; padding: 0; display: flex; flex-direction: column; height: {{ '100vh' if tam_ekran else 'calc(100vh - 62px)' }}; }
     #sayfa-nav {
         display: flex;
         align-items: center;
@@ -110,19 +110,14 @@
 </style>
 {% endblock %}
 {% block content %}
-{# Kullanıcı isteği: sayfa artık TAM EKRAN (platform üst çubuğu gizli) —
-   bu yüzden çıkış/geri dönüş yolu burada, küçük ve zarif bir şekilde
-   sağlanıyor: sol tarafta cihaz listesine dönüş, sağ tarafta (tasarımcıysa)
-   cihaz yönetimi + her zaman çıkış. #}
+{# Kullanıcı isteği: sayfalar arası geçiş artık SADECE tasarımcının canvas
+   üzerine koyduğu "Sayfaya Git" butonlarıyla yapılıyor — üst kısımda ayrı bir
+   sayfa-sekmesi listesi istenmiyor. Operatör girişinde (tam_ekran) bu çubuk
+   tamamen kaldırılıyor (programın kendisi gibi görünsün); admin/tasarımcı
+   önizleme/test kolaylığı için 🏠/⚙️/🚪 kısayollarını görmeye devam ediyor. #}
+{% if not tam_ekran %}
 <div id="sayfa-nav">
     <a class="geri" title="Cihaz Listesi" href="{{ url_for('dashboard.dashboard_page') }}">🏠</a>
-    {% if sayfalar and sayfalar|length > 1 %}
-    <span class="sayfa-nav-ayrac"></span>
-    {% for s in sayfalar %}
-    <a href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}"
-       class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</a>
-    {% endfor %}
-    {% endif %}
     <div class="sayfa-nav-sag">
         {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
         <a class="geri" title="Cihazı Yönet" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}">⚙️</a>
@@ -130,6 +125,7 @@
         <a class="geri" title="Çıkış Yap" href="{{ url_for('admin.admin_logout') if session.get('platform_admin') else url_for('login.logout') }}">🚪</a>
     </div>
 </div>
+{% endif %}
 
 <div id="cerceve"><div id="tuval-sarici"><div id="tuval"></div></div></div>
 

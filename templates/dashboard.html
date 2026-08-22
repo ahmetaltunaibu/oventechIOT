@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Cihazlar - OventechIOT{% endblock %}
 {% block extra_css %}
+{% if tam_ekran %}
 <style>
-    /* Kullanıcı isteği: giriş sonrası ekranda platform üst çubuğu (logo,
-       proje adı, rol, Çıkış) görünmesin — bu ekran "gerçek bir program"ın
-       başlangıç/cihaz-seçim ekranı gibi hissettirmeli. */
+    /* Kullanıcı isteği: bu tam-ekran/kart görünümü SADECE operatör girişinde —
+       admin/tasarımcı eski (üst çubuklu, tablolu) yapıyı görür. */
     .container { max-width: none; padding: 0; }
     #ds-ust {
         display: flex; align-items: center; justify-content: space-between;
@@ -41,8 +41,10 @@
     }
     .cihaz-kart .cihaz-yonet:hover { background: var(--border); color: var(--text); }
 </style>
+{% endif %}
 {% endblock %}
 {% block content %}
+{% if tam_ekran %}
 <div id="ds-ust">
     <h1>⚙️ OventechIOT <span class="ds-alt-baslik">{{ session.get('proje_ad', '') }}</span></h1>
     <div id="ds-ust-sag">
@@ -84,4 +86,37 @@
     </div>
     {% endif %}
 </div>
+{% else %}
+<div class="card">
+    <h2>Cihazlar</h2>
+    {% if cihazlar %}
+    <table>
+        <thead><tr><th>Ad</th><th>Cihaz Kimliği</th><th>Son Görülme</th><th></th></tr></thead>
+        <tbody>
+        {% for c in cihazlar %}
+            <tr>
+                <td>{{ c.ad }}</td>
+                <td style="font-family:monospace;font-size:12px;">{{ c.cihaz_kimlik }}</td>
+                <td>{{ c.son_gorulme if c.son_gorulme else '—' }}</td>
+                <td><a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=c.id) }}">Detay &rarr;</a></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-secondary);font-size:14px;">Henüz cihaz eklenmedi.</p>
+    {% endif %}
+</div>
+
+{% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+<div class="card">
+    <h2>Yeni Cihaz Ekle</h2>
+    <form method="POST" action="{{ url_for('dashboard.cihaz_ekle') }}">
+        <label>Cihaz Adı</label>
+        <input type="text" name="ad" placeholder="örn. Kurutma Fırını 1" required>
+        <button type="submit">Ekle</button>
+    </form>
+</div>
+{% endif %}
+{% endif %}
 {% endblock %}

@@ -14,10 +14,11 @@ def dashboard_page():
         flash('Herhangi bir projeye bağlı değilsiniz.', 'danger')
         return redirect(url_for('login.login_page'))
     cihazlar = database.proje_cihazlari(session['proje_id'])
-    # Kullanıcı isteği: giriş sonrası ekranda platform üst çubuğu (logo/proje
-    # adı/rol/Çıkış) görünmesin, cihaz listesi "gerçek bir program" gibi
-    # tam ekran, görsel kartlar halinde gelsin.
-    return render_template('dashboard.html', cihazlar=cihazlar, tam_ekran=True)
+    # Kullanıcı isteği: tam ekran/kart görünümü SADECE operatör girişinde —
+    # admin ve tasarımcı için eski yapı (üst çubuk + tablo) korunuyor,
+    # onlar yönetim/tasarım yapıyor, "gerçek program" hissi operatöre özel.
+    tam_ekran = session.get('rol') == 'operator'
+    return render_template('dashboard.html', cihazlar=cihazlar, tam_ekran=tam_ekran)
 
 
 @dashboard_bp.route('/cihaz-ekle', methods=['POST'])
