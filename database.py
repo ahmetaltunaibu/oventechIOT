@@ -715,14 +715,28 @@ def demo_veri_olustur():
     otomatik oluşturulur. Zaten varsa (kod='demo') hiçbir şeye dokunmaz,
     yani var olan gerçek veriler asla ezilmez — bu SADECE eksikse eklenen
     ayrı bir örnek projedir, gerçek verinin yerine geçmez."""
-    if proje_getir_kod('demo'):
+    DEMO_SIFRE = '123456'
+    mevcut_proje = proje_getir_kod('demo')
+    if mevcut_proje:
+        # Proje zaten var — yine de demo kullanıcının şifresini güncel
+        # varsayılana senkron tut (kod içindeki şifre değişse bile canlıda
+        # zaten oluşmuş demo hesabı eski şifrede takılı kalmasın).
+        conn = get_db()
+        try:
+            conn.execute(
+                'UPDATE kullanicilar SET sifre_hash = ? WHERE kullanici_adi = ?',
+                (_sifre_hashle(DEMO_SIFRE), 'demo')
+            )
+            conn.commit()
+        finally:
+            conn.close()
         return
 
     ok, proje_id = proje_ekle('demo', 'Demo Proje (Test / Şablon)')
     if not ok:
         return
 
-    kullanici_ekle(proje_id, 'demo', 'demo123', 'Demo Kullanıcı', rol='tasarimci')
+    kullanici_ekle(proje_id, 'demo', DEMO_SIFRE, 'Demo Kullanıcı', rol='tasarimci')
 
     ok, cihaz_bilgi = cihaz_ekle(proje_id, 'Demo Fırın')
     if not ok:
