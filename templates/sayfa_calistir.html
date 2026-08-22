@@ -216,6 +216,15 @@ function tuvalCiz() {
     sabitUst.innerHTML = ''; sabitAlt.innerHTML = '';
     aktifSayfa.elementler.forEach(el => {
         const div = document.createElement('div');
+        // KRİTİK: position:absolute burada, KOŞULSUZ ayarlanıyor. Önceden
+        // her element tipinin kendi dalı bunu ayarlaması gerekiyordu
+        // (className='el-...' üzerinden CSS class ile, ya da elle) — ama
+        // textbox/inputbox/combobox/checkbox/progressbar/alarm/grafik/
+        // groupbox dalları bunu hiç ayarlamıyordu (bazıları className=''
+        // yaparak class'tan gelen absolute'u da siliyordu). Sonuç: top/left
+        // tarayıcı tarafından yok sayılıyor, elementler normal akışta üst
+        // üste/yan yana diziliyordu (tasarımdaki konumları hiç yansımıyordu).
+        div.style.position = 'absolute';
         div.style.left = el.x + 'px';
         div.style.top = el.y + 'px';
         div.style.width = el.w + 'px';
@@ -441,7 +450,9 @@ function tuvalCiz() {
             div.style.background = el.renk_arkaplan || '#17222e';
             div.style.borderRadius = '6px';
             div.style.overflow = 'hidden';
-            div.style.position = 'relative';
+            // position:absolute zaten döngü başında ayarlandı — bu, içindeki
+            // "dolu" (fill) çubuğun position:absolute'u için de geçerli bir
+            // konumlama bağlamı oluşturuyor, ayrıca 'relative'e gerek yok.
             div.textContent = '';
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? parseFloat(degerler[el.tag_id].deger) : NaN;
             const minV = el.min_deger ?? 0, maxV = el.max_deger ?? 100;
