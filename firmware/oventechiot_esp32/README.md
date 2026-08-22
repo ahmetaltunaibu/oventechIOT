@@ -8,7 +8,7 @@ ESP32'yi Delta PLC (RS485/Modbus RTU) ile oventechIOT sunucusu arasında köprü
 |---|---|
 | WiFiManager | tzapu |
 | ModbusMaster | 4-20ma |
-| ArduinoJson | bblanchon (v6.x) |
+| ArduinoJson | bblanchon (v6 ya da v7 — kod ikisiyle de derlenir) |
 
 Kart seçimi: **ESP32 Dev Module** (Araçlar → Kart → ESP32 Arduino).
 

@@ -180,7 +180,7 @@ bool tagListesiniGetir() {
   String govde = http.getString();
   http.end();
 
-  DynamicJsonDocument doc(8192);
+  JsonDocument doc;
   DeserializationError hata = deserializeJson(doc, govde);
   if (hata) {
     Serial.print("JSON parse hatasi (tagler): "); Serial.println(hata.c_str());
@@ -194,7 +194,14 @@ bool tagListesiniGetir() {
     TagTanimi &hedef = tagListesi[tagSayisi];
     hedef.id = t["id"] | 0;
     strlcpy(hedef.ad, (t["ad"] | ""), sizeof(hedef.ad));
-    hedef.modbusAdres = (uint16_t)((t["modbus_adres"] | "0").as<String>().toInt());
+    // ArduinoJson v7'de "değişken | \"literal\"" ifadesi zincirlenebilir bir
+    // JsonVariant değil doğrudan const char* döndürüyor — bu yüzden önce
+    // JsonVariantConst olarak alıp öyle .as<String>() çağırıyoruz.
+    {
+      JsonVariantConst modbusAdresVar = t["modbus_adres"];
+      String modbusAdresStr = modbusAdresVar.isNull() ? String("0") : modbusAdresVar.as<String>();
+      hedef.modbusAdres = (uint16_t)modbusAdresStr.toInt();
+    }
     strlcpy(hedef.veriTipi, (t["veri_tipi"] | "bool"), sizeof(hedef.veriTipi));
     strlcpy(hedef.erisim, (t["erisim"] | "read"), sizeof(hedef.erisim));
     hedef.cift_registerli = tipCiftRegisterli(hedef.veriTipi);
@@ -275,8 +282,8 @@ void sunucuIleSenkronOl() {
   if (cihazKimlik.length() == 0 || tagSayisi == 0) return;
 
   // 1) PLC'den oku
-  DynamicJsonDocument gonderilecek(4096);
-  JsonObject degerler = gonderilecek.createNestedObject("degerler");
+  JsonDocument gonderilecek;
+  JsonObject degerler = gonderilecek["degerler"].to<JsonObject>();
   int okunanSayisi = 0;
   for (int i = 0; i < tagSayisi; i++) {
     if (String(tagListesi[i].erisim) == "write") continue; // sadece-yazma tag'i okumaya gerek yok
@@ -306,7 +313,7 @@ void sunucuIleSenkronOl() {
   String cevapStr = http.getString();
   http.end();
 
-  DynamicJsonDocument cevap(4096);
+  JsonDocument cevap;
   if (deserializeJson(cevap, cevapStr)) {
     Serial.println("xchange cevabi parse edilemedi");
     return;
@@ -401,7 +408,7 @@ bool otaGuncellemeUygula(const String &firmwareUrl, int firmwareId, const String
   String bildirimUrl = sunucuAdresi + "/esp32/" + cihazKimlik + "/firmware/basarili";
   bildirimHttp.begin(bildirimUrl);
   bildirimHttp.addHeader("Content-Type", "application/json");
-  DynamicJsonDocument bildirim(256);
+  JsonDocument bildirim;
   bildirim["firmware_id"] = firmwareId;
   bildirim["firmware_filename"] = firmwareFilename;
   String bildirimStr;
@@ -427,7 +434,7 @@ void otaKontrolEt() {
   String govde = http.getString();
   http.end();
 
-  DynamicJsonDocument doc(2048);
+  JsonDocument doc;
   if (deserializeJson(doc, govde)) {
     Serial.println("OTA kontrol cevabi parse edilemedi");
     return;
