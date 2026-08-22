@@ -369,7 +369,10 @@ String tagOku(const TagTanimi &tag) {
     }
     Serial.println();
 
-    uint32_t ham = ((uint32_t)reg0 << 16) | reg1;
+    // gemba-iot-gateway/modbus_handler.cpp'deki (bu PLC ailesinde ÇALIŞAN)
+    // kural: DÜŞÜK word ÖNCE (adres), YÜKSEK word SONRA (adres+1) — benim
+    // ilk varsayımım (yüksek önce) tersiymiş, düzeltildi.
+    uint32_t ham = ((uint32_t)reg1 << 16) | reg0;
     if (tip == "float") {
       float f;
       memcpy(&f, &ham, sizeof(f));
@@ -405,12 +408,12 @@ bool tagYaz(const TagTanimi &tag, const String &degerStr) {
     } else {
       ham = (uint32_t)degerStr.toInt();
     }
-    // Okumada olduğu gibi (bkz. tagOku), çift-register yazmada da tek
-    // seferde 2 register yerine güvenlik için AYRI AYRI yazıyoruz.
-    modbus.setTransmitBuffer(0, (uint16_t)(ham >> 16));
+    // Okumada olduğu gibi (bkz. tagOku) AYRI AYRI yazıyoruz — ve gemba'daki
+    // gibi DÜŞÜK word önce (adres), YÜKSEK word sonra (adres+1).
+    modbus.setTransmitBuffer(0, (uint16_t)(ham & 0xFFFF));  // düşük word
     uint8_t sonuc0 = modbus.writeMultipleRegisters(tag.modbusAdres, 1);
     if (sonuc0 != modbus.ku8MBSuccess) return false;
-    modbus.setTransmitBuffer(0, (uint16_t)(ham & 0xFFFF));
+    modbus.setTransmitBuffer(0, (uint16_t)(ham >> 16));     // yüksek word
     uint8_t sonuc1 = modbus.writeMultipleRegisters(tag.modbusAdres + 1, 1);
     return sonuc1 == modbus.ku8MBSuccess;
   }
