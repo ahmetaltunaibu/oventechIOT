@@ -167,6 +167,10 @@
         <button type="button" class="mini-ikon" title="Alta Gönder" onclick="altaGonder()">↓</button>
         <button type="button" class="mini-ikon" title="En Alta Gönder" onclick="enAltaGonder()">⤓</button>
         <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Dikey Diz" onclick="dizDikey()">▤</button>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Yatay Diz" onclick="dizYatay()">▥</button>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Izgaraya Diz" onclick="dizIzgara()">▦</button>
+        <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
         <button type="button" class="mini-ikon coklu-gerekli" title="Grupla" onclick="grupla()">🔗</button>
         <button type="button" id="btnGrubuCoz" class="mini-ikon" title="Grubu Çöz" onclick="grubuCoz()" style="display:none;">✂</button>
         <button type="button" id="btnKilitToggle" class="mini-ikon" title="Kilitle" onclick="kilitToggle()">🔒</button>
@@ -466,6 +470,8 @@
         <input type="color" id="ozSwitchRenkKapali" value="#e74c3c" style="height:38px;">
         <label>Sürgü (Daire) Rengi</label>
         <input type="color" id="ozSwitchDaireRengi" value="#ffffff" style="height:38px;">
+        <label>Metin Boyutu (ON/OFF yazısı)</label>
+        <input type="number" id="ozSwitchFontBoyutu" value="11" min="6">
         <label>Önizleme Durumu</label>
         <select id="ozSwitchOnizleme" onchange="uygula()">
             <option value="kapali">Kapalı</option>
@@ -561,6 +567,28 @@
         <label style="display:flex;align-items:center;gap:6px;">
             <input type="checkbox" id="ozProgressbarDegerGoster" style="width:auto;margin:0;" checked> Değeri Göster
         </label>
+    </div>
+
+    <div id="ozAlanGroupbox" class="ozel-alan">
+        <label>Başlık (boş bırakırsan sade çerçeve/frame olur)</label>
+        <input type="text" id="ozGroupboxBaslik" placeholder="örn. Ayarlar">
+        <label>Başlık Rengi</label>
+        <input type="color" id="ozGroupboxRenkYazi" value="#e8eef4" style="height:38px;">
+        <label>Başlık Font Boyutu</label>
+        <input type="number" id="ozGroupboxFontBoyutu" value="12" min="8">
+        <label>Kenarlık Rengi</label>
+        <input type="color" id="ozGroupboxRenkKenarlik" value="#2e9ed9" style="height:38px;">
+        <label>Kenarlık Kalınlığı</label>
+        <input type="number" id="ozGroupboxKenarlikKalinlik" value="2" min="0">
+        <label>Arka Plan (genelde şeffaf — içine element koyacaksın)</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" id="ozGroupboxRenkArkaplan" value="#17222e" style="height:38px;flex:1;">
+            <label style="display:flex;align-items:center;gap:4px;margin:0;white-space:nowrap;">
+                <input type="checkbox" id="ozGroupboxSeffaf" style="width:auto;margin:0;" checked> Şeffaf
+            </label>
+        </div>
+        <label>Köşe Yarıçapı</label>
+        <input type="number" id="ozGroupboxKose" value="10" min="0">
     </div>
 
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
@@ -1109,7 +1137,7 @@ function switchEkle(x, y) {
         x: Math.max(0, x - 40), y: Math.max(0, y - 16), w: 80, h: 32,
         tag_id: null, acik_deger: '1', kapali_deger: '0',
         metin_acik: 'ON', metin_kapali: 'OFF',
-        renk_acik: '#2ecc71', renk_kapali: '#e74c3c', daire_rengi: '#ffffff',
+        renk_acik: '#2ecc71', renk_kapali: '#e74c3c', daire_rengi: '#ffffff', font_boyutu: 11,
         _onizleme: 'kapali', custom_css: ''
     });
 }
@@ -1168,6 +1196,17 @@ function progressbarEkle(x, y) {
     });
 }
 
+function groupboxEkle(x, y) {
+    elementEkle({
+        id: uid(), type: 'groupbox',
+        x: Math.max(0, x - 100), y: Math.max(0, y - 70), w: 200, h: 140,
+        baslik: 'Grup', renk_yazi: '#e8eef4', font_boyutu: 12,
+        renk_kenarlik: '#2e9ed9', kenarlik_kalinlik: 2,
+        renk_arkaplan: 'transparent', kose_yaricapi: 10,
+        custom_css: ''
+    });
+}
+
 function bul(id) { return elementler.find(e => e.id === id); }
 function grupUyeleri(grupId) { return elementler.filter(e => e.grup_id === grupId).map(e => e.id); }
 
@@ -1191,18 +1230,27 @@ function renkAlanlariniZenginlestir(kapsam) {
     (kapsam || document).querySelectorAll('input[type="color"]').forEach(renkInput => {
         if (renkInput.dataset.hexEslendi) return;
         renkInput.dataset.hexEslendi = '1';
+        // Kullanıcı isteği: renk seçici ile hex kutusu alt alta değil yan
+        // yana olsun — ikisini bir flex sarmalayıcıya alıyoruz.
+        const sarmalayici = document.createElement('div');
+        sarmalayici.style.cssText = 'display:flex;gap:6px;align-items:stretch;margin-bottom:10px;';
+        renkInput.parentNode.insertBefore(sarmalayici, renkInput);
+        renkInput.style.marginBottom = '0';
+        renkInput.style.flex = '0 0 46px';
+        renkInput.style.minWidth = '0';
+        sarmalayici.appendChild(renkInput);
         const metinInput = document.createElement('input');
         metinInput.type = 'text';
         metinInput.value = renkInput.value;
         metinInput.maxLength = 7;
         metinInput.placeholder = '#rrggbb';
-        metinInput.style.cssText = 'margin-top:4px;font-family:monospace;font-size:12px;padding:6px 8px;';
+        metinInput.style.cssText = 'font-family:monospace;font-size:12px;flex:1;margin-bottom:0;';
         metinInput.addEventListener('input', () => {
             const v = metinInput.value.trim();
             if (/^#[0-9a-fA-F]{6}$/.test(v)) renkInput.value = v;
         });
         renkInput.addEventListener('input', () => { metinInput.value = renkInput.value; });
-        renkInput.insertAdjacentElement('afterend', metinInput);
+        sarmalayici.appendChild(metinInput);
     });
 }
 
@@ -1305,7 +1353,7 @@ function render() {
             div.textContent = '';
             const metin = document.createElement('span');
             metin.textContent = acikMi ? (el.metin_acik || 'ON') : (el.metin_kapali || 'OFF');
-            metin.style.cssText = `position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:11px;font-weight:700;color:#fff;`
+            metin.style.cssText = `position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:${el.font_boyutu || 11}px;font-weight:700;color:#fff;`
                 + (acikMi ? 'left:8px;' : 'right:8px;');
             div.appendChild(metin);
             const daireBoyut = el.h - 6;
@@ -1376,6 +1424,19 @@ function render() {
                     + 'width:100%;height:100%;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.6);';
                 div.appendChild(yazi);
             }
+        } else if (el.type === 'groupbox') {
+            div.style.border = `${el.kenarlik_kalinlik || 0}px solid ${el.renk_kenarlik || '#2e9ed9'}`;
+            div.style.borderRadius = (el.kose_yaricapi || 0) + 'px';
+            div.style.background = (el.renk_arkaplan === 'transparent' || !el.renk_arkaplan) ? 'transparent' : el.renk_arkaplan;
+            div.style.boxSizing = 'border-box';
+            div.textContent = '';
+            if (el.baslik) {
+                const baslikEl = document.createElement('div');
+                baslikEl.textContent = el.baslik;
+                baslikEl.style.cssText = `position:absolute;top:8px;left:12px;color:${el.renk_yazi || '#e8eef4'};`
+                    + `font-size:${el.font_boyutu || 12}px;font-weight:700;`;
+                div.appendChild(baslikEl);
+            }
         } else {
             // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
             // — "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
@@ -1434,12 +1495,14 @@ function render() {
         }
 
         div.addEventListener('mousedown', (e) => baslaSurukle(e, el.id));
-        div.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const hedefIdler = el.grup_id ? grupUyeleri(el.grup_id) : [el.id];
-            if (e.shiftKey || e.ctrlKey || e.metaKey) hedefIdler.forEach(hid => secEkle(hid));
-            else secCoklu(hedefIdler);
-        });
+        // BUG FIX: seçim mantığı burada TEKRAR çalıştırılıyordu — ama
+        // mousedown (baslaSurukle) zaten AYNI mantığı bir tık önce
+        // çalıştırıyor. click, mousedown'dan HEMEN SONRA (aynı elementte)
+        // ateşlendiği için Ctrl/Shift+tık'ta secEkle() İKİ KEZ çağrılıyor,
+        // bu da seçimi ekleyip hemen ardından geri çıkarıyordu (çoklu seçim
+        // hiç çalışmıyormuş gibi görünüyordu). Seçim artık SADECE
+        // mousedown'da yapılıyor, click sadece tuval'e yayılmayı durduruyor.
+        div.addEventListener('click', (e) => { e.stopPropagation(); });
         div.addEventListener('dblclick', (e) => { e.stopPropagation(); secTekli(el.id); ozellikAc(); });
         div.addEventListener('contextmenu', (e) => {
             e.preventDefault(); e.stopPropagation();
@@ -1458,10 +1521,7 @@ function render() {
         const tekEl = bul(tekId);
         const div = document.querySelector(`[data-el-id="${tekId}"]`);
         if (div && tekEl && !tekEl.kilitli) {
-            const tutamac = document.createElement('div');
-            tutamac.className = 'resize-tutamac';
-            tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, tekId));
-            div.appendChild(tutamac);
+            resizeTutamaclariEkle(div, tekId);
         }
     }
 }
@@ -1532,10 +1592,7 @@ function selectionGorunumunuTazele(eskiSet, yeniSet) {
         const tekEl = bul(tekId);
         const d = document.querySelector(`[data-el-id="${tekId}"]`);
         if (d && tekEl && !tekEl.kilitli) {
-            const tutamac = document.createElement('div');
-            tutamac.className = 'resize-tutamac';
-            tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, tekId));
-            d.appendChild(tutamac);
+            resizeTutamaclariEkle(d, tekId);
         }
     }
 }
@@ -1625,12 +1682,38 @@ function baslaSurukle(e, id) {
     });
 }
 
-function baslaBoyutlandir(e, id) {
+function baslaBoyutlandir(e, id, yon) {
     e.preventDefault();
     e.stopPropagation();
     gecmiseKaydet();
     const el = bul(id);
-    boyutlandiriliyor = { id, startX: e.clientX, startY: e.clientY, startW: el.w, startH: el.h };
+    boyutlandiriliyor = {
+        id, yon, startX: e.clientX, startY: e.clientY,
+        startW: el.w, startH: el.h, startElX: el.x, startElY: el.y,
+    };
+}
+
+// Kullanıcı isteği: tek noktadan (sağ-alt) değil 8 noktadan (4 köşe + 4
+// kenar ortası) boyutlandırma. Hem render() hem selectionGorunumunuTazele()
+// aynı 8 tutamacı kullandığı için ortak bir fonksiyona alındı.
+const RESIZE_YONLERI = [
+    { yon: 'nw', cursor: 'nwse-resize', stil: 'top:-6px;left:-6px;' },
+    { yon: 'n', cursor: 'ns-resize', stil: 'top:-6px;left:50%;margin-left:-6px;' },
+    { yon: 'ne', cursor: 'nesw-resize', stil: 'top:-6px;right:-6px;' },
+    { yon: 'w', cursor: 'ew-resize', stil: 'top:50%;left:-6px;margin-top:-6px;' },
+    { yon: 'e', cursor: 'ew-resize', stil: 'top:50%;right:-6px;margin-top:-6px;' },
+    { yon: 'sw', cursor: 'nesw-resize', stil: 'bottom:-6px;left:-6px;' },
+    { yon: 's', cursor: 'ns-resize', stil: 'bottom:-6px;left:50%;margin-left:-6px;' },
+    { yon: 'se', cursor: 'nwse-resize', stil: 'bottom:-6px;right:-6px;' },
+];
+function resizeTutamaclariEkle(div, elId) {
+    RESIZE_YONLERI.forEach(t => {
+        const tutamac = document.createElement('div');
+        tutamac.className = 'resize-tutamac';
+        tutamac.style.cssText = tutamac.style.cssText + t.stil + `cursor:${t.cursor};`;
+        tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, elId, t.yon));
+        div.appendChild(tutamac);
+    });
 }
 
 // ---------- Hizalama kılavuz çizgileri (Figma tarzı "smart guide") ----------
@@ -1714,13 +1797,38 @@ document.addEventListener('mousemove', (e) => {
             if (div && el) { div.style.left = el.x + 'px'; div.style.top = el.y + 'px'; }
         });
     } else if (boyutlandiriliyor) {
+        // 8 noktalı boyutlandırma: yöne göre hangi kenar(lar) hareket
+        // ediyor, karşı kenar/köşe sabit anchor olarak kalıyor.
         const el = bul(boyutlandiriliyor.id);
+        const yon = boyutlandiriliyor.yon || 'se';
         const dx = (e.clientX - boyutlandiriliyor.startX) / zoom;
         const dy = (e.clientY - boyutlandiriliyor.startY) / zoom;
-        el.w = Math.max(24, Math.min(tuvalW - el.x, Math.round(boyutlandiriliyor.startW + dx)));
-        el.h = Math.max(24, Math.min(tuvalH - el.y, Math.round(boyutlandiriliyor.startH + dy)));
+        const { startElX, startElY, startW, startH } = boyutlandiriliyor;
+        let yeniX = el.x, yeniY = el.y, yeniW = el.w, yeniH = el.h;
+
+        if (yon.includes('e')) {
+            yeniW = Math.max(24, Math.min(tuvalW - startElX, Math.round(startW + dx)));
+        }
+        if (yon.includes('w')) {
+            const sagKenar = startElX + startW;
+            yeniX = Math.max(0, Math.min(sagKenar - 24, Math.round(startElX + dx)));
+            yeniW = sagKenar - yeniX;
+        }
+        if (yon.includes('s')) {
+            yeniH = Math.max(24, Math.min(tuvalH - startElY, Math.round(startH + dy)));
+        }
+        if (yon.includes('n')) {
+            const altKenar = startElY + startH;
+            yeniY = Math.max(0, Math.min(altKenar - 24, Math.round(startElY + dy)));
+            yeniH = altKenar - yeniY;
+        }
+
+        el.x = yeniX; el.y = yeniY; el.w = yeniW; el.h = yeniH;
         const div = document.querySelector(`[data-el-id="${el.id}"]`);
-        if (div) { div.style.width = el.w + 'px'; div.style.height = el.h + 'px'; }
+        if (div) {
+            div.style.left = el.x + 'px'; div.style.top = el.y + 'px';
+            div.style.width = el.w + 'px'; div.style.height = el.h + 'px';
+        }
     } else if (marquee) {
         marqueeHareketEtti = true;
         const rect = document.getElementById('tuval').getBoundingClientRect();
@@ -1978,6 +2086,60 @@ function elementAynala(eksen) {
     durumYaz('⬌ Aynalandı');
 }
 
+// ---------- Diz (yerleşim): seçili elementleri BİR KEZ dikey/yatay/ızgara
+// olarak diz — Qt'deki VBoxLayout/HBoxLayout/GridLayout'un aksine CANLI
+// (kalıcı otomatik) bir konteyner değil, "şimdi düzenle" eylemidir; mevcut
+// düz (absolute-position) tuval mimarisine en uygun, sağlam çözüm budur.
+function dizDikey() {
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (secElemanlar.length < 2) return;
+    gecmiseKaydet();
+    secElemanlar.sort((a, b) => a.y - b.y);
+    const minX = Math.min(...secElemanlar.map(e => e.x));
+    const bosluk = 8;
+    let y = secElemanlar[0].y;
+    secElemanlar.forEach(el => {
+        el.x = minX; el.y = y;
+        y += el.h + bosluk;
+    });
+    render();
+    durumYaz('▤ Dikey dizildi');
+}
+function dizYatay() {
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (secElemanlar.length < 2) return;
+    gecmiseKaydet();
+    secElemanlar.sort((a, b) => a.x - b.x);
+    const minY = Math.min(...secElemanlar.map(e => e.y));
+    const bosluk = 8;
+    let x = secElemanlar[0].x;
+    secElemanlar.forEach(el => {
+        el.y = minY; el.x = x;
+        x += el.w + bosluk;
+    });
+    render();
+    durumYaz('▥ Yatay dizildi');
+}
+function dizIzgara() {
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (secElemanlar.length < 2) return;
+    gecmiseKaydet();
+    const sutun = Math.max(1, Math.round(Math.sqrt(secElemanlar.length)));
+    const genislikMax = Math.max(...secElemanlar.map(e => e.w));
+    const yukseklikMax = Math.max(...secElemanlar.map(e => e.h));
+    const bosluk = 8;
+    const baslangicX = Math.min(...secElemanlar.map(e => e.x));
+    const baslangicY = Math.min(...secElemanlar.map(e => e.y));
+    secElemanlar.forEach((el, i) => {
+        const satir = Math.floor(i / sutun);
+        const kolon = i % sutun;
+        el.x = baslangicX + kolon * (genislikMax + bosluk);
+        el.y = baslangicY + satir * (yukseklikMax + bosluk);
+    });
+    render();
+    durumYaz('▦ Izgaraya dizildi');
+}
+
 // ---------- Resim içeriği konumlandırma (obje sığdırma boşluk bırakınca) ----------
 function resimKonumAyarla(konum) {
     const secResimler = [...seciliSet].map(bul).filter(el => el && el.type === 'resim' && !el.kilitli);
@@ -2058,6 +2220,7 @@ function tuvalBaglamMenusu(e) {
         { etiket: '📋 Açılır Liste Ekle', aksiyon: () => comboboxEkle(tuvalX, tuvalY) },
         { etiket: '☑️ Onay Kutusu Ekle', aksiyon: () => checkboxEkle(tuvalX, tuvalY) },
         { etiket: '📶 İlerleme Çubuğu Ekle', aksiyon: () => progressbarEkle(tuvalX, tuvalY) },
+        { etiket: '🖼️ Grup Kutusu / Çerçeve Ekle', aksiyon: () => groupboxEkle(tuvalX, tuvalY) },
         { ayrac: true },
     ];
     if (pano.length) maddeler.push({ etiket: '📋 Yapıştır (Ctrl+V)', aksiyon: yapistir });
@@ -2136,6 +2299,7 @@ function guncellePanel() {
     document.getElementById('ozAlanCombobox').classList.toggle('gorunur', el.type === 'combobox');
     document.getElementById('ozAlanCheckbox').classList.toggle('gorunur', el.type === 'checkbox');
     document.getElementById('ozAlanProgressbar').classList.toggle('gorunur', el.type === 'progressbar');
+    document.getElementById('ozAlanGroupbox').classList.toggle('gorunur', el.type === 'groupbox');
 
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
@@ -2208,6 +2372,7 @@ function guncellePanel() {
         document.getElementById('ozSwitchRenkAcik').value = el.renk_acik || '#2ecc71';
         document.getElementById('ozSwitchRenkKapali').value = el.renk_kapali || '#e74c3c';
         document.getElementById('ozSwitchDaireRengi').value = el.daire_rengi || '#ffffff';
+        document.getElementById('ozSwitchFontBoyutu').value = el.font_boyutu || 11;
         document.getElementById('ozSwitchOnizleme').value = el._onizleme || 'kapali';
     } else if (el.type === 'textbox') {
         document.getElementById('ozTextboxTag').value = el.tag_id || '';
@@ -2245,6 +2410,16 @@ function guncellePanel() {
         document.getElementById('ozProgressbarRenkArkaplan').value = el.renk_arkaplan || '#17222e';
         document.getElementById('ozProgressbarBirim').value = el.birim || '';
         document.getElementById('ozProgressbarDegerGoster').checked = el.deger_goster !== false;
+    } else if (el.type === 'groupbox') {
+        document.getElementById('ozGroupboxBaslik').value = el.baslik || '';
+        document.getElementById('ozGroupboxRenkYazi').value = el.renk_yazi || '#e8eef4';
+        document.getElementById('ozGroupboxFontBoyutu').value = el.font_boyutu || 12;
+        document.getElementById('ozGroupboxRenkKenarlik').value = el.renk_kenarlik || '#2e9ed9';
+        document.getElementById('ozGroupboxKenarlikKalinlik').value = el.kenarlik_kalinlik || 0;
+        const seffaf = !el.renk_arkaplan || el.renk_arkaplan === 'transparent';
+        document.getElementById('ozGroupboxSeffaf').checked = seffaf;
+        document.getElementById('ozGroupboxRenkArkaplan').value = seffaf ? '#17222e' : el.renk_arkaplan;
+        document.getElementById('ozGroupboxKose').value = el.kose_yaricapi || 0;
     }
 
     document.getElementById('ozCustomCss').value = el.custom_css || '';
@@ -2453,6 +2628,7 @@ function uygula() {
         el.renk_acik = document.getElementById('ozSwitchRenkAcik').value;
         el.renk_kapali = document.getElementById('ozSwitchRenkKapali').value;
         el.daire_rengi = document.getElementById('ozSwitchDaireRengi').value;
+        el.font_boyutu = parseInt(document.getElementById('ozSwitchFontBoyutu').value) || 11;
         el._onizleme = document.getElementById('ozSwitchOnizleme').value;
     } else if (el.type === 'textbox') {
         el.tag_id = document.getElementById('ozTextboxTag').value ? parseInt(document.getElementById('ozTextboxTag').value) : null;
@@ -2490,6 +2666,14 @@ function uygula() {
         el.renk_arkaplan = document.getElementById('ozProgressbarRenkArkaplan').value;
         el.birim = document.getElementById('ozProgressbarBirim').value;
         el.deger_goster = document.getElementById('ozProgressbarDegerGoster').checked;
+    } else if (el.type === 'groupbox') {
+        el.baslik = document.getElementById('ozGroupboxBaslik').value;
+        el.renk_yazi = document.getElementById('ozGroupboxRenkYazi').value;
+        el.font_boyutu = parseInt(document.getElementById('ozGroupboxFontBoyutu').value) || 12;
+        el.renk_kenarlik = document.getElementById('ozGroupboxRenkKenarlik').value;
+        el.kenarlik_kalinlik = parseInt(document.getElementById('ozGroupboxKenarlikKalinlik').value) || 0;
+        el.renk_arkaplan = document.getElementById('ozGroupboxSeffaf').checked ? 'transparent' : document.getElementById('ozGroupboxRenkArkaplan').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozGroupboxKose').value) || 0;
     } else if (el.type === 'sekil') {
         el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;
         el.sekil_kenarlik = document.getElementById('ozSekilKenarlik').value;

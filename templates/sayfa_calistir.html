@@ -271,7 +271,7 @@ function tuvalCiz() {
             div.textContent = '';
             const metin = document.createElement('span');
             metin.textContent = acikMi ? (el.metin_acik || 'ON') : (el.metin_kapali || 'OFF');
-            metin.style.cssText = 'position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:11px;font-weight:700;color:#fff;pointer-events:none;'
+            metin.style.cssText = `position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:${el.font_boyutu || 11}px;font-weight:700;color:#fff;pointer-events:none;`
                 + (acikMi ? 'left:8px;' : 'right:8px;');
             div.appendChild(metin);
             const daireBoyut = el.h - 6;
@@ -397,6 +397,26 @@ function tuvalCiz() {
                 yazi.style.cssText = 'position:relative;z-index:1;display:flex;align-items:center;justify-content:center;'
                     + 'width:100%;height:100%;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.6);';
                 div.appendChild(yazi);
+            }
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'groupbox') {
+            div.style.border = `${el.kenarlik_kalinlik || 0}px solid ${el.renk_kenarlik || '#2e9ed9'}`;
+            div.style.borderRadius = (el.kose_yaricapi || 0) + 'px';
+            div.style.background = (el.renk_arkaplan === 'transparent' || !el.renk_arkaplan) ? 'transparent' : el.renk_arkaplan;
+            div.style.boxSizing = 'border-box';
+            div.style.pointerEvents = 'none';
+            div.textContent = '';
+            if (el.baslik) {
+                const baslikEl = document.createElement('div');
+                baslikEl.textContent = el.baslik;
+                baslikEl.style.cssText = `position:absolute;top:8px;left:12px;color:${el.renk_yazi || '#e8eef4'};`
+                    + `font-size:${el.font_boyutu || 12}px;font-weight:700;`;
+                div.appendChild(baslikEl);
             }
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
