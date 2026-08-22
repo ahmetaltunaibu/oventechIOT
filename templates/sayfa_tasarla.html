@@ -101,6 +101,12 @@
     .ikon-hucre:hover { background: var(--border); }
     .ikon-hucre img { width: 28px; height: 28px; }
     .ikon-hucre span { font-size: 9px; color: var(--text-secondary); text-align: center; word-break: break-word; }
+    .durum-satir {
+        border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
+        background: var(--panel2);
+    }
+    .durum-satir .durum-satir-baslik { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+    .durum-satir label { margin-top: 4px; }
     .sablon-satir small { display: block; color: var(--text-secondary); font-size: 11px; }
 </style>
 {% endblock %}
@@ -125,7 +131,7 @@
     {% endif %}
     <span class="mini-ayrac"></span>
     <span class="mini-bilgi" title="Tuval boyutu">📐 <span id="tuvalBoyutYazi">{{ tuval_w }}×{{ tuval_h }}</span></span>
-    <span class="mini-bilgi" title="Sağ tık: ekle/menü. Çift tık: özellikler. Shift/Ctrl+tık ya da boş alanda sürükle: çoklu seçim. Seçiliyken: Del sil, Ctrl+D çoğalt, Ctrl+C/V kopyala-yapıştır, Ctrl+Z/Y geri al-yinele, Ctrl+A tümünü seç.">❓</span>
+    <span class="mini-bilgi" title="Sağ tık: ekle/menü. Çift tık: özellikler. Shift/Ctrl+tık ya da boş alanda sürükle: çoklu seçim. Seçiliyken: ok tuşları taşır (Shift+ok = 10px), Del sil, Ctrl+D çoğalt, Ctrl+C/V kopyala-yapıştır, Ctrl+Z/Y geri al-yinele, Ctrl+A tümünü seç.">❓</span>
     <button type="button" class="mini-ikon" title="Uzaklaştır" onclick="zoomAyarla(zoom - 0.1)">－</button>
     <span id="zoom-yuzde">100%</span>
     <button type="button" class="mini-ikon" title="Yakınlaştır" onclick="zoomAyarla(zoom + 0.1)">＋</button>
@@ -140,28 +146,48 @@
 <!-- Sag tik baglam menusu -->
 <div id="baglam-menu"></div>
 
-<!-- Element(ler) secilince saginda beliren hizli-eylem paneli -->
-<div id="yan-panel" style="position:fixed;top:50%;right:14px;transform:translateY(-50%);display:none;
-     flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:10px;
-     padding:6px;z-index:150;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
-    <button type="button" class="mini-ikon coklu-gerekli" title="Sola Hizala" onclick="hizala('sol')">⇤</button>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Sağa Hizala" onclick="hizala('sag')">⇥</button>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Üste Hizala" onclick="hizala('ust')">⇧</button>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Alta Hizala" onclick="hizala('alt')">⇩</button>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Yatayda Dağıt (aralarındaki boşluğu eşitle, en az 3 element)" onclick="hizala('yatay-orta')">↔</button>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Dikeyde Dağıt (aralarındaki boşluğu eşitle, en az 3 element)" onclick="hizala('dikey-orta')">↕</button>
-    <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Genişliği Eşitle" onclick="boyutEsitle('genislik')">W=</button>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Yüksekliği Eşitle" onclick="boyutEsitle('yukseklik')">H=</button>
-    <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
-    <button type="button" class="mini-ikon" title="En Üste Getir" onclick="enUsteGetir()">⤒</button>
-    <button type="button" class="mini-ikon" title="Üste Getir" onclick="usteGetir()">↑</button>
-    <button type="button" class="mini-ikon" title="Alta Gönder" onclick="altaGonder()">↓</button>
-    <button type="button" class="mini-ikon" title="En Alta Gönder" onclick="enAltaGonder()">⤓</button>
-    <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
-    <button type="button" class="mini-ikon coklu-gerekli" title="Grupla" onclick="grupla()">🔗</button>
-    <button type="button" id="btnGrubuCoz" class="mini-ikon" title="Grubu Çöz" onclick="grubuCoz()" style="display:none;">✂</button>
-    <button type="button" id="btnKilitToggle" class="mini-ikon" title="Kilitle" onclick="kilitToggle()">🔒</button>
+<!-- Element(ler) secilince tuvalin saginda (canvas bitince kalan bosluga)
+     beliren hizli-eylem paneli — sutunlar halinde: genel / donustur / resim -->
+<div id="yan-panel" style="position:fixed;top:50%;transform:translateY(-50%);display:none;
+     flex-direction:row;align-items:flex-start;gap:8px;z-index:150;">
+    <div id="yan-panel-genel" style="display:flex;flex-direction:column;gap:4px;background:var(--panel);
+         border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
+        <button type="button" class="mini-ikon coklu-gerekli" title="Sola Hizala" onclick="hizala('sol')">⇤</button>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Sağa Hizala" onclick="hizala('sag')">⇥</button>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Üste Hizala" onclick="hizala('ust')">⇧</button>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Alta Hizala" onclick="hizala('alt')">⇩</button>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Yatayda Dağıt (aralarındaki boşluğu eşitle, en az 3 element)" onclick="hizala('yatay-orta')">↔</button>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Dikeyde Dağıt (aralarındaki boşluğu eşitle, en az 3 element)" onclick="hizala('dikey-orta')">↕</button>
+        <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Genişliği Eşitle" onclick="boyutEsitle('genislik')">W=</button>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Yüksekliği Eşitle" onclick="boyutEsitle('yukseklik')">H=</button>
+        <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
+        <button type="button" class="mini-ikon" title="En Üste Getir" onclick="enUsteGetir()">⤒</button>
+        <button type="button" class="mini-ikon" title="Üste Getir" onclick="usteGetir()">↑</button>
+        <button type="button" class="mini-ikon" title="Alta Gönder" onclick="altaGonder()">↓</button>
+        <button type="button" class="mini-ikon" title="En Alta Gönder" onclick="enAltaGonder()">⤓</button>
+        <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
+        <button type="button" class="mini-ikon coklu-gerekli" title="Grupla" onclick="grupla()">🔗</button>
+        <button type="button" id="btnGrubuCoz" class="mini-ikon" title="Grubu Çöz" onclick="grubuCoz()" style="display:none;">✂</button>
+        <button type="button" id="btnKilitToggle" class="mini-ikon" title="Kilitle" onclick="kilitToggle()">🔒</button>
+    </div>
+    <div id="yan-panel-donustur" style="display:flex;flex-direction:column;gap:4px;background:var(--panel);
+         border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
+        <button type="button" class="mini-ikon" title="Sola Döndür (-15°)" onclick="elementDondur(-15)">↺</button>
+        <button type="button" class="mini-ikon" title="Sağa Döndür (+15°)" onclick="elementDondur(15)">↻</button>
+        <button type="button" class="mini-ikon" title="Yatayda Aynala" onclick="elementAynala('x')">⬌</button>
+        <button type="button" class="mini-ikon" title="Dikeyde Aynala" onclick="elementAynala('y')">⬍</button>
+    </div>
+    <div id="yan-panel-resim" style="display:none;flex-direction:column;gap:4px;background:var(--panel);
+         border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
+        <button type="button" class="mini-ikon" title="Resmi Sola Yasla" onclick="resimKonumAyarla('left')">◀</button>
+        <button type="button" class="mini-ikon" title="Resmi Sağa Yasla" onclick="resimKonumAyarla('right')">▶</button>
+        <button type="button" class="mini-ikon" title="Resmi Yukarı Yasla" onclick="resimKonumAyarla('top')">▲</button>
+        <button type="button" class="mini-ikon" title="Resmi Aşağı Yasla" onclick="resimKonumAyarla('bottom')">▼</button>
+        <button type="button" class="mini-ikon" title="Resmi Merkeze Al" onclick="resimKonumAyarla('center')">⊙</button>
+        <span class="mini-ayrac" style="width:20px;height:1px;align-self:center;"></span>
+        <button type="button" id="btnResimArkaplanToggle" class="mini-ikon" title="Arkaplanı Gizle/Göster" onclick="resimArkaplanToggle()">👁</button>
+    </div>
 </div>
 
 <!-- Sayfa Ozellikleri modali -->
@@ -206,6 +232,23 @@
         <option value="cover" {{ 'selected' if arkaplan_sigdirma == 'cover' }}>Kapla (kırpılabilir)</option>
         <option value="contain" {{ 'selected' if arkaplan_sigdirma == 'contain' }}>Sığdır (boşluk kalabilir)</option>
         <option value="repeat" {{ 'selected' if arkaplan_sigdirma == 'repeat' }}>Tekrarla (döşe)</option>
+    </select>
+
+    <label>Sayfa Türü</label>
+    <select id="sayfaTuru">
+        <option value="normal" {{ 'selected' if sayfa_turu == 'normal' }}>Normal Sayfa (tam navigasyon)</option>
+        <option value="popup" {{ 'selected' if sayfa_turu == 'popup' }}>Popup Ekranı (başka sayfanın üzerinde açılır)</option>
+    </select>
+    <p style="font-size:11px;color:var(--text-secondary);margin:-6px 0 8px;">Popup seçersen: bu sayfaya "Sayfaya Git" butonuyla gelen kullanıcı, sayfadan ayrılmadan üstte açılan bir kutu görür (✕ ile kapatılır).</p>
+
+    <label>Giriş Animasyonu (sayfa açılırken oynar)</label>
+    <select id="sayfaGirisAnimasyonu">
+        <option value="none" {{ 'selected' if giris_animasyonu == 'none' }}>Yok</option>
+        <option value="fade" {{ 'selected' if giris_animasyonu == 'fade' }}>Solma (fade)</option>
+        <option value="soldan-saga" {{ 'selected' if giris_animasyonu == 'soldan-saga' }}>Soldan Sağa Kayma</option>
+        <option value="sagdan-sola" {{ 'selected' if giris_animasyonu == 'sagdan-sola' }}>Sağdan Sola Kayma</option>
+        <option value="yukaridan-asagi" {{ 'selected' if giris_animasyonu == 'yukaridan-asagi' }}>Yukarıdan Aşağı Kayma</option>
+        <option value="asagidan-yukari" {{ 'selected' if giris_animasyonu == 'asagidan-yukari' }}>Aşağıdan Yukarı Kayma</option>
     </select>
 
     <div style="display:flex;gap:8px;margin-top:6px;">
@@ -259,28 +302,46 @@
     </div>
 
     <div id="ozAlanButon" class="ozel-alan">
-        <label>Bağlı Tag</label>
-        <select id="ozTag"><option value="">— seçilmedi —</option></select>
-
         <label>Buton Modu</label>
-        <select id="ozMod">
+        <select id="ozMod" onchange="butonModuGuncelle()">
             <option value="toggle">Toggle (durum tersine çevir)</option>
             <option value="set_on">Aç (sabit değer yaz)</option>
             <option value="set_off">Kapat (sabit değer yaz)</option>
             <option value="momentary">Anlık (bas-bırak)</option>
+            <option value="sayfaya_git">Sayfaya Git (navigasyon)</option>
         </select>
 
-        <label>Açık Değer</label>
-        <input type="text" id="ozAcikDeger" value="1">
-        <label>Kapalı Değer</label>
-        <input type="text" id="ozKapaliDeger" value="0">
+        <div id="ozButonTagAlani">
+            <label>Bağlı Tag</label>
+            <select id="ozTag"><option value="">— seçilmedi —</option></select>
+
+            <label>Açık Değer</label>
+            <input type="text" id="ozAcikDeger" value="1">
+            <label>Kapalı Değer</label>
+            <input type="text" id="ozKapaliDeger" value="0">
+        </div>
+
+        <div id="ozButonSayfaAlani" style="display:none;">
+            <label>Hangi sayfaya gidilsin</label>
+            <select id="ozHedefSayfa"></select>
+        </div>
 
         <label>Renk (Açık)</label>
         <input type="color" id="ozRenkAcik" value="#2ecc71" style="height:38px;">
         <label>Renk (Kapalı)</label>
         <input type="color" id="ozRenkKapali" value="#e74c3c" style="height:38px;">
 
-        <label>Önizleme Durumu (tuvalde hangi renk gösterilsin)</label>
+        <label>Resim (Açık Durumu) — opsiyonel, metnin yanında/üzerinde gösterilir</label>
+        <input type="text" id="ozButonResimAcik" placeholder="https://...">
+        <input type="file" id="ozButonResimAcikDosya" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
+        <button type="button" onclick="butonIkonAc('acik')" style="background:var(--panel2);width:100%;margin:4px 0 6px;">🧩 İkon Kütüphanesinden Seç</button>
+
+        <label>Resim (Kapalı Durumu) — opsiyonel</label>
+        <input type="text" id="ozButonResimKapali" placeholder="https://...">
+        <input type="file" id="ozButonResimKapaliDosya" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
+        <button type="button" onclick="butonIkonAc('kapali')" style="background:var(--panel2);width:100%;margin:4px 0 6px;">🧩 İkon Kütüphanesinden Seç</button>
+
+        <label>Önizleme Durumu (tuvalde hangi renk/resim gösterilsin)</label>
         <select id="ozOnizlemeDurum" onchange="uygula()">
             <option value="kapali">Kapalı</option>
             <option value="acik">Açık</option>
@@ -366,6 +427,28 @@
         </div>
     </div>
 
+    <div id="ozAlanDurum" class="ozel-alan">
+        <label>Bağlı Tag</label>
+        <select id="ozDurumTag"><option value="">— seçilmedi —</option></select>
+
+        <label>Durum Modu</label>
+        <select id="ozDurumModu" onchange="durumSatirlariCiz()">
+            <option value="metin">Metin + Renk</option>
+            <option value="resim">Sadece Resim</option>
+        </select>
+
+        <label>Durum Sayısı (sınır yok — istediğin kadar ekle: 2, 3, 4, 5...)</label>
+        <div style="display:flex;gap:8px;">
+            <input type="number" id="ozDurumSayisi" value="2" min="1">
+            <button type="button" onclick="durumSayisiUygula()" style="background:var(--panel2);white-space:nowrap;">Uygula</button>
+        </div>
+
+        <label>Önizleme Durumu (tuvalde hangisi gösterilsin)</label>
+        <select id="ozDurumOnizleme" onchange="uygula()"></select>
+
+        <div id="ozDurumSatirlari" style="margin-top:8px;"></div>
+    </div>
+
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
     <textarea id="ozCustomCss" rows="3" placeholder="örn. box-shadow: 0 4px 12px #000; transform: rotate(2deg);" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:monospace;padding:8px;margin-bottom:10px;box-sizing:border-box;"></textarea>
 
@@ -390,6 +473,7 @@
 let elementler = {{ elementler_json | safe }};
 const tagler = {{ tagler_json | safe }};
 const projeSayfalari = {{ proje_sayfalari | tojson }};
+const cihazSayfalari = {{ sayfalar | tojson }};
 let tuvalW = {{ tuval_w }};
 let tuvalH = {{ tuval_h }};
 let arkaplan = "{{ arkaplan }}";
@@ -399,6 +483,8 @@ let arkaplanGradientAktif = {{ arkaplan_gradient_aktif | tojson }};
 let arkaplanGradientRenk1 = {{ (arkaplan_gradient_renk1 or '#1e2d3d') | tojson }};
 let arkaplanGradientRenk2 = {{ (arkaplan_gradient_renk2 or '#0f1720') | tojson }};
 let arkaplanGradientYon = {{ (arkaplan_gradient_yon or 'to bottom') | tojson }};
+let sayfaTuru = {{ (sayfa_turu or 'normal') | tojson }};
+let sayfaGirisAnimasyonu = {{ (giris_animasyonu or 'none') | tojson }};
 const hedef = "{{ hedef }}";
 const cihazId = {{ cihaz.id }};
 
@@ -445,6 +531,7 @@ function zoomUygula() {
     tuval.style.transform = `scale(${zoom})`;
     tuval.style.transformOrigin = 'top left';
     document.getElementById('zoom-yuzde').textContent = Math.round(zoom * 100) + '%';
+    if (typeof yanPanelKonumlandir === 'function') yanPanelKonumlandir();
 }
 
 function sayfaOzellikAc() {
@@ -458,6 +545,8 @@ function sayfaOzellikAc() {
     document.getElementById('sayfaGradientRenk2').value = arkaplanGradientRenk2 || '#0f1720';
     document.getElementById('sayfaGradientYon').value = arkaplanGradientYon || 'to bottom';
     sayfaGradientAlanGuncelle();
+    document.getElementById('sayfaTuru').value = sayfaTuru || 'normal';
+    document.getElementById('sayfaGirisAnimasyonu').value = sayfaGirisAnimasyonu || 'none';
     document.getElementById('sayfa-ozellik-perde').style.display = 'block';
     document.getElementById('sayfa-ozellik-modal').style.display = 'block';
     baglamMenuKapat();
@@ -504,6 +593,8 @@ function sayfaOzellikUygula() {
     arkaplanGradientRenk1 = document.getElementById('sayfaGradientRenk1').value;
     arkaplanGradientRenk2 = document.getElementById('sayfaGradientRenk2').value;
     arkaplanGradientYon = document.getElementById('sayfaGradientYon').value;
+    sayfaTuru = document.getElementById('sayfaTuru').value;
+    sayfaGirisAnimasyonu = document.getElementById('sayfaGirisAnimasyonu').value;
     tuvalCerceveGuncelle();
     sayfaOzellikKapat();
 }
@@ -752,9 +843,10 @@ function butonEkle(x, y) {
     elementEkle({
         id: uid(), type: 'button',
         x: Math.max(0, x - 60), y: Math.max(0, y - 22), w: 120, h: 44,
-        label: 'Buton', tag_id: null, mod: 'toggle',
+        label: 'Buton', tag_id: null, mod: 'toggle', hedef_sayfa: '',
         acik_deger: '1', kapali_deger: '0',
         renk_acik: '#2ecc71', renk_kapali: '#e74c3c', renk_yazi: '#ffffff',
+        resim_url_acik: '', resim_url_kapali: '',
         _onizleme: 'kapali', custom_css: ''
     });
 }
@@ -836,6 +928,10 @@ function ikonSec(url) {
     if (ikonModu === 'element' && seciliId) {
         document.getElementById('ozResimUrl').value = url;
         uygula();
+    } else if (ikonModu === 'buton_acik') {
+        document.getElementById('ozButonResimAcik').value = url;
+    } else if (ikonModu === 'buton_kapali') {
+        document.getElementById('ozButonResimKapali').value = url;
     } else {
         resimEkle(ikonEklemeKonumu.x, ikonEklemeKonumu.y);
         const yeni = elementler[elementler.length - 1];
@@ -847,12 +943,39 @@ function ikonSec(url) {
     ikonKapat();
     durumYaz('🧩 İkon eklendi');
 }
+function butonIkonAc(hangiDurum) {
+    ikonAc(hangiDurum === 'acik' ? 'buton_acik' : 'buton_kapali');
+}
 
 function cizgiEkle(x, y) {
     elementEkle({
         id: uid(), type: 'cizgi',
         x: Math.max(0, x - 60), y: Math.max(0, y - 2), w: 120, h: 4,
         cizgi_renk: '#e8eef4', custom_css: ''
+    });
+}
+
+// Durum Göstergesi: bir tag'in değerine göre N farklı görünüm (metin+renk
+// ya da sadece resim) arasında geçiş yapan element. Kullanıcı isteği: 2
+// durumla başlasın ama 3/4/5... istediği kadar duruma çıkarabilsin, her
+// durumun kendi metni/arkaplan-yazı rengi/font boyutu/(opsiyonel) kendi
+// genişlik-yüksekliği ve/veya kendi resmi olabilsin.
+function yeniDurum(deger, metin, renkArkaplan, renkYazi) {
+    return {
+        deger: deger, metin: metin, renk_arkaplan: renkArkaplan, renk_yazi: renkYazi,
+        font_boyutu: 14, resim_url: '', genislik: '', yukseklik: ''
+    };
+}
+function durumEkle(x, y) {
+    elementEkle({
+        id: uid(), type: 'durum',
+        x: Math.max(0, x - 60), y: Math.max(0, y - 20), w: 140, h: 40,
+        tag_id: null, durum_modu: 'metin', durum_onizleme_index: 0,
+        durumlar: [
+            yeniDurum('0', 'Duruyor', '#e74c3c', '#ffffff'),
+            yeniDurum('1', 'Çalışıyor', '#2ecc71', '#ffffff'),
+        ],
+        custom_css: ''
     });
 }
 
@@ -867,6 +990,37 @@ function koseCSS(el, on) {
     const br = el[on + '_sagalt'] || 0;
     const bl = el[on + '_solalt'] || 0;
     return `${tl}px ${tr}px ${br}px ${bl}px`;
+}
+
+// Kullanıcı isteği: renk seçici (native color picker) üzerinde hex kodunu
+// doğrudan yazamıyordu ("#12a3f" gibi) — her `<input type="color">`'un
+// yanına eşlenmiş bir metin kutusu ekliyoruz, hex yazınca renk anında
+// güncelleniyor, tersi de (renk değişince metin kutusu) güncelleniyor.
+// Dinamik olarak sonradan oluşturulan renk alanları (ör. durum satırları)
+// için de kapsam (scope) parametresiyle tekrar çağrılabilir.
+function renkAlanlariniZenginlestir(kapsam) {
+    (kapsam || document).querySelectorAll('input[type="color"]').forEach(renkInput => {
+        if (renkInput.dataset.hexEslendi) return;
+        renkInput.dataset.hexEslendi = '1';
+        const metinInput = document.createElement('input');
+        metinInput.type = 'text';
+        metinInput.value = renkInput.value;
+        metinInput.maxLength = 7;
+        metinInput.placeholder = '#rrggbb';
+        metinInput.style.cssText = 'margin-top:4px;font-family:monospace;font-size:12px;padding:6px 8px;';
+        metinInput.addEventListener('input', () => {
+            const v = metinInput.value.trim();
+            if (/^#[0-9a-fA-F]{6}$/.test(v)) renkInput.value = v;
+        });
+        renkInput.addEventListener('input', () => { metinInput.value = renkInput.value; });
+        renkInput.insertAdjacentElement('afterend', metinInput);
+    });
+}
+
+// Resim elementi içindeki resmin hangi kenara/merkeze yaslanacağı
+// (object-fit:contain ile boşluk kalınca kullanışlı).
+function _resimKonumCSS(konum) {
+    return { left: 'left center', right: 'right center', top: 'center top', bottom: 'center bottom', center: 'center center' }[konum] || 'center center';
 }
 
 function sekilArkaplanCSS(el) {
@@ -914,12 +1068,73 @@ function render() {
                 div.style.color = 'var(--text-secondary)'; div.style.fontSize = '11px';
                 div.textContent = '🖼️ URL gir';
             }
+            div.style.objectPosition = '';
+            if (el.resim_konum && el.resim_konum !== 'center') {
+                const img2 = div.querySelector('img');
+                if (img2) img2.style.objectPosition = _resimKonumCSS(el.resim_konum);
+            }
+            if (el.resim_arkaplan_gorunur === false && !el.resim_url) {
+                div.style.background = 'transparent';
+            }
+        } else if (el.type === 'durum') {
+            // Bağlı tag'in değerine göre metin+renk ya da resim değişen durum
+            // göstergesi — tasarımda TASARIM ÖNİZLEMESİ (varsayılan/seçili
+            // önizleme durumu) gösterilir, gerçek değer runtime'da okunur.
+            const dList = el.durumlar || [];
+            const dIdx = Math.min(el.durum_onizleme_index || 0, Math.max(dList.length - 1, 0));
+            const durum = dList[dIdx];
+            if (durum) {
+                if (el.durum_modu === 'resim') {
+                    div.style.overflow = 'hidden';
+                    div.style.background = '#0008';
+                    if (durum.resim_url) {
+                        const img = document.createElement('img');
+                        img.src = durum.resim_url;
+                        img.style.objectFit = 'contain';
+                        div.appendChild(img);
+                    } else {
+                        div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+                        div.style.color = 'var(--text-secondary)'; div.style.fontSize = '11px';
+                        div.textContent = '🖼️ durum resmi gir';
+                    }
+                } else {
+                    div.style.background = durum.renk_arkaplan || '#333';
+                    div.style.color = durum.renk_yazi || '#fff';
+                    div.style.fontSize = (durum.font_boyutu || 14) + 'px';
+                    div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+                    div.style.fontWeight = '600';
+                    div.textContent = durum.metin || '';
+                }
+                if (durum.genislik) div.style.width = durum.genislik + 'px';
+                if (durum.yukseklik) div.style.height = durum.yukseklik + 'px';
+            }
         } else {
             // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
             // — "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
             div.style.background = (el._onizleme === 'acik') ? el.renk_acik : el.renk_kapali;
             div.style.color = el.renk_yazi;
-            div.textContent = el.label;
+            div.textContent = '';
+            div.style.flexDirection = 'column';
+            div.style.gap = '2px';
+            const butonResimUrl = (el._onizleme === 'acik') ? el.resim_url_acik : el.resim_url_kapali;
+            if (butonResimUrl) {
+                const img = document.createElement('img');
+                img.src = butonResimUrl;
+                img.style.cssText = 'max-width:70%;max-height:60%;object-fit:contain;pointer-events:none;';
+                div.appendChild(img);
+            }
+            if (el.label) {
+                const yazi = document.createElement('span');
+                yazi.textContent = el.label;
+                yazi.style.fontSize = butonResimUrl ? '10px' : '';
+                div.appendChild(yazi);
+            }
+        }
+
+        // Döndürme / X-Y aynalama — tüm element tiplerinde ortak (kullanıcı
+        // isteği: hizalama butonlarının yanına döndür/aynala eklendi).
+        if (el.donus || el.ayna_x || el.ayna_y) {
+            div.style.transform = `rotate(${el.donus || 0}deg) scale(${el.ayna_x ? -1 : 1}, ${el.ayna_y ? -1 : 1})`;
         }
 
         if (el.custom_css) {
@@ -1005,7 +1220,27 @@ function yanPanelGuncelle() {
         kilitBtn.textContent = digerKilitli ? '🔓' : '🔒';
         kilitBtn.title = digerKilitli ? 'Kilidi Aç' : 'Kilitle';
     }
+    const resimVarMi = [...seciliSet].some(sid => { const e = bul(sid); return e && e.type === 'resim'; });
+    document.getElementById('yan-panel-resim').style.display = resimVarMi ? 'flex' : 'none';
+    yanPanelKonumlandir();
 }
+
+// Kullanıcı isteği: panel viewport'un sağına değil, TUVALİN bittiği yerden
+// hemen sonraki boşluğa yerleşsin (dar/mobil tuvallerde viewport kenarına
+// yapışıp tuvalden kopuk durmasın diye).
+function yanPanelKonumlandir() {
+    const panel = document.getElementById('yan-panel');
+    const tuvalEl = document.getElementById('tuval');
+    if (!panel || !tuvalEl || panel.style.display === 'none') return;
+    const rect = tuvalEl.getBoundingClientRect();
+    let sol = rect.right + 16;
+    const genislikTahmini = panel.offsetWidth || 200;
+    if (sol + genislikTahmini > window.innerWidth - 8) {
+        sol = window.innerWidth - genislikTahmini - 8;
+    }
+    panel.style.left = Math.max(8, sol) + 'px';
+}
+window.addEventListener('resize', yanPanelKonumlandir);
 
 // Kullanıcı isteği: Kilitle/Kilidi Aç ayrı iki buton yerine Grupla/Grubu Çöz
 // gibi TEK bir toggle buton olsun.
@@ -1449,6 +1684,50 @@ function topluKilitle(kilit) {
     durumYaz(kilit ? '🔒 Kilitlendi' : '🔓 Kilit açıldı');
 }
 
+// ---------- Döndürme / Aynalama ----------
+// Not: aynalama gerçek bir CSS scaleX/scaleY(-1) yansımasıdır — bu yüzden
+// yazı ve resim de görsel olarak ters döner (bu, tasarım araçlarında
+// standart/beklenen davranıştır, bir "hata" değildir). Köşe yarıçapı,
+// gölge gibi diğer özellikler transform ile birlikte tutarlı şekilde
+// döner/yansır, bozulma olmaz.
+function elementDondur(aci) {
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (!secElemanlar.length) return;
+    gecmiseKaydet();
+    secElemanlar.forEach(el => { el.donus = ((el.donus || 0) + aci + 360) % 360; });
+    render();
+    durumYaz('🔄 Döndürüldü');
+}
+function elementAynala(eksen) {
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (!secElemanlar.length) return;
+    gecmiseKaydet();
+    secElemanlar.forEach(el => {
+        if (eksen === 'x') el.ayna_x = !el.ayna_x;
+        else el.ayna_y = !el.ayna_y;
+    });
+    render();
+    durumYaz('⬌ Aynalandı');
+}
+
+// ---------- Resim içeriği konumlandırma (obje sığdırma boşluk bırakınca) ----------
+function resimKonumAyarla(konum) {
+    const secResimler = [...seciliSet].map(bul).filter(el => el && el.type === 'resim' && !el.kilitli);
+    if (!secResimler.length) return;
+    gecmiseKaydet();
+    secResimler.forEach(el => { el.resim_konum = konum; });
+    render();
+    durumYaz('🖼️ Resim konumu ayarlandı');
+}
+function resimArkaplanToggle() {
+    const secResimler = [...seciliSet].map(bul).filter(el => el && el.type === 'resim' && !el.kilitli);
+    if (!secResimler.length) return;
+    gecmiseKaydet();
+    secResimler.forEach(el => { el.resim_arkaplan_gorunur = !(el.resim_arkaplan_gorunur !== false); });
+    render();
+    durumYaz('👁 Arkaplan görünürlüğü değişti');
+}
+
 // ---------- Klavye kısayolları ----------
 document.addEventListener('keydown', (e) => {
     const aktifEtiket = document.activeElement ? document.activeElement.tagName : '';
@@ -1469,7 +1748,23 @@ document.addEventListener('keydown', (e) => {
     else if (ctrl && tus === 'a') { e.preventDefault(); secTumu(); }
     else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); elementSil(); }
     else if (e.key === 'Escape') { secTemizle(); }
+    else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); oklaTasi(e.key, e.shiftKey); }
 });
+
+// Ok tuşlarıyla seçili (kilitsiz) elementleri taşı — normal 1px, Shift ile 10px.
+function oklaTasi(tus, buyukAdim) {
+    const secElemanlar = [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+    if (!secElemanlar.length) return;
+    gecmiseKaydet();
+    const adim = buyukAdim ? 10 : 1;
+    secElemanlar.forEach(el => {
+        if (tus === 'ArrowUp') el.y = Math.max(0, el.y - adim);
+        else if (tus === 'ArrowDown') el.y = Math.min(tuvalH - el.h, el.y + adim);
+        else if (tus === 'ArrowLeft') el.x = Math.max(0, el.x - adim);
+        else if (tus === 'ArrowRight') el.x = Math.min(tuvalW - el.w, el.x + adim);
+    });
+    render();
+}
 
 // ---------- Bağlam (sağ tık) menüleri ----------
 function baglamMenuKapat() {
@@ -1488,6 +1783,7 @@ function tuvalBaglamMenusu(e) {
         { etiket: '+ Çizgi Ekle', aksiyon: () => cizgiEkle(tuvalX, tuvalY) },
         { etiket: '+ Resim Ekle', aksiyon: () => resimEkle(tuvalX, tuvalY) },
         { etiket: '🧩 İkon Ekle', aksiyon: () => { ikonEklemeKonumu = { x: tuvalX, y: tuvalY }; ikonAc('yeni'); } },
+        { etiket: '🚦 Durum Göstergesi Ekle', aksiyon: () => durumEkle(tuvalX, tuvalY) },
         { ayrac: true },
     ];
     if (pano.length) maddeler.push({ etiket: '📋 Yapıştır (Ctrl+V)', aksiyon: yapistir });
@@ -1559,6 +1855,7 @@ function guncellePanel() {
     document.getElementById('ozAlanSekil').classList.toggle('gorunur', el.type === 'sekil');
     document.getElementById('ozAlanResim').classList.toggle('gorunur', el.type === 'resim');
     document.getElementById('ozAlanCizgi').classList.toggle('gorunur', el.type === 'cizgi');
+    document.getElementById('ozAlanDurum').classList.toggle('gorunur', el.type === 'durum');
 
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
@@ -1583,7 +1880,19 @@ function guncellePanel() {
         document.getElementById('ozKapaliDeger').value = el.kapali_deger;
         document.getElementById('ozRenkAcik').value = el.renk_acik;
         document.getElementById('ozRenkKapali').value = el.renk_kapali;
+        document.getElementById('ozButonResimAcik').value = el.resim_url_acik || '';
+        document.getElementById('ozButonResimKapali').value = el.resim_url_kapali || '';
         document.getElementById('ozOnizlemeDurum').value = el._onizleme || 'kapali';
+        const hedefSecim = document.getElementById('ozHedefSayfa');
+        hedefSecim.innerHTML = '';
+        cihazSayfalari.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.ad;
+            opt.textContent = s.ad;
+            hedefSecim.appendChild(opt);
+        });
+        hedefSecim.value = el.hedef_sayfa || '';
+        butonModuGuncelle();
     } else if (el.type === 'sekil') {
         document.getElementById('ozSekilDolgu').value = el.sekil_dolgu || '#2e9ed9';
         document.getElementById('ozSekilKenarlik').value = el.sekil_kenarlik || '#1f7bb0';
@@ -1605,9 +1914,124 @@ function guncellePanel() {
         document.getElementById('ozResimKoseSolAlt').value = el.resim_kose_solalt || 0;
         document.getElementById('ozResimKoseSagAlt').value = el.resim_kose_sagalt || 0;
         document.getElementById('ozResimYukleDurum').textContent = '';
+    } else if (el.type === 'durum') {
+        document.getElementById('ozDurumTag').value = el.tag_id || '';
+        document.getElementById('ozDurumModu').value = el.durum_modu || 'metin';
+        document.getElementById('ozDurumSayisi').value = (el.durumlar || []).length || 2;
+        durumSatirlariCiz();
     }
 
     document.getElementById('ozCustomCss').value = el.custom_css || '';
+}
+
+// ---------- Durum Göstergesi: dinamik durum satırları ----------
+function durumSatirlariCiz() {
+    const el = bul(seciliId);
+    if (!el || el.type !== 'durum') return;
+    const modu = document.getElementById('ozDurumModu').value;
+    const durumlar = el.durumlar || [];
+    const kapsayici = document.getElementById('ozDurumSatirlari');
+    kapsayici.innerHTML = '';
+    const onizlemeSecim = document.getElementById('ozDurumOnizleme');
+    onizlemeSecim.innerHTML = '';
+
+    durumlar.forEach((d, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `Durum ${i} (değer=${d.deger})`;
+        onizlemeSecim.appendChild(opt);
+
+        const satir = document.createElement('div');
+        satir.className = 'durum-satir';
+        satir.dataset.idx = i;
+        satir.innerHTML = `
+            <div class="durum-satir-baslik">Durum ${i}</div>
+            <label>Tag Değeri (bu değere eşitse bu durum aktif olur)</label>
+            <input type="text" class="durum-deger" value="${(d.deger ?? '').toString().replace(/"/g, '&quot;')}">
+            ${modu === 'resim' ? `
+                <label>Resim URL</label>
+                <input type="text" class="durum-resim-url" value="${(d.resim_url || '').replace(/"/g, '&quot;')}" placeholder="https://...">
+                <input type="file" class="durum-resim-dosya" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
+            ` : `
+                <label>Metin</label>
+                <input type="text" class="durum-metin" value="${(d.metin || '').replace(/"/g, '&quot;')}">
+                <label>Arka Plan Rengi</label>
+                <input type="color" class="durum-renk-arkaplan" value="${d.renk_arkaplan || '#333333'}" style="height:34px;">
+                <label>Yazı Rengi</label>
+                <input type="color" class="durum-renk-yazi" value="${d.renk_yazi || '#ffffff'}" style="height:34px;">
+                <label>Font Boyutu</label>
+                <input type="number" class="durum-font" value="${d.font_boyutu || 14}" min="6">
+            `}
+            <label>Boyut (opsiyonel — boşsa elementin kendi boyutu kullanılır)</label>
+            <div style="display:flex;gap:6px;">
+                <input type="number" class="durum-genislik" placeholder="Genişlik" value="${d.genislik || ''}">
+                <input type="number" class="durum-yukseklik" placeholder="Yükseklik" value="${d.yukseklik || ''}">
+            </div>
+        `;
+        kapsayici.appendChild(satir);
+
+        if (modu === 'resim') {
+            const dosyaInput = satir.querySelector('.durum-resim-dosya');
+            const urlInput = satir.querySelector('.durum-resim-url');
+            dosyaInput.addEventListener('change', async (e) => {
+                const dosya = e.target.files[0];
+                if (!dosya) return;
+                const fd = new FormData();
+                fd.append('dosya', dosya);
+                try {
+                    const res = await fetch("{{ url_for('sayfa.medya_yukle', cihaz_id=cihaz.id) }}", { method: 'POST', body: fd });
+                    const data = await res.json();
+                    if (res.ok) urlInput.value = data.url;
+                    else alert(data.error || 'Yükleme hatası');
+                } catch (err) { alert('İstek başarısız'); }
+            });
+        }
+    });
+    onizlemeSecim.value = Math.min(el.durum_onizleme_index || 0, durumlar.length - 1);
+    renkAlanlariniZenginlestir(kapsayici);
+}
+
+function durumSayisiUygula() {
+    const el = bul(seciliId);
+    if (!el || el.type !== 'durum') return;
+    // Önce ekrandaki mevcut satırlardan güncel veriyi topla, sonra sayıyı değiştir
+    // — kullanıcının o ana kadar girdiği değerler kaybolmasın.
+    _durumSatirlariniOku(el);
+    const yeniSayi = Math.max(1, parseInt(document.getElementById('ozDurumSayisi').value) || 2);
+    while (el.durumlar.length < yeniSayi) {
+        el.durumlar.push(yeniDurum(String(el.durumlar.length), 'Durum ' + el.durumlar.length, '#607080', '#ffffff'));
+    }
+    el.durumlar.length = yeniSayi;
+    durumSatirlariCiz();
+}
+
+// Ekrandaki durum satırlarını okuyup el.durumlar'ı günceller (uygula() ve
+// durumSayisiUygula() tarafından paylaşılan yardımcı).
+function _durumSatirlariniOku(el) {
+    const modu = document.getElementById('ozDurumModu').value;
+    const satirlar = [...document.querySelectorAll('#ozDurumSatirlari .durum-satir')];
+    if (!satirlar.length) return;
+    el.durumlar = satirlar.map(satir => {
+        const eskiIdx = parseInt(satir.dataset.idx);
+        const eski = (el.durumlar || [])[eskiIdx] || {};
+        const durum = {
+            deger: satir.querySelector('.durum-deger').value,
+            metin: modu === 'resim' ? (eski.metin || '') : satir.querySelector('.durum-metin').value,
+            renk_arkaplan: modu === 'resim' ? (eski.renk_arkaplan || '#333333') : satir.querySelector('.durum-renk-arkaplan').value,
+            renk_yazi: modu === 'resim' ? (eski.renk_yazi || '#ffffff') : satir.querySelector('.durum-renk-yazi').value,
+            font_boyutu: modu === 'resim' ? (eski.font_boyutu || 14) : (parseInt(satir.querySelector('.durum-font').value) || 14),
+            resim_url: modu === 'resim' ? satir.querySelector('.durum-resim-url').value.trim() : (eski.resim_url || ''),
+            genislik: parseInt(satir.querySelector('.durum-genislik').value) || '',
+            yukseklik: parseInt(satir.querySelector('.durum-yukseklik').value) || '',
+        };
+        return durum;
+    });
+}
+
+function butonModuGuncelle() {
+    const sayfayaGitMi = document.getElementById('ozMod').value === 'sayfaya_git';
+    document.getElementById('ozButonTagAlani').style.display = sayfayaGitMi ? 'none' : 'block';
+    document.getElementById('ozButonSayfaAlani').style.display = sayfayaGitMi ? 'block' : 'none';
 }
 
 function gradientAlanGuncelle() {
@@ -1635,13 +2059,24 @@ function uygula() {
     } else if (el.type === 'cizgi') {
         el.cizgi_renk = document.getElementById('ozCizgiRenk').value;
     } else if (el.type === 'button') {
-        el.tag_id = document.getElementById('ozTag').value ? parseInt(document.getElementById('ozTag').value) : null;
         el.mod = document.getElementById('ozMod').value;
-        el.acik_deger = document.getElementById('ozAcikDeger').value;
-        el.kapali_deger = document.getElementById('ozKapaliDeger').value;
+        if (el.mod === 'sayfaya_git') {
+            el.hedef_sayfa = document.getElementById('ozHedefSayfa').value;
+        } else {
+            el.tag_id = document.getElementById('ozTag').value ? parseInt(document.getElementById('ozTag').value) : null;
+            el.acik_deger = document.getElementById('ozAcikDeger').value;
+            el.kapali_deger = document.getElementById('ozKapaliDeger').value;
+        }
         el.renk_acik = document.getElementById('ozRenkAcik').value;
         el.renk_kapali = document.getElementById('ozRenkKapali').value;
         el._onizleme = document.getElementById('ozOnizlemeDurum').value;
+        el.resim_url_acik = document.getElementById('ozButonResimAcik').value.trim();
+        el.resim_url_kapali = document.getElementById('ozButonResimKapali').value.trim();
+    } else if (el.type === 'durum') {
+        el.tag_id = document.getElementById('ozDurumTag').value ? parseInt(document.getElementById('ozDurumTag').value) : null;
+        el.durum_modu = document.getElementById('ozDurumModu').value;
+        _durumSatirlariniOku(el);
+        el.durum_onizleme_index = parseInt(document.getElementById('ozDurumOnizleme').value) || 0;
     } else if (el.type === 'sekil') {
         el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;
         el.sekil_kenarlik = document.getElementById('ozSekilKenarlik').value;
@@ -1713,8 +2148,14 @@ async function kaydet() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                // BUG FIX: gradient ve sayfa türü/animasyon alanları kaydet()
+                // isteğine hiç eklenmemişti — Sayfa Özellikleri'nde ayarlanıp
+                // tuvalde görünse de kaydedilmiyordu, sayfa yenilenince kaybolurdu.
                 elementler: temiz, tuval_w: tuvalW, tuval_h: tuvalH, arkaplan: arkaplan,
-                arkaplan_resim: arkaplanResim, arkaplan_sigdirma: arkaplanSigdirma
+                arkaplan_resim: arkaplanResim, arkaplan_sigdirma: arkaplanSigdirma,
+                arkaplan_gradient_aktif: arkaplanGradientAktif, arkaplan_gradient_renk1: arkaplanGradientRenk1,
+                arkaplan_gradient_renk2: arkaplanGradientRenk2, arkaplan_gradient_yon: arkaplanGradientYon,
+                sayfa_turu: sayfaTuru, giris_animasyonu: sayfaGirisAnimasyonu
             })
         });
         const data = await res.json();
@@ -1724,6 +2165,7 @@ async function kaydet() {
     }
 }
 
+renkAlanlariniZenginlestir();
 render();
 </script>
 {% endblock %}

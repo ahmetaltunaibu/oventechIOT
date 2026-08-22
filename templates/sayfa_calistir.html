@@ -71,6 +71,35 @@
     .el-resim { position: absolute; overflow: hidden; pointer-events: none; }
     .el-resim img { width: 100%; height: 100%; }
     .el-cizgi { position: absolute; pointer-events: none; }
+    .el-durum { position: absolute; box-sizing: border-box; pointer-events: none; overflow: hidden; }
+    .el-durum img { width: 100%; height: 100%; object-fit: contain; }
+
+    /* Sayfa giriş animasyonları — sadece ilk yüklemede bir kez oynar. */
+    @keyframes girisFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes girisSoldanSaga { from { transform: translateX(-40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes girisSagdanSola { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes girisYukaridanAsagi { from { transform: translateY(-40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes girisAsagidanYukari { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* Popup ekranı — "Sayfaya Git" ile popup türünde bir sayfaya gidilince
+       tam navigasyon yerine bu overlay içinde iframe olarak açılır. */
+    #popup-arkaplan {
+        display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+        z-index: 500; align-items: center; justify-content: center;
+    }
+    #popup-arkaplan.acik { display: flex; }
+    #popup-kutu {
+        position: relative; background: var(--panel); border-radius: 14px; overflow: hidden;
+        width: min(94vw, 480px); height: min(90vh, 900px);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.6); border: 1px solid var(--border);
+    }
+    #popup-kutu iframe { width: 100%; height: 100%; border: none; display: block; }
+    #popup-kapat {
+        position: absolute; top: 8px; right: 8px; z-index: 2;
+        width: 30px; height: 30px; border-radius: 50%; border: none;
+        background: rgba(0,0,0,0.6); color: #fff; font-size: 16px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+    }
 </style>
 {% endblock %}
 {% block content %}
@@ -90,12 +119,22 @@
 
 <div id="cerceve"><div id="tuval"></div></div>
 
+<!-- Popup ekranı (sayfa_turu='popup' hedefine "Sayfaya Git" ile gidilince) -->
+<div id="popup-arkaplan" onclick="if (event.target === this) popupKapat()">
+    <div id="popup-kutu">
+        <button id="popup-kapat" onclick="popupKapat()" aria-label="Kapat">✕</button>
+        <iframe id="popup-iframe" src="about:blank"></iframe>
+    </div>
+</div>
+
 <script>
 const masaustu = {{ masaustu_json | safe }};
 const mobil = {{ mobil_json | safe }};
 const cihazId = {{ cihaz.id }};
+const sayfaBilgileri = {{ sayfa_bilgileri_json | safe }}; // {sayfaAdi: {tur, animasyon}}
 let degerler = {}; // tag_id -> {ad, deger, yazilacak_deger}
 let aktifSayfa = null; // {elementler, tuval_w, tuval_h}
+let ilkCizimYapildiMi = false;
 
 function sayfaSec() {
     // Kullanıcı isteği: masaüstünden mobil düzeni önizlemenin bir yolu
@@ -181,15 +220,68 @@ function tuvalCiz() {
                 const img = document.createElement('img');
                 img.src = el.resim_url;
                 img.style.objectFit = el.resim_sigdirma || 'cover';
+                if (el.resim_konum && el.resim_konum !== 'center') img.style.objectPosition = resimKonumCSS(el.resim_konum);
                 div.appendChild(img);
+            } else if (el.resim_arkaplan_gorunur === false) {
+                div.style.background = 'transparent';
             }
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            tuval.appendChild(div);
+            return;
+        }
+
+        if (el.type === 'durum') {
+            div.className = 'el-durum';
+            div.textContent = '';
+            const dList = el.durumlar || [];
+            const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+            let durum = dList.find(d => String(d.deger) === String(guncelDeger));
+            if (!durum) durum = dList[0];
+            if (durum) {
+                if (el.durum_modu === 'resim') {
+                    if (durum.resim_url) {
+                        const img = document.createElement('img');
+                        img.src = durum.resim_url;
+                        div.appendChild(img);
+                    }
+                } else {
+                    div.style.background = durum.renk_arkaplan || '#333';
+                    div.style.color = durum.renk_yazi || '#fff';
+                    div.style.fontSize = (durum.font_boyutu || 14) + 'px';
+                    div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+                    div.style.fontWeight = '600';
+                    div.textContent = durum.metin || '';
+                }
+                if (durum.genislik) div.style.width = durum.genislik + 'px';
+                if (durum.yukseklik) div.style.height = durum.yukseklik + 'px';
+            }
+            elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             tuval.appendChild(div);
             return;
         }
 
         div.className = 'el-buton';
+        div.textContent = '';
+        div.style.flexDirection = 'column'; div.style.gap = '2px';
         renkGuncelle(div, el);
+        const guncelDegerBtn = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
+        const acikMi = guncelDegerBtn !== null && String(guncelDegerBtn) === String(el.acik_deger);
+        const butonResimUrl = acikMi ? el.resim_url_acik : el.resim_url_kapali;
+        if (butonResimUrl) {
+            const img = document.createElement('img');
+            img.src = butonResimUrl;
+            img.style.cssText = 'max-width:70%;max-height:60%;object-fit:contain;pointer-events:none;';
+            div.appendChild(img);
+        }
+        if (el.label) {
+            const yazi = document.createElement('span');
+            yazi.textContent = el.label;
+            if (butonResimUrl) yazi.style.fontSize = '10px';
+            div.appendChild(yazi);
+        }
+        elemDonusUygula(div, el);
         if (el.custom_css) div.style.cssText += ';' + el.custom_css;
 
         // Basma efekti — dokunmatikte :active her zaman güvenilir tetiklenmediği
@@ -203,7 +295,9 @@ function tuvalCiz() {
         div.addEventListener('touchend', basiliCikar);
         div.addEventListener('touchcancel', basiliCikar);
 
-        if (el.mod === 'momentary') {
+        if (el.mod === 'sayfaya_git') {
+            div.addEventListener('click', () => sayfayaGit(el.hedef_sayfa));
+        } else if (el.mod === 'momentary') {
             div.addEventListener('mousedown', () => yaz(el, el.acik_deger));
             div.addEventListener('touchstart', (e) => { e.preventDefault(); yaz(el, el.acik_deger); });
             div.addEventListener('mouseup', () => yaz(el, el.kapali_deger));
@@ -214,6 +308,60 @@ function tuvalCiz() {
         tuval.appendChild(div);
     });
     olcekle();
+    if (!ilkCizimYapildiMi) {
+        ilkCizimYapildiMi = true;
+        girisAnimasyonuOynat();
+    }
+}
+
+// Döndürme/aynalama — tasarım ekranıyla aynı mantık (universal, tüm tipler).
+function elemDonusUygula(div, el) {
+    if (el.donus || el.ayna_x || el.ayna_y) {
+        div.style.transform = `rotate(${el.donus || 0}deg) scale(${el.ayna_x ? -1 : 1}, ${el.ayna_y ? -1 : 1})`;
+    }
+}
+function resimKonumCSS(konum) {
+    return { left: 'left center', right: 'right center', top: 'center top', bottom: 'center bottom', center: 'center center' }[konum] || 'center center';
+}
+
+// ---------- Sayfa geçişi: normal navigasyon ya da popup ----------
+function sayfayaGit(hedefSayfaAdi) {
+    if (!hedefSayfaAdi) return;
+    const bilgi = sayfaBilgileri[hedefSayfaAdi];
+    if (bilgi && bilgi.tur === 'popup') {
+        popupAc(hedefSayfaAdi, bilgi.animasyon);
+    } else {
+        const gorunum = new URLSearchParams(location.search).get('gorunum');
+        let url = `/cihaz/${cihazId}/sayfa/${encodeURIComponent(hedefSayfaAdi)}`;
+        if (gorunum) url += `?gorunum=${gorunum}`;
+        window.location.href = url;
+    }
+}
+
+const ANIMASYON_KEYFRAME = {
+    'fade': 'girisFade', 'soldan-saga': 'girisSoldanSaga', 'sagdan-sola': 'girisSagdanSola',
+    'yukaridan-asagi': 'girisYukaridanAsagi', 'asagidan-yukari': 'girisAsagidanYukari',
+};
+function girisAnimasyonuOynat() {
+    const anim = ANIMASYON_KEYFRAME[aktifSayfa.giris_animasyonu];
+    if (!anim) return;
+    const tuval = document.getElementById('tuval');
+    tuval.style.animation = `${anim} 0.45s cubic-bezier(0.16,1,0.3,1)`;
+}
+
+function popupAc(sayfaAdi, animasyon) {
+    const gorunum = new URLSearchParams(location.search).get('gorunum');
+    let url = `/cihaz/${cihazId}/sayfa/${encodeURIComponent(sayfaAdi)}?popup=1`;
+    if (gorunum) url += `&gorunum=${gorunum}`;
+    document.getElementById('popup-iframe').src = url;
+    const kutu = document.getElementById('popup-kutu');
+    const anim = ANIMASYON_KEYFRAME[animasyon] || 'girisAsagidanYukari';
+    kutu.style.animation = `${anim} 0.35s cubic-bezier(0.16,1,0.3,1)`;
+    document.getElementById('popup-arkaplan').classList.add('acik');
+}
+function popupKapat() {
+    document.getElementById('popup-arkaplan').classList.remove('acik');
+    document.getElementById('popup-iframe').src = 'about:blank';
 }
 
 function koseCSS(el, on) {
@@ -275,6 +423,13 @@ async function degerleriYenile() {
         degerler = await res.json();
         tuvalCiz();
     } catch (e) { /* bağlantı sorunu — sessiz geç */ }
+}
+
+// Bu sayfa bir popup içinde (iframe) açıldıysa dış navigasyon çubuğunu
+// gizle — küçük overlay içinde tekrar tam bir üst bar göstermeye gerek yok.
+if (new URLSearchParams(location.search).get('popup') === '1') {
+    const nav = document.getElementById('sayfa-nav');
+    if (nav) nav.style.display = 'none';
 }
 
 sayfaSec();

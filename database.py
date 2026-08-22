@@ -183,6 +183,16 @@ def init_db():
     if sayfa_kolonlari and 'sablon_kaynak_sayfa_ad' not in sayfa_kolonlari:
         cursor.execute("ALTER TABLE sayfalar ADD COLUMN sablon_kaynak_sayfa_ad TEXT")
 
+    # Migration: sayfa TÜRÜ (normal | popup — popup sayfalar başka bir
+    # sayfadan "Sayfaya Git" butonuyla açılınca tam navigasyon yerine
+    # üzerinde açılan bir kutu/overlay olarak gösterilir) ve GİRİŞ
+    # ANİMASYONU (sayfa açılırken oynatılan kayma/solma efekti).
+    sayfa_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(sayfalar)").fetchall()}
+    if sayfa_kolonlari and 'sayfa_turu' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN sayfa_turu TEXT NOT NULL DEFAULT 'normal'")
+    if sayfa_kolonlari and 'giris_animasyonu' not in sayfa_kolonlari:
+        cursor.execute("ALTER TABLE sayfalar ADD COLUMN giris_animasyonu TEXT NOT NULL DEFAULT 'none'")
+
     # Resim elementi icin yuklenen dosyalar — DB icinde BLOB olarak saklanir
     # (Render'in diski deploy'da sifirlaniyor, ama tum .db zaten yedekleniyor
     # — boylece yuklenen resimler de yedekle birlikte tasinir).
@@ -585,7 +595,8 @@ def sayfa_kaydet(cihaz_id: int, ad: str, elementler: list, hedef: str = 'masaust
                   tuval_w: int = None, tuval_h: int = None, arkaplan: str = None,
                   arkaplan_resim: str = None, arkaplan_sigdirma: str = None,
                   arkaplan_gradient_aktif: bool = None, arkaplan_gradient_renk1: str = None,
-                  arkaplan_gradient_renk2: str = None, arkaplan_gradient_yon: str = None):
+                  arkaplan_gradient_renk2: str = None, arkaplan_gradient_yon: str = None,
+                  sayfa_turu: str = None, giris_animasyonu: str = None):
     varsayilan_w = 1280 if hedef == 'masaustu' else 420
     varsayilan_h = 800 if hedef == 'masaustu' else 860
     conn = get_db()
@@ -593,8 +604,8 @@ def sayfa_kaydet(cihaz_id: int, ad: str, elementler: list, hedef: str = 'masaust
         conn.execute('''
             INSERT INTO sayfalar (cihaz_id, ad, hedef, tuval_w, tuval_h, arkaplan, arkaplan_resim, arkaplan_sigdirma,
                                    arkaplan_gradient_aktif, arkaplan_gradient_renk1, arkaplan_gradient_renk2, arkaplan_gradient_yon,
-                                   elementler, guncelleme_zamani)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+3 hours'))
+                                   sayfa_turu, giris_animasyonu, elementler, guncelleme_zamani)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+3 hours'))
             ON CONFLICT(cihaz_id, ad, hedef) DO UPDATE SET
                 elementler = excluded.elementler,
                 tuval_w = excluded.tuval_w,
@@ -606,11 +617,14 @@ def sayfa_kaydet(cihaz_id: int, ad: str, elementler: list, hedef: str = 'masaust
                 arkaplan_gradient_renk1 = excluded.arkaplan_gradient_renk1,
                 arkaplan_gradient_renk2 = excluded.arkaplan_gradient_renk2,
                 arkaplan_gradient_yon = excluded.arkaplan_gradient_yon,
+                sayfa_turu = excluded.sayfa_turu,
+                giris_animasyonu = excluded.giris_animasyonu,
                 guncelleme_zamani = datetime('now', '+3 hours')
         ''', (cihaz_id, ad.strip(), hedef, tuval_w or varsayilan_w, tuval_h or varsayilan_h,
               arkaplan or '#1e2d3d', (arkaplan_resim or None), arkaplan_sigdirma or 'cover',
               1 if arkaplan_gradient_aktif else 0, arkaplan_gradient_renk1 or '#1e2d3d',
               arkaplan_gradient_renk2 or '#0f1720', arkaplan_gradient_yon or 'to bottom',
+              sayfa_turu or 'normal', giris_animasyonu or 'none',
               json.dumps(elementler, ensure_ascii=False)))
         conn.commit()
         return True
@@ -676,6 +690,23 @@ def cihaz_sayfalari(cihaz_id: int):
         conn.close()
 
 
+def cihaz_sayfa_bilgileri(cihaz_id: int):
+    """Bir cihazın TÜM sayfaları için {ad: {tur, animasyon}} döner —
+    runtime'da 'Sayfaya Git' butonu tıklanınca hedef sayfa 'popup' türündeyse
+    tam navigasyon yerine üstte açılan bir kutu (overlay) olarak gösterilir;
+    ekstra bir istek atmadan bunu bilebilmek için tüm sayfa tipleri tek
+    seferde bu şekilde runtime'a gömülür."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            'SELECT ad, sayfa_turu, giris_animasyonu FROM sayfalar WHERE cihaz_id = ? GROUP BY ad',
+            (cihaz_id,)
+        ).fetchall()
+        return {r['ad']: {'tur': r['sayfa_turu'] or 'normal', 'animasyon': r['giris_animasyonu'] or 'none'} for r in rows}
+    finally:
+        conn.close()
+
+
 def demo_veri_olustur():
     """Uygulama her başlatıldığında (app.py -> init_db() sonrası) çağrılır.
     Render'ın diski her deploy'da sıfırlanıyor, .db dosyası da onunla
@@ -731,6 +762,156 @@ def demo_veri_olustur():
         },
     ]
     sayfa_kaydet(cihaz_id, 'Ana Sayfa', elementler, hedef='masaustu', tuval_w=1280, tuval_h=800, arkaplan='#1e2d3d')
+
+    # Kullanıcı isteği: gemba'daki mobil giriş ekranının alt navbar + "+"
+    # hızlı-erişim (speed dial) düzeninden esinlenerek, oventechIOT'un kendi
+    # renk paletiyle (koyu lacivert + mavi accent) yeniden üretilmiş, hazır
+    # bir MOBİL navigasyon şablonu. Ayrı bir "Şablon" sayfası olarak
+    # eklenir (kaynak — burada düzenlenebilir) VE Ana Sayfa'nın mobil
+    # düzenine de "Şablon Uygula" yapılmış GİBİ (kilitli, sablon_kaynagi
+    # işaretli) varsayılan olarak YANSITILIR — kullanıcı elle uygulamadan
+    # da örnek kullanımı görsün. Web (masaüstü) için şimdilik eklenmiyor.
+    # Şablon sayfasının KENDİSİ (sadece orada görünür, başka sayfalara
+    # yansıtılmaz) — ne olduğu tek bakışta anlaşılsın diye başlık, açıklama
+    # ve bir örnek içerik kartı ile "profesyonel" bir mockup gibi sunulur.
+    sablon_vitrin_elementleri = [
+        {
+            'id': 'el_sablon_baslik', 'type': 'label',
+            'x': 20, 'y': 28, 'w': 380, 'h': 30,
+            'label': '📱 Mobil Navigasyon Şablonu', 'tag_id': None, 'renk_yazi': '#e8eef4',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 18, 'custom_css': 'font-weight:700;'
+        },
+        {
+            'id': 'el_sablon_aciklama', 'type': 'label',
+            'x': 20, 'y': 62, 'w': 380, 'h': 50,
+            'label': 'Sağ tık > Şablon Uygula ile diğer sayfalarına ekleyebilirsin. Kaynağı burada düzenle, "🔄 Güncelle" ile her yerde tazele.',
+            'tag_id': None, 'renk_yazi': '#8aa0b3', 'renk_arkaplan': 'transparent', 'font_boyutu': 12,
+            'custom_css': 'white-space:normal;line-height:1.4;'
+        },
+        {
+            'id': 'el_sablon_kart', 'type': 'sekil',
+            'x': 20, 'y': 128, 'w': 380, 'h': 220,
+            'sekil_dolgu': '#17222e', 'sekil_kenarlik': '#2a3b4c', 'sekil_kenarlik_kalinlik': 1,
+            'sekil_kose_solust': 14, 'sekil_kose_sagust': 14, 'sekil_kose_solalt': 14, 'sekil_kose_sagalt': 14,
+            'sekil_gradient_aktif': False, 'sekil_gradient_renk1': '#2e9ed9', 'sekil_gradient_renk2': '#8e44ad',
+            'sekil_gradient_yon': 'to right', 'custom_css': ''
+        },
+        {
+            'id': 'el_sablon_kart_ikon', 'type': 'label',
+            'x': 20, 'y': 168, 'w': 380, 'h': 60,
+            'label': '🧩', 'tag_id': None, 'renk_yazi': '#2e9ed9',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 42, 'custom_css': ''
+        },
+        {
+            'id': 'el_sablon_kart_yazi', 'type': 'label',
+            'x': 40, 'y': 260, 'w': 340, 'h': 60,
+            'label': 'Sayfa içeriğin burada yer alır — bu kart sadece yer tutucudur',
+            'tag_id': None, 'renk_yazi': '#8aa0b3', 'renk_arkaplan': 'transparent', 'font_boyutu': 12,
+            'custom_css': 'white-space:normal;line-height:1.4;text-align:center;'
+        },
+    ]
+    navbar_sablon_elementleri = sablon_vitrin_elementleri + _mobil_navbar_sablonu()
+    sayfa_kaydet(cihaz_id, 'Şablon - Alt Menü', navbar_sablon_elementleri, hedef='mobil',
+                 tuval_w=420, tuval_h=860, arkaplan='#0f1720')
+
+    navbar_yansitilan = _mobil_navbar_sablonu(
+        sablon_kaynagi=f'{cihaz_id}:Şablon - Alt Menü', kilitli=True
+    )
+    ana_sayfa_mobil_elementleri = [
+        {
+            'id': 'el_demo_mobil_baslik', 'type': 'label',
+            'x': 20, 'y': 24, 'w': 380, 'h': 36,
+            'label': 'Demo Fırın', 'tag_id': None, 'renk_yazi': '#e8eef4',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 20, 'custom_css': 'font-weight:700;'
+        },
+        {
+            'id': 'el_demo_mobil_buton', 'type': 'button',
+            'x': 20, 'y': 80, 'w': 160, 'h': 52,
+            'label': 'Isıtıcı', 'tag_id': isitici_tag_id, 'mod': 'toggle',
+            'acik_deger': '1', 'kapali_deger': '0',
+            'renk_acik': '#2ecc71', 'renk_kapali': '#e74c3c', 'renk_yazi': '#ffffff', 'custom_css': ''
+        },
+    ] + navbar_yansitilan
+    sayfa_kaydet(cihaz_id, 'Ana Sayfa', ana_sayfa_mobil_elementleri, hedef='mobil',
+                 tuval_w=420, tuval_h=860, arkaplan='#1e2d3d')
+
+
+def _mobil_navbar_sablonu(sablon_kaynagi: str = None, kilitli: bool = False):
+    """gemba projesindeki mobil alt-navbar + '+' speed-dial FAB düzeninden
+    esinlenilmiş, oventechIOT'un kendi (koyu lacivert #17222e/#0f1720 +
+    mavi accent #2e9ed9) paletiyle yeniden üretilmiş hazır mobil
+    navigasyon elementleri. sablon_kaynagi/kilitli verilirse (bir sayfaya
+    'Şablon Uygula' ile yansıtılmış gibi) o alanlar da eklenir; verilmezse
+    şablonun KENDİ (kaynak, düzenlenebilir) hâli döner."""
+    def _id():
+        return 'el_' + secrets.token_hex(4)
+
+    ekstra = {}
+    if sablon_kaynagi:
+        ekstra['sablon_kaynagi'] = sablon_kaynagi
+    if kilitli:
+        ekstra['kilitli'] = True
+
+    def _sekil(**kw):
+        d = {
+            'id': _id(), 'type': 'sekil',
+            'sekil_kenarlik': 'transparent', 'sekil_kenarlik_kalinlik': 0,
+            'sekil_kose_solust': 0, 'sekil_kose_sagust': 0, 'sekil_kose_solalt': 0, 'sekil_kose_sagalt': 0,
+            'sekil_gradient_aktif': False, 'sekil_gradient_renk1': '#2e9ed9', 'sekil_gradient_renk2': '#1f7bb0',
+            'sekil_gradient_yon': 'to bottom', 'custom_css': '',
+        }
+        d.update(kw)
+        d.update(ekstra)
+        return d
+
+    def _label(**kw):
+        d = {
+            'id': _id(), 'type': 'label', 'tag_id': None,
+            'renk_arkaplan': 'transparent', 'custom_css': '',
+        }
+        d.update(kw)
+        d.update(ekstra)
+        return d
+
+    return [
+        # Alt navbar zemini — üst köşeleri yuvarlak, gradient koyu lacivert.
+        _sekil(
+            x=0, y=796, w=420, h=64,
+            sekil_dolgu='#17222e', sekil_kenarlik='#2a3b4c', sekil_kenarlik_kalinlik=1,
+            sekil_kose_solust=20, sekil_kose_sagust=20,
+            sekil_gradient_aktif=True, sekil_gradient_renk1='#1e2d3d', sekil_gradient_renk2='#0f1720',
+            sekil_gradient_yon='to bottom',
+            custom_css='box-shadow: 0 -4px 20px rgba(0,0,0,0.35);',
+        ),
+        # "Ana Sayfa" sekmesinin aktif olduğunu gösteren yarı saydam pill —
+        # gemba'daki `.bottom-nav-item.active .icon` vurgusunun karşılığı.
+        # Etiketten ÖNCE eklenir ki katman sırasında ARKADA kalsın.
+        _sekil(
+            x=16, y=800, w=80, h=30,
+            sekil_dolgu='#2e9ed933', sekil_kenarlik='transparent', sekil_kenarlik_kalinlik=0,
+            sekil_kose_solust=15, sekil_kose_sagust=15, sekil_kose_solalt=15, sekil_kose_sagalt=15,
+        ),
+        # 4 navbar sekmesi (ikon üstte, metin altta) — ilki (Ana Sayfa) aktif renkte.
+        _label(x=8, y=806, w=96, h=46, label='🏠\nAna Sayfa', renk_yazi='#ffffff', font_boyutu=11,
+               custom_css='white-space:pre-line;line-height:1.5;font-weight:700;'),
+        _label(x=112, y=806, w=96, h=46, label='🔥\nFırınlar', renk_yazi='#cfd8e3', font_boyutu=11,
+               custom_css='white-space:pre-line;line-height:1.5;font-weight:600;'),
+        _label(x=216, y=806, w=96, h=46, label='📊\nVeriler', renk_yazi='#cfd8e3', font_boyutu=11,
+               custom_css='white-space:pre-line;line-height:1.5;font-weight:600;'),
+        _label(x=320, y=806, w=92, h=46, label='⚙️\nAyarlar', renk_yazi='#cfd8e3', font_boyutu=11,
+               custom_css='white-space:pre-line;line-height:1.5;font-weight:600;'),
+        # "+" hızlı-erişim (speed dial) FAB — navbar'ın üzerinde yüzen daire.
+        _sekil(
+            x=348, y=726, w=56, h=56,
+            sekil_dolgu='#2e9ed9', sekil_kenarlik='#1f7bb0', sekil_kenarlik_kalinlik=0,
+            sekil_kose_solust=28, sekil_kose_sagust=28, sekil_kose_solalt=28, sekil_kose_sagalt=28,
+            sekil_gradient_aktif=True, sekil_gradient_renk1='#2e9ed9', sekil_gradient_renk2='#1f7bb0',
+            sekil_gradient_yon='to bottom',
+            custom_css='box-shadow: 0 6px 16px rgba(0,0,0,0.4);',
+        ),
+        _label(x=348, y=726, w=56, h=56, label='+', renk_yazi='#ffffff', font_boyutu=30,
+               custom_css='font-weight:700;'),
+    ]
 
 
 def proje_tum_sayfalari(proje_id: int):

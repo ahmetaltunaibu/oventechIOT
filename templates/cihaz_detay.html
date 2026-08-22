@@ -50,8 +50,17 @@
                     <label>Veri Tipi</label>
                     <select name="veri_tipi" style="margin-bottom:0;">
                         <option value="bool" {% if t.veri_tipi == 'bool' %}selected{% endif %}>bool</option>
+                        <option value="byte" {% if t.veri_tipi == 'byte' %}selected{% endif %}>byte</option>
+                        <option value="sint" {% if t.veri_tipi == 'sint' %}selected{% endif %}>sint</option>
+                        <option value="usint" {% if t.veri_tipi == 'usint' %}selected{% endif %}>usint</option>
                         <option value="int" {% if t.veri_tipi == 'int' %}selected{% endif %}>int</option>
-                        <option value="float" {% if t.veri_tipi == 'float' %}selected{% endif %}>float</option>
+                        <option value="uint" {% if t.veri_tipi == 'uint' %}selected{% endif %}>uint</option>
+                        <option value="dint" {% if t.veri_tipi == 'dint' %}selected{% endif %}>dint</option>
+                        <option value="udint" {% if t.veri_tipi == 'udint' %}selected{% endif %}>udint</option>
+                        <option value="word" {% if t.veri_tipi == 'word' %}selected{% endif %}>word</option>
+                        <option value="dword" {% if t.veri_tipi == 'dword' %}selected{% endif %}>dword</option>
+                        <option value="float" {% if t.veri_tipi == 'float' %}selected{% endif %}>float (real)</option>
+                        <option value="string" {% if t.veri_tipi == 'string' %}selected{% endif %}>string</option>
                     </select>
                 </div>
                 <div>
@@ -94,8 +103,17 @@
         <label>Veri Tipi</label>
         <select name="veri_tipi">
             <option value="bool">bool (açık/kapalı)</option>
+            <option value="byte">byte</option>
+            <option value="sint">sint</option>
+            <option value="usint">usint</option>
             <option value="int">int (tam sayı)</option>
-            <option value="float">float (ondalık)</option>
+            <option value="uint">uint</option>
+            <option value="dint">dint</option>
+            <option value="udint">udint</option>
+            <option value="word">word</option>
+            <option value="dword">dword</option>
+            <option value="float">float / real (ondalık)</option>
+            <option value="string">string</option>
         </select>
         <label>Erişim</label>
         <select name="erisim">

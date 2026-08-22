@@ -117,6 +117,8 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
         arkaplan_gradient_renk1=sayfa.get('arkaplan_gradient_renk1') or '#1e2d3d',
         arkaplan_gradient_renk2=sayfa.get('arkaplan_gradient_renk2') or '#0f1720',
         arkaplan_gradient_yon=sayfa.get('arkaplan_gradient_yon') or 'to bottom',
+        sayfa_turu=sayfa.get('sayfa_turu') or 'normal',
+        giris_animasyonu=sayfa.get('giris_animasyonu') or 'none',
         elementler_json=json.dumps(sayfa['elementler'], ensure_ascii=False),
         tagler_json=json.dumps(tagler, ensure_ascii=False),
     )
@@ -138,7 +140,8 @@ def sayfa_kopyala(cihaz_id, sayfa_ad, hedef):
                                arkaplan_gradient_aktif=diger.get('arkaplan_gradient_aktif'),
                                arkaplan_gradient_renk1=diger.get('arkaplan_gradient_renk1'),
                                arkaplan_gradient_renk2=diger.get('arkaplan_gradient_renk2'),
-                               arkaplan_gradient_yon=diger.get('arkaplan_gradient_yon'))
+                               arkaplan_gradient_yon=diger.get('arkaplan_gradient_yon'),
+                               sayfa_turu=diger.get('sayfa_turu'), giris_animasyonu=diger.get('giris_animasyonu'))
         flash('Diğer düzenden kopyalandı — konumları yeni tuvala göre ayarlamayı unutma.', 'success')
     return redirect(url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz_id, sayfa_ad=sayfa_ad, hedef=hedef))
 
@@ -158,7 +161,8 @@ def sayfa_kaydet(cihaz_id, sayfa_ad, hedef):
         arkaplan_gradient_aktif=veri.get('arkaplan_gradient_aktif'),
         arkaplan_gradient_renk1=veri.get('arkaplan_gradient_renk1'),
         arkaplan_gradient_renk2=veri.get('arkaplan_gradient_renk2'),
-        arkaplan_gradient_yon=veri.get('arkaplan_gradient_yon')
+        arkaplan_gradient_yon=veri.get('arkaplan_gradient_yon'),
+        sayfa_turu=veri.get('sayfa_turu'), giris_animasyonu=veri.get('giris_animasyonu')
     )
     return jsonify({'success': True})
 
@@ -188,6 +192,8 @@ def sayfa_calistir(cihaz_id, sayfa_ad):
             'arkaplan_gradient_renk1': s.get('arkaplan_gradient_renk1') or '#1e2d3d',
             'arkaplan_gradient_renk2': s.get('arkaplan_gradient_renk2') or '#0f1720',
             'arkaplan_gradient_yon': s.get('arkaplan_gradient_yon') or 'to bottom',
+            'sayfa_turu': s.get('sayfa_turu') or 'normal',
+            'giris_animasyonu': s.get('giris_animasyonu') or 'none',
         }, ensure_ascii=False)
 
     return render_template(
@@ -195,6 +201,7 @@ def sayfa_calistir(cihaz_id, sayfa_ad):
         cihaz=cihaz, sayfa_ad=sayfa_ad,
         masaustu_json=paket(masaustu), mobil_json=paket(mobil),
         sayfalar=database.cihaz_sayfalari(cihaz_id),
+        sayfa_bilgileri_json=json.dumps(database.cihaz_sayfa_bilgileri(cihaz_id), ensure_ascii=False),
     )
 
 
