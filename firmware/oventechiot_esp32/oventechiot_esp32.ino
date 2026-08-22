@@ -152,7 +152,14 @@ class Led {
 Led ledWifi(PIN_LED_WIFI);
 Led ledSunucu(PIN_LED_SUNUCU);
 Led ledHeartbeat(PIN_LED_HEARTBEAT);
-bool sonSenkronBasariliMi = true;  // ledSunucu/ledHeartbeat'in loop()'ta hangi paterni çizeceğine karar vermek için
+// Kullanıcı raporu: cihaz sunucuda hiç kayıtlı olmasa (404) ya da internet
+// tamamen gitse (HTTP -1) bile LED'ler "her şey yolunda" gösteriyordu.
+// Kök neden: bu bayrak İYİMSER (true) başlıyordu ve SADECE sunucuIleSenkronOl()
+// içindeki HTTP/parse hatalarında false oluyordu — ama tag listesi hiç
+// alınamadıysa o fonksiyon en baştaki guard'da hiçbir şey denemeden sessizce
+// çıkıyor, bayrağı hiç güncellemiyordu. Artık KÖTÜMSER (false) başlıyor —
+// LED'ler ancak GERÇEK bir başarılı senkrondan sonra "iyi" gösterecek.
+bool sonSenkronBasariliMi = false;  // ledSunucu/ledHeartbeat'in loop()'ta hangi paterni çizeceğine karar vermek için
 
 // ================== RS485 YÖN KONTROLÜ ==================
 // ModbusMaster her okuma/yazmadan önce/sonra bu callback'leri çağırır —
@@ -255,7 +262,7 @@ void kurulumPortaliBaslat(bool zorlaSifirla) {
 
 // ================== SUNUCUDAN TAG LİSTESİNİ ÇEK ==================
 bool tagListesiniGetir() {
-  if (cihazKimlik.length() == 0) return false;
+  if (cihazKimlik.length() == 0) { sonSenkronBasariliMi = false; return false; }
 
   HTTPClient http;
   String url = sunucuAdresi + "/esp32/" + cihazKimlik + "/tagler";
@@ -264,6 +271,7 @@ bool tagListesiniGetir() {
   if (kod != 200) {
     Serial.printf("Tag listesi alinamadi, HTTP %d\n", kod);
     http.end();
+    sonSenkronBasariliMi = false;  // sunucuyla gerçek iletişim yok — LED'ler bunu yansıtsın
     return false;
   }
 
@@ -274,6 +282,7 @@ bool tagListesiniGetir() {
   DeserializationError hata = deserializeJson(doc, govde);
   if (hata) {
     Serial.print("JSON parse hatasi (tagler): "); Serial.println(hata.c_str());
+    sonSenkronBasariliMi = false;
     return false;
   }
 
@@ -425,7 +434,10 @@ bool tagYaz(const TagTanimi &tag, const String &degerStr) {
 
 // ================== SUNUCUYLA SENKRON (xchange) ==================
 void sunucuIleSenkronOl() {
-  if (cihazKimlik.length() == 0 || tagSayisi == 0) return;
+  if (cihazKimlik.length() == 0 || tagSayisi == 0) {
+    sonSenkronBasariliMi = false;  // tag listesi yoksa gerçek bir senkron da yok — LED bunu "iyi" saymasın
+    return;
+  }
 
   // 1) PLC'den oku
   JsonDocument gonderilecek;
