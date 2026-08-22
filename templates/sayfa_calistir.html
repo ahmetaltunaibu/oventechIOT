@@ -135,6 +135,12 @@ const sayfaBilgileri = {{ sayfa_bilgileri_json | safe }}; // {sayfaAdi: {tur, an
 let degerler = {}; // tag_id -> {ad, deger, yazilacak_deger}
 let aktifSayfa = null; // {elementler, tuval_w, tuval_h}
 let ilkCizimYapildiMi = false;
+// Grafik elementi için: DB'de geçmiş tutulmuyor (henüz), bu yüzden sayfa
+// açık kaldığı sürece her poll'da (3sn) gelen değerler burada birikiyor.
+// Sayfa kapanıp açılınca sıfırdan başlar — kalıcı geçmiş istenirse ayrı
+// bir backend özelliği (tag_gecmis tablosu) gerekir.
+let grafikGecmisi = {}; // tag_id -> [{deger, zaman}, ...]
+const GRAFIK_MAKS_NOKTA = 100;
 
 function sayfaSec() {
     // Kullanıcı isteği: masaüstünden mobil düzeni önizlemenin bir yolu
@@ -404,6 +410,57 @@ function tuvalCiz() {
             return;
         }
 
+        if (el.type === 'grafik') {
+            div.style.background = el.arkaplan_rengi || '#17222e';
+            div.style.borderRadius = '6px';
+            div.style.boxSizing = 'border-box';
+            div.style.padding = '6px';
+            div.style.overflow = 'hidden';
+            div.textContent = '';
+            const gecmis = (grafikGecmisi[el.tag_id] || []).slice(-(el.nokta_sayisi || 20));
+            const svgNs = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNs, 'svg');
+            svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%');
+            svg.style.display = 'block';
+            const ustBosluk = el.baslik ? 22 : 6;
+            const genislik = el.w - 12, yukseklik = el.h - ustBosluk - 6;
+            if (gecmis.length >= 2) {
+                const degerlerListesi = gecmis.map(g => g.deger);
+                let minV = Math.min(...degerlerListesi), maxV = Math.max(...degerlerListesi);
+                if (minV === maxV) { minV -= 1; maxV += 1; } // duz cizgi olmasin diye kucuk bir aralik ac
+                const puanlar = gecmis.map((g, i) => {
+                    const xOran = i / (gecmis.length - 1);
+                    const yOran = (g.deger - minV) / (maxV - minV);
+                    return `${xOran * genislik},${yukseklik - yOran * yukseklik}`;
+                }).join(' ');
+                const polyline = document.createElementNS(svgNs, 'polyline');
+                polyline.setAttribute('points', puanlar);
+                polyline.setAttribute('fill', 'none');
+                polyline.setAttribute('stroke', el.cizgi_rengi || '#2e9ed9');
+                polyline.setAttribute('stroke-width', '2');
+                polyline.setAttribute('transform', `translate(6,${ustBosluk})`);
+                svg.appendChild(polyline);
+            } else {
+                const yaziEl = document.createElement('div');
+                yaziEl.textContent = 'Veri toplanıyor…';
+                yaziEl.style.cssText = `position:absolute;top:${ustBosluk}px;left:6px;right:6px;bottom:6px;`
+                    + 'display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-secondary);';
+                div.appendChild(yaziEl);
+            }
+            if (el.baslik || gecmis.length) {
+                const baslikEl = document.createElement('div');
+                const guncelDeger = gecmis.length ? gecmis[gecmis.length - 1].deger : null;
+                baslikEl.textContent = (el.baslik ? el.baslik + '  ' : '') + (guncelDeger !== null ? guncelDeger + (el.birim || '') : '');
+                baslikEl.style.cssText = 'position:absolute;top:6px;left:10px;font-size:11px;font-weight:700;color:var(--text-secondary);';
+                div.appendChild(baslikEl);
+            }
+            div.appendChild(svg);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            tuval.appendChild(div);
+            return;
+        }
+
         if (el.type === 'groupbox') {
             div.style.border = `${el.kenarlik_kalinlik || 0}px solid ${el.renk_kenarlik || '#2e9ed9'}`;
             div.style.borderRadius = (el.kose_yaricapi || 0) + 'px';
@@ -583,6 +640,7 @@ async function degerleriYenile() {
         const res = await fetch(`/api/cihaz/${cihazId}/degerler`);
         if (!res.ok) return;
         degerler = await res.json();
+        grafikGecmisineEkle();
         // Kullanıcı bir giriş kutusuna (inputbox/combobox) yazıyor/seçim
         // yapıyorken tam yeniden çizim onu kesip odağı/yazdığını
         // silmesin diye — o an aktif elemansa bu turu atla, bir sonraki
@@ -594,6 +652,17 @@ async function degerleriYenile() {
         }
         tuvalCiz();
     } catch (e) { /* bağlantı sorunu — sessiz geç */ }
+}
+
+function grafikGecmisineEkle() {
+    Object.keys(degerler).forEach(tagId => {
+        const d = degerler[tagId];
+        const sayi = parseFloat(d.deger);
+        if (isNaN(sayi)) return;
+        if (!grafikGecmisi[tagId]) grafikGecmisi[tagId] = [];
+        grafikGecmisi[tagId].push({ deger: sayi, zaman: Date.now() });
+        if (grafikGecmisi[tagId].length > GRAFIK_MAKS_NOKTA) grafikGecmisi[tagId].shift();
+    });
 }
 
 // Bu sayfa bir popup içinde (iframe) açıldıysa dış navigasyon çubuğunu
