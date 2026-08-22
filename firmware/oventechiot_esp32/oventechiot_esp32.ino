@@ -345,11 +345,13 @@ String tagOku(const TagTanimi &tag) {
   }
 
   if (tag.cift_registerli) {
-    // Kullanıcı raporu: tek seferde 2 register okuyunca (readHoldingRegisters(adres,2))
-    // İKİNCİ register her zaman 0x0000 geliyordu (145.5->145.0, 1245.5->1240.00 —
-    // ikisinde de sadece düşük word kayboluyordu). Bu, çoklu-register okumada bir
-    // sorun olduğuna işaret ediyor — bu yüzden iki register'ı AYRI AYRI, tek tek
-    // okuyoruz; daha güvenilir ve sorunu da kesin teşhis ediyor.
+    // İki register AYRI AYRI okunuyor (tek istekte 2 register bazı
+    // PLC/kütüphane kombinasyonlarında güvenilir olmuyordu). Kural (gemba-
+    // iot-gateway/modbus_handler.cpp ile aynı, doğrulanmış): DÜŞÜK word
+    // ÖNCE (adres), YÜKSEK word SONRA (adres+1). Tag'in modbus_adres'i
+    // ÇİFTİN DÜŞÜK word'ünü göstermeli — Delta PLC'lerde float bir D-register
+    // çiftinin genelde İKİNCİ (yüksek) yarısı "görünen" adres olabiliyor,
+    // öyleyse tag'e bir eksiğini gir (bkz. README "Veri tipi ↔ Modbus eşlemesi").
     uint8_t sonuc0 = modbus.readHoldingRegisters(tag.modbusAdres, 1);
     if (sonuc0 != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata (reg0, adres=%u): %s\n", tag.modbusAdres, modbusHataMetni(sonuc0)); return ""; }
     uint16_t reg0 = modbus.getResponseBuffer(0);
@@ -358,29 +360,6 @@ String tagOku(const TagTanimi &tag) {
     if (sonuc1 != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata (reg1, adres=%u): %s\n", tag.modbusAdres + 1, modbusHataMetni(sonuc1)); return ""; }
     uint16_t reg1 = modbus.getResponseBuffer(0);
 
-    // Debug: ham register değerlerini hex olarak yazdır.
-    Serial.printf("    [ham] reg0(adr=%u)=0x%04X reg1(adr=%u)=0x%04X\n",
-      tag.modbusAdres, reg0, tag.modbusAdres + 1, reg1);
-
-    // GEÇİCİ TEŞHİS: adres+1'de (4098) hep 0x0000 çıkıyor — düşük word
-    // farklı bir adreste olabilir (örn. adres-1). Etraftaki 5 adresi tek
-    // seferde tarayıp hangisinin gerçekten değişen/anlamlı bir değer
-    // taşıdığını görelim; bu blok sorun çözülünce kaldırılabilir.
-    Serial.print("    [tarama] ");
-    for (int off = -2; off <= 2; off++) {
-      uint16_t komsuAdres = (uint16_t)(tag.modbusAdres + off);
-      uint8_t s = modbus.readHoldingRegisters(komsuAdres, 1);
-      if (s == modbus.ku8MBSuccess) {
-        Serial.printf("adr%+d(%u)=0x%04X  ", off, komsuAdres, modbus.getResponseBuffer(0));
-      } else {
-        Serial.printf("adr%+d(%u)=HATA  ", off, komsuAdres);
-      }
-    }
-    Serial.println();
-
-    // gemba-iot-gateway/modbus_handler.cpp'deki (bu PLC ailesinde ÇALIŞAN)
-    // kural: DÜŞÜK word ÖNCE (adres), YÜKSEK word SONRA (adres+1) — benim
-    // ilk varsayımım (yüksek önce) tersiymiş, düzeltildi.
     uint32_t ham = ((uint32_t)reg1 << 16) | reg0;
     if (tip == "float") {
       float f;

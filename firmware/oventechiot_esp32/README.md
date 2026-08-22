@@ -71,6 +71,8 @@ oventechIOT'ta cihazın yönetim sayfasında (cihaz_detay) bir "📡 Firmware" k
 | float | Holding Register (03/16), IEEE754 | 2×16bit (big-endian) |
 | string | — desteklenmiyor | (projene özel; gerekirse ayrıca konuşuruz) |
 
-`tagler.modbus_adres` alanındaki sayı doğrudan register/coil adresi olarak kullanılır.
+`tagler.modbus_adres` alanındaki sayı doğrudan register/coil adresi olarak kullanılır. Float/dint/udint/dword için firmware **DÜŞÜK word'ü `modbus_adres`'te, YÜKSEK word'ü `modbus_adres+1`'de** okur/yazar.
+
+⚠️ **Delta PLC'lerde gerçek deneyimle görüldü:** WPLSoft/ISPSoft'ta bir float değişkeni izlerken görünen "tek" register numarası bazen çiftin **yüksek** (ikinci) yarısı oluyor — bu durumda `modbus_adres`'e o görünen numaradan **1 eksiğini** gir (örn. izlemede D4097 görünüyorsa tag'e 4096 yaz). Emin değilsen: yanlış adresle deneyip seri monitördeki `[ham] reg0=... reg1=...` çıktısına bak — biri sürekli `0x0000` geliyorsa muhtemelen bir eksiğini denemen gerekiyor.
 
 <!-- yedekleme boru hattı testi 2026-08-22T18:13:29Z -->
