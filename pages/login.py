@@ -46,6 +46,7 @@ def login_page():
             return redirect(url_for('login.login_page'))
 
         session.clear()
+        session.permanent = True  # PERMANENT_SESSION_LIFETIME'a (8 saat) bağlı, kalıcı bir çerez olsun
         session['kullanici_id']  = kullanici['id']
         session['kullanici_adi'] = kullanici['kullanici_adi']
         session['ad_soyad']      = kullanici['ad_soyad']

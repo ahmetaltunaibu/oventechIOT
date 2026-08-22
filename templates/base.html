@@ -136,6 +136,20 @@
                 navigator.serviceWorker.register('/static/sw.js').catch(() => {});
             });
         }
+
+        // PWA (yüklenmiş uygulama) modunda bilinen bir sorun: kullanıcı bir
+        // formu (örn. giriş) gönderdikten sonra işletim sistemi uygulamayı
+        // arka plana alıp geri getirirse, tarayıcı bazen NAVİGASYON GERÇEKTEN
+        // OLMUŞ olsa bile eski sayfanın "bfcache"teki dondurulmuş görüntüsünü
+        // gösterir — kullanıcıya "hiçbir şey olmadı, hâlâ giriş sayfasındayım"
+        // gibi görünür (oysa sunucu tarafında giriş zaten başarılı olmuştur).
+        // `pageshow`'da `event.persisted` true ise bu durum var demektir —
+        // sayfayı zorla tazeleyip sunucudan GERÇEK güncel hâli getiriyoruz.
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
     </script>
 </body>
 </html>
