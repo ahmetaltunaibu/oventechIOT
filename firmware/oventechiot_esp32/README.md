@@ -44,6 +44,17 @@ Ayarları sıfırlamak (yeni WiFi/sunucu girmek) istersen: açılışta **BOOT**
 - **Alarm mantığı firmware'de YOK** — sunucu her gelen değeri kendisi değerlendirir (bkz. `database.alarm_degerlendir`), böylece tarayıcı kapalı olsa bile alarm oluşur/kaydedilir.
 - Grafik geçmişi de sunucu tarafında en fazla ~20 saniyede bir satır olacak şekilde otomatik seyreltilir — firmware'in bunu bilmesine gerek yok, istediği sıklıkla gönderebilir.
 
+## Durum LED'leri
+
+gemba-iot-gateway ile aynı kart düzeni/pin numaraları kullanılıyor — kırmızı (pin 27, Modbus) bu firmware'e hiç dahil değil, kendi haliyle çalışmaya devam ediyor.
+
+| LED | Pin | Nefes alıyorsa | Hızlı yanıp sönüyorsa |
+|---|---|---|---|
+| 🔵 Mavi | 18 | WiFi bağlı | WiFi bağlı değil / bağlanmaya çalışıyor |
+| 🟡 Sarı | 19 | Sunucuyla son senkron başarılı | Sunucuya ulaşılamıyor / cevap hatalı |
+| 🟢 Yeşil | 21 | Genel sistem sağlıklı (WiFi + sunucu ikisi de OK) | Söner (WiFi ya da sunucu sorunlu) |
+| 🔴 Kırmızı | 27 | — bu firmware'de yönetilmiyor, dokunulmuyor | — |
+
 ## Uzaktan güncelleme (OTA)
 
 oventechIOT'ta cihazın yönetim sayfasında (cihaz_detay) bir "📡 Firmware" kartı var — oradan `.bin` dosyası yüklersin, hedef olarak "Bu Cihaz" ya da "Tüm Cihazlar" seçersin. ESP32 her 10 dakikada bir sunucuya sorar (`GET /esp32/<kimlik>/firmware/kontrol`), yeni sürüm varsa indirip kendini flaslar ve yeniden başlar — kabloya bağlamana gerek yok.

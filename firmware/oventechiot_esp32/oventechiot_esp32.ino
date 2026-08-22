@@ -71,6 +71,13 @@
 #define PIN_RS485_DE_RE   4   // MAX485 DE+RE (yön kontrolü)
 #define PIN_RESET_BUTON   0   // BOOT butonu — açılışta 5sn basılıysa ayarları sıfırlar
 
+// Durum LED'leri — gemba-iot-gateway ile AYNI pin numaraları (aynı kart
+// düzeni). Kırmızı (MODBUS_LED_PIN=27) burada KASITLI OLARAK YOK — o LED
+// zaten doğru çalışıyor, bu firmware ona hiç dokunmuyor.
+#define PIN_LED_WIFI     18   // mavi — WiFi bağlı: nefes alır, değilse hızlı yanıp söner
+#define PIN_LED_SUNUCU   19   // sarı — sunucu senkronu: başarılıysa nefes alır, hata varsa hızlı yanıp söner
+#define PIN_LED_HEARTBEAT 21  // yeşil — genel sistem sağlığı: WiFi+sunucu hepsi OK'sa nefes alır, biri bozuksa söner
+
 #define MODBUS_BAUD    9600   // Delta PLC ile aynı olmalı (RTU portu ayarı)
 #define MODBUS_SLAVE_ID   1   // PLC'nin Modbus slave adresi
 
@@ -100,6 +107,52 @@ TagTanimi tagListesi[MAKS_TAG_SAYISI];
 int tagSayisi = 0;
 unsigned long sonSenkron = 0;
 unsigned long sonTagYenileme = 0;
+
+// ================== DURUM LED'LERİ ==================
+// gemba-iot-gateway/led.cpp ile birebir aynı mantık (nefes alma + yanıp
+// sönme, PWM ile, non-blocking millis()) — sadece Türkçe isimler korunarak
+// tek dosyaya taşındı.
+class Led {
+  public:
+    Led(uint8_t pin) : _pin(pin), _state(false), _lastTime(0),
+                        _breatheZaman(0), _parlaklik(0), _breatheYon(1) {}
+
+    void begin() { ledcAttach(_pin, 5000, 8); }  // 5000 Hz, 8-bit (0-255 parlaklık)
+
+    void on()  { ledcWrite(_pin, 255); _state = true; }
+    void off() { _parlaklik = 0; _breatheYon = 1; ledcWrite(_pin, 0); _state = false; }
+
+    void blink(uint32_t interval) {
+      if (millis() - _lastTime >= interval) {
+        _lastTime = millis();
+        _state = !_state;
+        ledcWrite(_pin, _state ? 255 : 0);
+      }
+    }
+
+    void breathe(uint32_t hiz) {
+      if (millis() - _breatheZaman >= hiz) {
+        _breatheZaman = millis();
+        _parlaklik += _breatheYon * 5;
+        if (_parlaklik >= 255) { _parlaklik = 255; _breatheYon = -1; }
+        if (_parlaklik <= 0)   { _parlaklik = 0;   _breatheYon = 1;  }
+        ledcWrite(_pin, _parlaklik);
+      }
+    }
+
+  private:
+    uint8_t  _pin;
+    bool     _state;
+    uint32_t _lastTime;
+    uint32_t _breatheZaman;
+    int16_t  _parlaklik;
+    int16_t  _breatheYon;
+};
+
+Led ledWifi(PIN_LED_WIFI);
+Led ledSunucu(PIN_LED_SUNUCU);
+Led ledHeartbeat(PIN_LED_HEARTBEAT);
+bool sonSenkronBasariliMi = true;  // ledSunucu/ledHeartbeat'in loop()'ta hangi paterni çizeceğine karar vermek için
 
 // ================== RS485 YÖN KONTROLÜ ==================
 // ModbusMaster her okuma/yazmadan önce/sonra bu callback'leri çağırır —
@@ -367,6 +420,7 @@ void sunucuIleSenkronOl() {
   if (kod != 200) {
     Serial.printf("xchange basarisiz, HTTP %d\n", kod);
     http.end();
+    sonSenkronBasariliMi = false;   // sarı/yeşil LED hata paternine geçer
     return;
   }
 
@@ -376,8 +430,10 @@ void sunucuIleSenkronOl() {
   JsonDocument cevap;
   if (deserializeJson(cevap, cevapStr)) {
     Serial.println("xchange cevabi parse edilemedi");
+    sonSenkronBasariliMi = false;
     return;
   }
+  sonSenkronBasariliMi = true;
 
   // 3) Kullanıcının panelden yazdığı değerleri PLC'ye yaz
   JsonObject yazilacaklar = cevap["yazilacaklar"].as<JsonObject>();
@@ -531,6 +587,10 @@ void setup() {
   digitalWrite(PIN_RS485_DE_RE, LOW);
   pinMode(PIN_RESET_BUTON, INPUT_PULLUP);
 
+  ledWifi.begin();
+  ledSunucu.begin();
+  ledHeartbeat.begin();
+
   // Modbus RTU — Serial2 üzerinden (RX2=16, TX2=17)
   Serial2.begin(MODBUS_BAUD, SERIAL_8N1, PIN_RS485_RX, PIN_RS485_TX);
   modbus.begin(MODBUS_SLAVE_ID, Serial2);
@@ -554,7 +614,15 @@ void setup() {
 }
 
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
+  bool wifiBagliMi = (WiFi.status() == WL_CONNECTED);
+
+  // Durum LED'leri — WiFi bağlı değilken de çalışsın diye erken dönüşten
+  // ÖNCE güncelleniyor. Kırmızı (Modbus, pin 27) buraya hiç dahil değil.
+  if (wifiBagliMi) ledWifi.breathe(25); else ledWifi.blink(100);
+  if (wifiBagliMi && sonSenkronBasariliMi) ledSunucu.breathe(25); else ledSunucu.blink(100);
+  if (wifiBagliMi && sonSenkronBasariliMi) ledHeartbeat.breathe(25); else ledHeartbeat.off();
+
+  if (!wifiBagliMi) {
     Serial.println("WiFi baglantisi koptu, yeniden baglaniliyor...");
     WiFi.reconnect();
     delay(2000);
