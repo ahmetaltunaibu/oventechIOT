@@ -13,7 +13,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-degistir')
 app.config['PERMANENT_SESSION_LIFETIME'] = 28800
 
 database.init_db()
-database.demo_veri_olustur()
+database.demo_projesini_sil()
 
 app.register_blueprint(login_bp)
 app.register_blueprint(dashboard_bp)
