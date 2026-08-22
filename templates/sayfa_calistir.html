@@ -823,6 +823,20 @@ function tikla(el) {
     yaz(el, acik ? el.kapali_deger : el.acik_deger);
 }
 
+// Kullanıcı raporu: butona/switch'e basınca önce yeşilleniyor, hemen
+// sonra sönüyor, birkaç saniye sonra tekrar doğru haline dönüyordu —
+// "sanki birden fazla komut gönderiyormuşuz gibi". Gerçek sebep: yaz()
+// yerel degerler'i İYİMSER (optimistic) güncelliyordu, ama 3sn'de bir
+// çalışan degerleriYenile() sunucudan gelen (henüz cihaz tarafından
+// UYGULANMAMIŞ, eski) değerle bunun üzerine tamamen YAZIYORDU — bizim az
+// önceki tıklamamızı "geri alıyormuş" gibi görünüyordu, cihaz gerçekten
+// uygulayınca da bir SONRAKİ pollde tekrar doğru hale dönüyordu. Şimdi:
+// bir tag'e yazdıktan sonra kısa bir "koruma süresi" boyunca (sunucu bizim
+// yazdığımızı yansıtana ya da süre dolana kadar) o tag'in yerel değeri
+// poll'larda EZİLMİYOR.
+let sonYazma = {}; // tag_id -> { deger, zaman }
+const YAZMA_KORUMA_MS = 4000;
+
 async function yaz(el, deger) {
     if (!el.tag_id) return;
     try {
@@ -833,6 +847,7 @@ async function yaz(el, deger) {
         });
         if (!degerler[el.tag_id]) degerler[el.tag_id] = {};
         degerler[el.tag_id].deger = deger;
+        sonYazma[el.tag_id] = { deger: String(deger), zaman: Date.now() };
         tuvalCiz();
     } catch (e) { /* sessiz geç, bir sonraki poll düzeltir */ }
 }
@@ -841,7 +856,20 @@ async function degerleriYenile() {
     try {
         const res = await fetch(`/api/cihaz/${cihazId}/degerler`);
         if (!res.ok) return;
-        degerler = await res.json();
+        const yeniDegerler = await res.json();
+        const simdi = Date.now();
+        Object.keys(sonYazma).forEach(tagId => {
+            const kayit = sonYazma[tagId];
+            if (simdi - kayit.zaman > YAZMA_KORUMA_MS) { delete sonYazma[tagId]; return; }
+            if (yeniDegerler[tagId] && String(yeniDegerler[tagId].deger) === kayit.deger) {
+                delete sonYazma[tagId]; // sunucu artık bizim yazdığımızı yansıtıyor, koruma bitti
+                return;
+            }
+            // sunucu henüz yansıtmadı — bizim yazdığımız (optimistic) değeri koru
+            if (yeniDegerler[tagId]) yeniDegerler[tagId].deger = kayit.deger;
+            else yeniDegerler[tagId] = { deger: kayit.deger };
+        });
+        degerler = yeniDegerler;
         grafikGecmisineEkle();
         // Kullanıcı bir giriş kutusuna (inputbox/combobox) yazıyor/seçim
         // yapıyorken tam yeniden çizim onu kesip odağı/yazdığını
