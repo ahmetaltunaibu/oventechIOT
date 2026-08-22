@@ -101,6 +101,10 @@
     .ikon-hucre:hover { background: var(--border); }
     .ikon-hucre img { width: 28px; height: 28px; }
     .ikon-hucre span { font-size: 9px; color: var(--text-secondary); text-align: center; word-break: break-word; }
+    .emoji-hucre {
+        font-size: 20px; text-align: center; padding: 6px 0; border-radius: 6px; cursor: pointer; background: var(--panel2);
+    }
+    .emoji-hucre:hover { background: var(--border); }
     .durum-satir {
         border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
         background: var(--panel2);
@@ -293,6 +297,15 @@
     <button type="button" onclick="ikonKapat()" style="background:var(--panel2);width:100%;margin-top:10px;">Kapat</button>
 </div>
 
+<!-- Emoji secici (Etiket/Metin alanlarina hizli emoji eklemek icin) -->
+<div id="emoji-perde" class="modal-perde" onclick="emojiSeciciKapat()"></div>
+<div id="emoji-modal" class="modal-kutu" style="width:340px;">
+    <h2 style="color:var(--accent);font-size:15px;margin-bottom:10px;">😀 Emoji / Simge Seç</h2>
+    <input type="text" id="emojiArama" placeholder="Ara... (örn. ateş, ev, ayar, ok)" oninput="emojiListesiCiz()">
+    <div id="emoji-grid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;max-height:320px;overflow-y:auto;margin-top:10px;"></div>
+    <button type="button" onclick="emojiSeciciKapat()" style="background:var(--panel2);width:100%;margin-top:10px;">Kapat</button>
+</div>
+
 <!-- Element Ozellikleri modali -->
 <div id="element-ozellik-perde" class="modal-perde" onclick="ozellikKapat()"></div>
 <div id="element-ozellik-modal" class="modal-kutu">
@@ -302,7 +315,10 @@
     </div>
     <div id="ozAlanGenelMetin" class="ozel-alan gorunur">
         <label>Etiket / Metin</label>
-        <input type="text" id="ozLabel">
+        <div style="display:flex;gap:6px;">
+            <input type="text" id="ozLabel" style="flex:1;">
+            <button type="button" onclick="emojiSeciciAc('ozLabel')" title="Emoji/Simge Ekle" style="background:var(--panel2);flex:0 0 42px;padding:0;">😀</button>
+        </div>
     </div>
 
     <div id="ozAlanButon" class="ozel-alan">
@@ -1097,6 +1113,85 @@ function ikonSec(url) {
 }
 function butonIkonAc(hangiDurum) {
     ikonAc(hangiDurum === 'acik' ? 'buton_acik' : 'buton_kapali');
+}
+
+// ---------- Emoji/simge seçici (Etiket/Metin alanlarına hızlı ekleme) ----------
+// Kullanıcı isteği: "🏠📊🔥⚙️ gibi simgeleri metin alanına nereden seçiyoruz"
+// — Windows'un kendi emoji panelini (Win+.) her metin kutusunda zaten
+// kullanabilir, ama sık kullanılacağı için tasarım ekranına da 100+
+// simgelik aranabilir bir seçici eklendi (arama: TR anahtar kelimelerle).
+const EMOJI_LISTESI = [
+    ['🏠','ev anasayfa home'], ['🏭','fabrika endustri'], ['⚙️','ayar dişli gear settings'],
+    ['🔧','anahtar tamir wrench'], ['🔩','somun bulon civata'], ['🛠️','alet takim tools'],
+    ['📊','grafik chart veri'], ['📈','artis trend yukselis'], ['📉','azalis dusus trend'],
+    ['📋','liste pano clipboard'], ['📄','dosya belge document'], ['📁','klasor folder'],
+    ['🗂️','dosya klasor arsiv'], ['💾','kaydet disket save'], ['🔄','yenile refresh donguz'],
+    ['↩️','geri al undo'], ['↪️','ileri al redo'], ['✅','tamam onay check'],
+    ['❌','iptal hata sil close'], ['⚠️','uyari warning dikkat'], ['🚨','alarm acil siren'],
+    ['ℹ️','bilgi info'], ['❓','soru help yardim'], ['❗','unlem dikkat'],
+    ['🔥','ates firin sicak fire'], ['❄️','soguk buz cold'], ['💧','su damla water'],
+    ['🌊','dalga su akis wave'], ['💨','ruzgar hava rüzgar'], ['⚡','elektrik enerji sok'],
+    ['🔌','fis priz plug elektrik'], ['🔋','pil batarya battery'], ['🌡️','termometre sicaklik'],
+    ['🟢','yesil daire on acik yesil'], ['🟡','sari daire uyari'], ['🔴','kirmizi daire off kapali alarm'],
+    ['🟠','turuncu daire'], ['🔵','mavi daire'], ['⚪','beyaz daire'], ['⚫','siyah daire'],
+    ['🔒','kilit kilitli lock'], ['🔓','kilit acik unlock'], ['🔑','anahtar key'],
+    ['🚦','trafik isigi durum'], ['🚧','bariyer bakim yapim'], ['🛑','dur stop'],
+    ['▶️','oynat play baslat'], ['⏸️','duraklat pause'], ['⏹️','durdur stop'],
+    ['⏺️','kayit record'], ['⏭️','ileri next'], ['⏮️','geri previous'],
+    ['⬆️','yukari ok up'], ['⬇️','asagi ok down'], ['⬅️','sol ok left'], ['➡️','sag ok right'],
+    ['↔️','yatay ok'], ['↕️','dikey ok'], ['🔼','yukari uclu ok'], ['🔽','asagi uclu ok'],
+    ['➕','arti plus ekle'], ['➖','eksi minus cikar'], ['✖️','carpi close x'], ['✏️','kalem duzenle edit'],
+    ['🗑️','cop sil delete trash'], ['🔍','buyutec ara search zoom'], ['🔎','buyutec ara arama'],
+    ['📌','pin sabitle'], ['📍','konum pin location'], ['🎯','hedef target'],
+    ['⭐','yildiz star favori'], ['🏆','kupa odul basari'], ['🔔','zil bildirim notification'],
+    ['🔕','sessiz zil kapali'], ['📱','telefon mobil'], ['💻','laptop bilgisayar'],
+    ['🖥️','masaustu bilgisayar monitor'], ['📡','anten sinyal antenna'], ['📶','sinyal wifi'],
+    ['📞','telefon ara'], ['👤','kullanici kisi user'], ['👥','kullanicilar kisiler users'],
+    ['📅','takvim tarih calendar'], ['🗓️','takvim ajanda'], ['⏱️','kronometre timer sure'],
+    ['⏰','alarm saat clock'], ['🕐','saat clock time'], ['🚪','kapi door'],
+    ['🏢','bina ofis building'], ['🚚','kamyon nakliye truck'], ['📦','kutu paket box'],
+    ['🛢️','varil tank yag'], ['⛽','yakit benzin fuel'], ['🌡️','termometre sicaklik olcum'],
+    ['🧪','tup deney test'], ['🧯','yangin sondurucu extinguisher'], ['🩺','olcum sensor'],
+    ['📶','sinyal baglanti'], ['🌐','ag network internet'], ['🔗','baglanti link zincir'],
+    ['🧩','parca modul puzzle'], ['⏳','bekleme kum saati loading'], ['♻️','geri donusum recycle'],
+    ['🆗','tamam ok onay'], ['🆕','yeni new'], ['🆙','yukselt up seviye'],
+    ['💡','ampul lamba idea isik'], ['🔦','el feneri flashlight'], ['🌙','gece mode ay'],
+    ['☀️','gunduz mode gunes'], ['🖨️','yazici printer'], ['📤','gonder cikis export'],
+    ['📥','gelen kutu import'], ['🧭','pusula compass yon'], ['🗺️','harita map'],
+];
+let emojiHedefInputId = 'ozLabel';
+function emojiSeciciAc(hedefInputId) {
+    emojiHedefInputId = hedefInputId;
+    document.getElementById('emojiArama').value = '';
+    emojiListesiCiz();
+    document.getElementById('emoji-perde').style.display = 'block';
+    document.getElementById('emoji-modal').style.display = 'block';
+}
+function emojiSeciciKapat() {
+    document.getElementById('emoji-perde').style.display = 'none';
+    document.getElementById('emoji-modal').style.display = 'none';
+}
+function emojiListesiCiz() {
+    const arama = document.getElementById('emojiArama').value.trim().toLowerCase();
+    const grid = document.getElementById('emoji-grid');
+    grid.innerHTML = '';
+    EMOJI_LISTESI.filter(([em, anahtar]) => !arama || anahtar.includes(arama)).forEach(([em]) => {
+        const hucre = document.createElement('div');
+        hucre.className = 'emoji-hucre';
+        hucre.textContent = em;
+        hucre.addEventListener('click', () => emojiSec(em));
+        grid.appendChild(hucre);
+    });
+}
+function emojiSec(emoji) {
+    const input = document.getElementById(emojiHedefInputId);
+    if (input) {
+        const basi = input.value.slice(0, input.selectionStart ?? input.value.length);
+        const sonu = input.value.slice(input.selectionEnd ?? input.value.length);
+        input.value = basi + emoji + sonu;
+        input.focus();
+    }
+    emojiSeciciKapat();
 }
 
 function cizgiEkle(x, y) {
@@ -2165,7 +2260,8 @@ document.addEventListener('keydown', (e) => {
         || document.getElementById('sayfa-ozellik-modal').style.display === 'block'
         || document.getElementById('sablon-modal').style.display === 'block'
         || document.getElementById('baglanti-modal').style.display === 'block'
-        || document.getElementById('ikon-modal').style.display === 'block';
+        || document.getElementById('ikon-modal').style.display === 'block'
+        || document.getElementById('emoji-modal').style.display === 'block';
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(aktifEtiket) || modalAcikMi) return;
 
     const ctrl = e.ctrlKey || e.metaKey;
