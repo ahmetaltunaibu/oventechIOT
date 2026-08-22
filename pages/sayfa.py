@@ -292,6 +292,27 @@ def api_degerler(cihaz_id):
     return jsonify(database.cihaz_tag_degerleri(cihaz_id))
 
 
+@sayfa_bp.route('/api/cihaz/<int:cihaz_id>/gecmis')
+@login_required
+def api_gecmis(cihaz_id):
+    """Grafik elementi için — birden fazla tag'in geçmiş değerlerini tek
+    seferde döner: {tag_id: [{deger, zaman}, ...]}. ?tagler=1,2,3&limit=100"""
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    tagler_param = request.args.get('tagler', '')
+    try:
+        tag_idler = [int(t) for t in tagler_param.split(',') if t.strip()]
+    except ValueError:
+        return jsonify({'error': 'Geçersiz tagler parametresi'}), 400
+    if not tag_idler:
+        return jsonify({})
+    limit = min(max(request.args.get('limit', 100, type=int), 2), 500)
+    # Bu cihaza ait olmayan tag id'leri sızdırmayalım.
+    cihaz_tag_idleri = {t['id'] for t in database.cihaz_tagleri(cihaz_id)}
+    tag_idler = [t for t in tag_idler if t in cihaz_tag_idleri]
+    return jsonify(database.tagler_deger_gecmisi(tag_idler, limit))
+
+
 @sayfa_bp.route('/api/cihaz/<int:cihaz_id>/tag/<int:tag_id>/yaz', methods=['POST'])
 @login_required
 def api_tag_yaz(cihaz_id, tag_id):

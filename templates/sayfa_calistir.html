@@ -141,16 +141,41 @@
 const masaustu = {{ masaustu_json | safe }};
 const mobil = {{ mobil_json | safe }};
 const cihazId = {{ cihaz.id }};
+const buSayfaAdi = {{ sayfa_ad | tojson }};
 const sayfaBilgileri = {{ sayfa_bilgileri_json | safe }}; // {sayfaAdi: {tur, animasyon}}
 let degerler = {}; // tag_id -> {ad, deger, yazilacak_deger}
 let aktifSayfa = null; // {elementler, tuval_w, tuval_h}
 let ilkCizimYapildiMi = false;
-// Grafik elementi için: DB'de geçmiş tutulmuyor (henüz), bu yüzden sayfa
-// açık kaldığı sürece her poll'da (3sn) gelen değerler burada birikiyor.
-// Sayfa kapanıp açılınca sıfırdan başlar — kalıcı geçmiş istenirse ayrı
-// bir backend özelliği (tag_gecmis tablosu) gerekir.
+// Grafik elementi — gerçek geçmiş sunucudan (tag_deger_gecmis tablosu)
+// çekilir; sayfa açılışında dolduruluyor, sonra her poll'da (3sn) gelen
+// canlı değerlerle uçtan uzatılıyor. Sayfa kapanıp açılsa bile geçmiş kalır.
 let grafikGecmisi = {}; // tag_id -> [{deger, zaman}, ...]
-const GRAFIK_MAKS_NOKTA = 100;
+const GRAFIK_MAKS_NOKTA = 200;
+let grafikGecmisiYuklendiSayfa = null; // hangi sayfa için sunucudan çekildi (tekrar çekmeyelim)
+
+async function grafikGecmisiniYukle() {
+    if (!aktifSayfa || !aktifSayfa.elementler) return;
+    const tagIdSeti = new Set();
+    aktifSayfa.elementler.forEach(el => {
+        if (el.type !== 'grafik') return;
+        (el.seriler || []).forEach(s => { if (s.tag_id) tagIdSeti.add(s.tag_id); });
+    });
+    if (!tagIdSeti.size) return;
+    const anahtar = buSayfaAdi + ':' + [...tagIdSeti].sort().join(',');
+    if (grafikGecmisiYuklendiSayfa === anahtar) return;
+    grafikGecmisiYuklendiSayfa = anahtar;
+    try {
+        const res = await fetch(`/api/cihaz/${cihazId}/gecmis?tagler=${[...tagIdSeti].join(',')}&limit=${GRAFIK_MAKS_NOKTA}`);
+        if (!res.ok) return;
+        const veri = await res.json();
+        Object.keys(veri).forEach(tagId => {
+            grafikGecmisi[tagId] = veri[tagId]
+                .map(r => ({ deger: parseFloat(r.deger), zaman: r.zaman }))
+                .filter(r => !isNaN(r.deger));
+        });
+        tuvalCiz();
+    } catch (e) { /* bağlantı sorunu — canlı polling zaten devam eder */ }
+}
 
 function sayfaSec() {
     // Kullanıcı isteği: masaüstünden mobil düzeni önizlemenin bir yolu
@@ -430,14 +455,24 @@ function tuvalCiz() {
             div.style.padding = '6px';
             div.style.overflow = 'hidden';
             div.textContent = '';
-            const gecmis = (grafikGecmisi[el.tag_id] || []).slice(-(el.nokta_sayisi || 20));
+            // Geriye dönük uyumluluk: eski tek-seri kayıtlarda tag_id/cizgi_rengi
+            // vardı, seriler yoktu — varsa onu tek elemanlı bir seri say.
+            const seriler = (el.seriler && el.seriler.length) ? el.seriler
+                : (el.tag_id ? [{ tag_id: el.tag_id, etiket: el.baslik || '', renk: el.cizgi_rengi || '#2e9ed9' }] : []);
+            const noktaSayisi = el.nokta_sayisi || 20;
+            const ustBosluk = el.baslik ? 22 : 6;
+            const altBosluk = seriler.length > 1 ? 18 : 6;
+            const genislik = el.w - 12, yukseklik = el.h - ustBosluk - altBosluk;
             const svgNs = 'http://www.w3.org/2000/svg';
             const svg = document.createElementNS(svgNs, 'svg');
             svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%');
             svg.style.display = 'block';
-            const ustBosluk = el.baslik ? 22 : 6;
-            const genislik = el.w - 12, yukseklik = el.h - ustBosluk - 6;
-            if (gecmis.length >= 2) {
+
+            let herhangiVeriVar = false;
+            seriler.forEach(s => {
+                const gecmis = (grafikGecmisi[s.tag_id] || []).slice(-noktaSayisi);
+                if (gecmis.length < 2) return;
+                herhangiVeriVar = true;
                 const degerlerListesi = gecmis.map(g => g.deger);
                 let minV = Math.min(...degerlerListesi), maxV = Math.max(...degerlerListesi);
                 if (minV === maxV) { minV -= 1; maxV += 1; } // duz cizgi olmasin diye kucuk bir aralik ac
@@ -449,23 +484,51 @@ function tuvalCiz() {
                 const polyline = document.createElementNS(svgNs, 'polyline');
                 polyline.setAttribute('points', puanlar);
                 polyline.setAttribute('fill', 'none');
-                polyline.setAttribute('stroke', el.cizgi_rengi || '#2e9ed9');
+                polyline.setAttribute('stroke', s.renk || '#2e9ed9');
                 polyline.setAttribute('stroke-width', '2');
+                polyline.setAttribute('stroke-linejoin', 'round');
+                polyline.setAttribute('stroke-linecap', 'round');
                 polyline.setAttribute('transform', `translate(6,${ustBosluk})`);
                 svg.appendChild(polyline);
-            } else {
+            });
+            if (!herhangiVeriVar) {
                 const yaziEl = document.createElement('div');
-                yaziEl.textContent = 'Veri toplanıyor…';
-                yaziEl.style.cssText = `position:absolute;top:${ustBosluk}px;left:6px;right:6px;bottom:6px;`
+                yaziEl.textContent = seriler.length ? 'Veri toplanıyor…' : 'Seri seçilmedi';
+                yaziEl.style.cssText = `position:absolute;top:${ustBosluk}px;left:6px;right:6px;bottom:${altBosluk}px;`
                     + 'display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-secondary);';
                 div.appendChild(yaziEl);
             }
-            if (el.baslik || gecmis.length) {
+            if (el.baslik) {
                 const baslikEl = document.createElement('div');
-                const guncelDeger = gecmis.length ? gecmis[gecmis.length - 1].deger : null;
-                baslikEl.textContent = (el.baslik ? el.baslik + '  ' : '') + (guncelDeger !== null ? guncelDeger + (el.birim || '') : '');
+                baslikEl.textContent = el.baslik;
                 baslikEl.style.cssText = 'position:absolute;top:6px;left:10px;font-size:11px;font-weight:700;color:var(--text-secondary);';
                 div.appendChild(baslikEl);
+            }
+            // Çoklu seri iken alt kısımda küçük bir gösterge (legend): renk +
+            // etiket + o serinin en güncel değeri.
+            if (seriler.length > 1) {
+                const legend = document.createElement('div');
+                legend.style.cssText = 'position:absolute;left:6px;right:6px;bottom:3px;display:flex;'
+                    + 'flex-wrap:wrap;gap:6px;font-size:9px;color:var(--text-secondary);pointer-events:none;';
+                seriler.forEach(s => {
+                    const gecmis = grafikGecmisi[s.tag_id] || [];
+                    const son = gecmis.length ? gecmis[gecmis.length - 1].deger : null;
+                    const item = document.createElement('span');
+                    item.style.cssText = 'display:inline-flex;align-items:center;gap:3px;';
+                    item.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:${s.renk || '#2e9ed9'};display:inline-block;"></span>`
+                        + `${s.etiket || ''}${son !== null ? ' ' + son + (el.birim || '') : ''}`;
+                    legend.appendChild(item);
+                });
+                div.appendChild(legend);
+            } else if (seriler.length === 1) {
+                const gecmis = grafikGecmisi[seriler[0].tag_id] || [];
+                const son = gecmis.length ? gecmis[gecmis.length - 1].deger : null;
+                if (son !== null) {
+                    const sonEl = document.createElement('div');
+                    sonEl.textContent = son + (el.birim || '');
+                    sonEl.style.cssText = 'position:absolute;top:6px;right:10px;font-size:11px;font-weight:700;color:var(--text-secondary);';
+                    div.appendChild(sonEl);
+                }
             }
             div.appendChild(svg);
             elemDonusUygula(div, el);
@@ -737,6 +800,7 @@ if (new URLSearchParams(location.search).get('popup') === '1') {
 
 sayfaSec();
 tuvalCiz();
+grafikGecmisiniYukle();
 degerleriYenile();
 setInterval(degerleriYenile, 3000);
 window.addEventListener('resize', () => { sayfaSec(); tuvalCiz(); });

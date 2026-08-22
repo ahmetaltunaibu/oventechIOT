@@ -17,6 +17,10 @@ import sqlite3
 import hashlib
 import secrets
 import json
+import math
+import random
+import threading
+import time
 from datetime import datetime
 
 DB_NAME = 'oventechiot.db'
@@ -239,6 +243,21 @@ def init_db():
             FROM kullanicilar_eski
         ''')
         cursor.execute('DROP TABLE kullanicilar_eski')
+
+    # Grafik elementi için TAG DEĞER GEÇMİŞİ — kullanıcı isteği: grafik artık
+    # sadece o an açık kalan sekmede biriken anlık değerleri değil, gerçek
+    # geçmiş veriyi göstermeli. Her tag_deger_guncelle() çağrısında (ESP32'den
+    # gelen okuma ya da demo simülatörü) buraya bir satır düşer; eski satırlar
+    # tag başına belli bir sayıda tutulup budanır (sınırsız büyümesin diye).
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tag_deger_gecmis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tag_id INTEGER NOT NULL REFERENCES tagler(id) ON DELETE CASCADE,
+            deger TEXT,
+            zaman TIMESTAMP DEFAULT (datetime('now', '+3 hours'))
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_gecmis_tag_zaman ON tag_deger_gecmis(tag_id, zaman)')
 
     conn.commit()
     conn.close()
@@ -581,17 +600,49 @@ def tag_yaz_iste(tag_id: int, deger):
 
 
 def tag_deger_guncelle(tag_id: int, deger):
-    """ESP32'den gelen okunan değeri kaydeder (xchange sırasında kullanılacak)."""
+    """ESP32'den gelen okunan değeri kaydeder (xchange sırasında kullanılacak).
+    Aynı zamanda grafik elementinin okuyabilmesi için bir geçmiş satırı da
+    ekler (tag_deger_gecmis) — her tag için son GECMIS_MAKS_SATIR satır tutulur."""
     conn = get_db()
     try:
         conn.execute(
             "UPDATE tagler SET deger = ?, deger_zamani = datetime('now', '+3 hours') WHERE id = ?",
             (str(deger), tag_id)
         )
+        conn.execute(
+            "INSERT INTO tag_deger_gecmis (tag_id, deger) VALUES (?, ?)",
+            (tag_id, str(deger))
+        )
+        GECMIS_MAKS_SATIR = 500
+        conn.execute('''
+            DELETE FROM tag_deger_gecmis WHERE tag_id = ? AND id NOT IN (
+                SELECT id FROM tag_deger_gecmis WHERE tag_id = ? ORDER BY id DESC LIMIT ?
+            )
+        ''', (tag_id, tag_id, GECMIS_MAKS_SATIR))
         conn.commit()
         return True
     finally:
         conn.close()
+
+
+def tag_deger_gecmisi(tag_id: int, limit: int = 100):
+    """Bir tag'in en son `limit` geçmiş değerini ESKİDEN YENİYE sıralı döner:
+    [{deger, zaman}, ...] — grafik elementi bunu çizer."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            'SELECT deger, zaman FROM tag_deger_gecmis WHERE tag_id = ? ORDER BY id DESC LIMIT ?',
+            (tag_id, limit)
+        ).fetchall()
+        return [dict(r) for r in reversed(rows)]
+    finally:
+        conn.close()
+
+
+def tagler_deger_gecmisi(tag_idler: list, limit: int = 100):
+    """Birden fazla tag için geçmiş değerleri tek seferde döner:
+    {tag_id: [{deger, zaman}, ...]} — grafik elementinde çoklu seri desteği için."""
+    return {tid: tag_deger_gecmisi(tid, limit) for tid in tag_idler}
 
 
 def cihaz_tag_degerleri(cihaz_id: int):
@@ -732,271 +783,516 @@ def demo_veri_olustur():
     Render'ın diski her deploy'da sıfırlanıyor, .db dosyası da onunla
     birlikte gidiyor — kullanıcı her seferinde elle test projesi/cihaz/
     kullanıcı/sayfa oluşturmak zorunda kalmasın diye örnek bir demo proje
-    otomatik oluşturulur. Zaten varsa (kod='demo') hiçbir şeye dokunmaz,
-    yani var olan gerçek veriler asla ezilmez — bu SADECE eksikse eklenen
-    ayrı bir örnek projedir, gerçek verinin yerine geçmez."""
+    otomatik oluşturulur/tazelenir. Demo verisi gerçek müşteri verisi
+    DEĞİLDİR — bu yüzden her başlangıçta tag'ler + sayfalar (var olsa bile)
+    güncel şablona göre yeniden yazılır (sayfa_kaydet zaten UPSERT), böylece
+    kod içindeki demo tasarımı güncellenince canlıdaki demo da tazelenir."""
     DEMO_SIFRE = '123456'
     mevcut_proje = proje_getir_kod('demo')
     if mevcut_proje:
-        # Proje zaten var — yine de demo kullanıcının şifresini güncel
-        # varsayılana senkron tut (kod içindeki şifre değişse bile canlıda
-        # zaten oluşmuş demo hesabı eski şifrede takılı kalmasın).
+        proje_id = mevcut_proje['id']
         conn = get_db()
         try:
-            conn.execute(
-                'UPDATE kullanicilar SET sifre_hash = ? WHERE kullanici_adi = ?',
-                (_sifre_hashle(DEMO_SIFRE), 'demo')
-            )
+            # Kod içindeki şifre değişse bile canlıda zaten oluşmuş demo
+            # hesabı eski şifrede takılı kalmasın; rol de OPERATÖR'e senkron
+            # tutulur (giriş yapınca doğrudan tam ekran/kart deneyimi).
+            conn.execute('UPDATE kullanicilar SET sifre_hash = ? WHERE kullanici_adi = ?',
+                         (_sifre_hashle(DEMO_SIFRE), 'demo'))
+            conn.execute("UPDATE kullanicilar SET rol = 'operator' WHERE kullanici_adi = ?", ('demo',))
             conn.commit()
         finally:
             conn.close()
-        # '📌 Sabitle' özelliği eklenmeden ÖNCE oluşmuş demo cihazlarda
-        # navbar/FAB elementlerinin sabit_konum alanı hiç yoktu — bu yüzden
-        # canlıda hâlâ kaydırmayla birlikte kayıyorlardı. Var olan demo
-        # sayfalarını burada tek seferlik geriye dönük düzeltiyoruz.
-        _demo_navbar_sabitle_migrasyonu(mevcut_proje['id'])
-        return
+    else:
+        ok, proje_id = proje_ekle('demo', 'Demo Proje (Test / Şablon)')
+        if not ok:
+            return
+        kullanici_ekle(proje_id, 'demo', DEMO_SIFRE, 'Demo Kullanıcı', rol='operator')
 
-    ok, proje_id = proje_ekle('demo', 'Demo Proje (Test / Şablon)')
-    if not ok:
-        return
+    cihazlar = proje_cihazlari(proje_id)
+    cihaz = next((c for c in cihazlar if c['ad'] == 'Demo Fırın'), None)
+    if not cihaz:
+        ok, cihaz_bilgi = cihaz_ekle(proje_id, 'Demo Fırın')
+        if not ok:
+            return
+        cihaz_id = cihaz_bilgi['id']
+    else:
+        cihaz_id = cihaz['id']
 
-    kullanici_ekle(proje_id, 'demo', DEMO_SIFRE, 'Demo Kullanıcı', rol='tasarimci')
+    # Eski (tek sayfalık) demo sürümünden kalan artık sayfayı temizle —
+    # yeni şablon 5 ayrı sayfa kullanıyor, "Şablon - Alt Menü" artık yok.
+    sayfa_sil(cihaz_id, 'Şablon - Alt Menü')
+    if not cihaz or not cihaz.get('baslangic_sayfa'):
+        cihaz_baslangic_sayfa_guncelle(cihaz_id, 'Ana Sayfa')
 
-    ok, cihaz_bilgi = cihaz_ekle(proje_id, 'Demo Fırın')
-    if not ok:
-        return
-    cihaz_id = cihaz_bilgi['id']
-
-    _, isitici_tag_id = tag_ekle(cihaz_id, 'Isıtıcı', '0', 'bool', 'readwrite')
-    tag_ekle(cihaz_id, 'Sıcaklık', '1', 'float', 'read')
-
-    elementler = [
-        {
-            'id': 'el_demo_baslik', 'type': 'label',
-            'x': 40, 'y': 30, 'w': 340, 'h': 40,
-            'label': 'Demo Fırın Kontrol Paneli', 'renk_yazi': '#e8eef4',
-            'renk_arkaplan': 'transparent', 'font_boyutu': 22, 'custom_css': ''
-        },
-        {
-            'id': 'el_demo_panel', 'type': 'sekil',
-            'x': 40, 'y': 90, 'w': 380, 'h': 220,
-            'sekil_dolgu': '#22384d', 'sekil_kenarlik': '#2e9ed9', 'sekil_kenarlik_kalinlik': 2,
-            'sekil_kose_solust': 12, 'sekil_kose_sagust': 12, 'sekil_kose_solalt': 12, 'sekil_kose_sagalt': 12,
-            'sekil_gradient_aktif': False, 'sekil_gradient_renk1': '#2e9ed9', 'sekil_gradient_renk2': '#8e44ad',
-            'sekil_gradient_yon': 'to right', 'custom_css': ''
-        },
-        {
-            'id': 'el_demo_buton', 'type': 'button',
-            'x': 70, 'y': 130, 'w': 140, 'h': 48,
-            'label': 'Isıtıcı', 'tag_id': isitici_tag_id, 'mod': 'toggle',
-            'acik_deger': '1', 'kapali_deger': '0',
-            'renk_acik': '#2ecc71', 'renk_kapali': '#e74c3c', 'renk_yazi': '#ffffff', 'custom_css': ''
-        },
-        {
-            'id': 'el_demo_not', 'type': 'label',
-            'x': 70, 'y': 200, 'w': 300, 'h': 60,
-            'label': "Bu sayfa örnek/şablon olarak eklendi. Sağ tık > Şablon Uygula ile kendi sayfalarına kopyalayabilirsin.",
-            'renk_yazi': '#9fb3c8', 'renk_arkaplan': 'transparent', 'font_boyutu': 13, 'custom_css': ''
-        },
-    ]
-    sayfa_kaydet(cihaz_id, 'Ana Sayfa', elementler, hedef='masaustu', tuval_w=1280, tuval_h=800, arkaplan='#1e2d3d')
-
-    # Kullanıcı isteği: gemba'daki mobil giriş ekranının alt navbar + "+"
-    # hızlı-erişim (speed dial) düzeninden esinlenerek, oventechIOT'un kendi
-    # renk paletiyle (koyu lacivert + mavi accent) yeniden üretilmiş, hazır
-    # bir MOBİL navigasyon şablonu. Ayrı bir "Şablon" sayfası olarak
-    # eklenir (kaynak — burada düzenlenebilir) VE Ana Sayfa'nın mobil
-    # düzenine de "Şablon Uygula" yapılmış GİBİ (kilitli, sablon_kaynagi
-    # işaretli) varsayılan olarak YANSITILIR — kullanıcı elle uygulamadan
-    # da örnek kullanımı görsün. Web (masaüstü) için şimdilik eklenmiyor.
-    # Şablon sayfasının KENDİSİ (sadece orada görünür, başka sayfalara
-    # yansıtılmaz) — ne olduğu tek bakışta anlaşılsın diye başlık, açıklama
-    # ve bir örnek içerik kartı ile "profesyonel" bir mockup gibi sunulur.
-    sablon_vitrin_elementleri = [
-        {
-            'id': 'el_sablon_baslik', 'type': 'label',
-            'x': 20, 'y': 28, 'w': 380, 'h': 30,
-            'label': '📱 Mobil Navigasyon Şablonu', 'tag_id': None, 'renk_yazi': '#e8eef4',
-            'renk_arkaplan': 'transparent', 'font_boyutu': 18, 'custom_css': 'font-weight:700;'
-        },
-        {
-            'id': 'el_sablon_aciklama', 'type': 'label',
-            'x': 20, 'y': 62, 'w': 380, 'h': 50,
-            'label': 'Sağ tık > Şablon Uygula ile diğer sayfalarına ekleyebilirsin. Kaynağı burada düzenle, "🔄 Güncelle" ile her yerde tazele.',
-            'tag_id': None, 'renk_yazi': '#8aa0b3', 'renk_arkaplan': 'transparent', 'font_boyutu': 12,
-            'custom_css': 'white-space:normal;line-height:1.4;'
-        },
-        {
-            'id': 'el_sablon_kart', 'type': 'sekil',
-            'x': 20, 'y': 128, 'w': 380, 'h': 220,
-            'sekil_dolgu': '#17222e', 'sekil_kenarlik': '#2a3b4c', 'sekil_kenarlik_kalinlik': 1,
-            'sekil_kose_solust': 14, 'sekil_kose_sagust': 14, 'sekil_kose_solalt': 14, 'sekil_kose_sagalt': 14,
-            'sekil_gradient_aktif': False, 'sekil_gradient_renk1': '#2e9ed9', 'sekil_gradient_renk2': '#8e44ad',
-            'sekil_gradient_yon': 'to right', 'custom_css': ''
-        },
-        {
-            'id': 'el_sablon_kart_ikon', 'type': 'label',
-            'x': 20, 'y': 168, 'w': 380, 'h': 60,
-            'label': '🧩', 'tag_id': None, 'renk_yazi': '#2e9ed9',
-            'renk_arkaplan': 'transparent', 'font_boyutu': 42, 'custom_css': ''
-        },
-        {
-            'id': 'el_sablon_kart_yazi', 'type': 'label',
-            'x': 40, 'y': 260, 'w': 340, 'h': 60,
-            'label': 'Sayfa içeriğin burada yer alır — bu kart sadece yer tutucudur',
-            'tag_id': None, 'renk_yazi': '#8aa0b3', 'renk_arkaplan': 'transparent', 'font_boyutu': 12,
-            'custom_css': 'white-space:normal;line-height:1.4;text-align:center;'
-        },
-    ]
-    navbar_sablon_elementleri = sablon_vitrin_elementleri + _mobil_navbar_sablonu()
-    sayfa_kaydet(cihaz_id, 'Şablon - Alt Menü', navbar_sablon_elementleri, hedef='mobil',
-                 tuval_w=420, tuval_h=860, arkaplan='#0f1720')
-
-    navbar_yansitilan = _mobil_navbar_sablonu(
-        sablon_kaynagi=f'{cihaz_id}:Şablon - Alt Menü', kilitli=True
-    )
-    ana_sayfa_mobil_elementleri = [
-        {
-            'id': 'el_demo_mobil_baslik', 'type': 'label',
-            'x': 20, 'y': 24, 'w': 380, 'h': 36,
-            'label': 'Demo Fırın', 'tag_id': None, 'renk_yazi': '#e8eef4',
-            'renk_arkaplan': 'transparent', 'font_boyutu': 20, 'custom_css': 'font-weight:700;'
-        },
-        {
-            'id': 'el_demo_mobil_buton', 'type': 'button',
-            'x': 20, 'y': 80, 'w': 160, 'h': 52,
-            'label': 'Isıtıcı', 'tag_id': isitici_tag_id, 'mod': 'toggle',
-            'acik_deger': '1', 'kapali_deger': '0',
-            'renk_acik': '#2ecc71', 'renk_kapali': '#e74c3c', 'renk_yazi': '#ffffff', 'custom_css': ''
-        },
-    ] + navbar_yansitilan
-    sayfa_kaydet(cihaz_id, 'Ana Sayfa', ana_sayfa_mobil_elementleri, hedef='mobil',
-                 tuval_w=420, tuval_h=860, arkaplan='#1e2d3d')
+    tag_idler = _demo_tagleri_olustur(cihaz_id)
+    _demo_sayfalari_olustur(cihaz_id, tag_idler)
+    demo_simulator_baslat()
 
 
-def _demo_navbar_sabitle_migrasyonu(proje_id: int):
-    """Var olan demo projesindeki 'Şablon - Alt Menü' (kaynak) ve 'Ana
-    Sayfa'nın mobil düzenindeki (yansıtılmış) navbar/FAB elementlerine
-    sabit_konum='alt' işaretini geriye dönük ekler. 'Şablon - Alt Menü'
-    sayfasında navbar dışında hiçbir şey yok (vitrin metinleri hariç —
-    onlar 'sablon_kaynagi'/geometri ile ayrılır), 'Ana Sayfa'da ise sadece
-    sablon_kaynagi işaretli (yansıtılmış) elementler navbar'a aittir."""
-    try:
-        cihazlar = proje_cihazlari(proje_id)
-    except Exception:
-        return
-    for c in cihazlar:
-        for sayfa_ad, sadece_sablon_kaynakli in (('Şablon - Alt Menü', False), ('Ana Sayfa', True)):
-            sayfa = sayfa_getir(c['id'], sayfa_ad, hedef='mobil')
-            if not sayfa:
-                continue
-            degisti = False
-            for el in sayfa['elementler']:
-                if el.get('sabit_konum'):
-                    continue
-                if sadece_sablon_kaynakli and not el.get('sablon_kaynagi'):
-                    continue
-                if sadece_sablon_kaynakli:
-                    el['sabit_konum'] = 'alt'
-                    degisti = True
-                elif el.get('id', '').startswith('el_sablon_'):
-                    continue  # vitrin başlık/açıklama/kart metinleri — navbar değil
-                else:
-                    el['sabit_konum'] = 'alt'
-                    degisti = True
-            if degisti:
-                sayfa_kaydet(
-                    c['id'], sayfa_ad, sayfa['elementler'], hedef='mobil',
-                    tuval_w=sayfa['tuval_w'], tuval_h=sayfa['tuval_h'], arkaplan=sayfa['arkaplan'],
-                    arkaplan_resim=sayfa.get('arkaplan_resim'), arkaplan_sigdirma=sayfa.get('arkaplan_sigdirma'),
-                    arkaplan_gradient_aktif=sayfa.get('arkaplan_gradient_aktif'),
-                    arkaplan_gradient_renk1=sayfa.get('arkaplan_gradient_renk1'),
-                    arkaplan_gradient_renk2=sayfa.get('arkaplan_gradient_renk2'),
-                    arkaplan_gradient_yon=sayfa.get('arkaplan_gradient_yon'),
-                    sayfa_turu=sayfa.get('sayfa_turu'), giris_animasyonu=sayfa.get('giris_animasyonu'),
-                )
+def _demo_tag_al(cihaz_id: int, ad: str, modbus_adres: str, veri_tipi: str, erisim: str) -> int:
+    """tag_ekle idempotent değil (aynı isimde ikinci çağrı hata döner) —
+    demo her başlangıçta yeniden kurulduğu için burada 'yoksa ekle, varsa
+    id'sini getir' sarmalayıcısı kullanılıyor."""
+    ok, sonuc = tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim)
+    if ok:
+        return sonuc
+    for t in cihaz_tagleri(cihaz_id):
+        if t['ad'] == ad:
+            return t['id']
+    return None
 
 
-def _mobil_navbar_sablonu(sablon_kaynagi: str = None, kilitli: bool = False):
-    """gemba projesindeki mobil alt-navbar + '+' speed-dial FAB düzeninden
-    esinlenilmiş, oventechIOT'un kendi (koyu lacivert #17222e/#0f1720 +
-    mavi accent #2e9ed9) paletiyle yeniden üretilmiş hazır mobil
-    navigasyon elementleri. sablon_kaynagi/kilitli verilirse (bir sayfaya
-    'Şablon Uygula' ile yansıtılmış gibi) o alanlar da eklenir; verilmezse
-    şablonun KENDİ (kaynak, düzenlenebilir) hâli döner."""
+def _demo_tagleri_olustur(cihaz_id: int) -> dict:
+    """Demo fırın için gerçekçi bir tag seti — okuma (sensör) VE
+    okuma+yazma (kullanıcı kontrolü) tag'lerinin karışımı, farklı veri
+    tiplerini de (bool/int/float) gösterecek şekilde."""
+    return {
+        'isitici':        _demo_tag_al(cihaz_id, 'Isıtıcı', '0', 'bool', 'readwrite'),
+        'sicaklik':       _demo_tag_al(cihaz_id, 'Sıcaklık', '1', 'float', 'read'),
+        'hedef_sicaklik': _demo_tag_al(cihaz_id, 'Hedef Sıcaklık', '2', 'float', 'readwrite'),
+        'nem':            _demo_tag_al(cihaz_id, 'Nem', '3', 'float', 'read'),
+        'basinc':         _demo_tag_al(cihaz_id, 'Basınç', '4', 'float', 'read'),
+        'alarm':          _demo_tag_al(cihaz_id, 'Alarm', '5', 'bool', 'read'),
+        'konveyor_hiz':    _demo_tag_al(cihaz_id, 'Konveyör Hız', '6', 'float', 'readwrite'),
+        'konveyor_calisiyor': _demo_tag_al(cihaz_id, 'Konveyör Çalışıyor', '7', 'bool', 'readwrite'),
+        'calisma_modu':   _demo_tag_al(cihaz_id, 'Çalışma Modu', '8', 'int', 'readwrite'),
+        'alarm_bildirim': _demo_tag_al(cihaz_id, 'Alarm Bildirimi', '9', 'bool', 'readwrite'),
+    }
+
+
+# ============================================================
+# DEMO ŞABLONU — mobil, 5 sayfa + alt navbar (gerçekten çalışan
+# "Sayfaya Git" sekmeleri) + her sayfada farklı giriş animasyonu.
+# ============================================================
+
+DEMO_NAVBAR_SEKMELERI = [
+    ('🏠', 'Ana Sayfa'),
+    ('🔥', 'Fırın'),
+    ('📊', 'Grafik'),
+    ('🎚️', 'Konveyör'),
+    ('⚙️', 'Ayarlar'),
+]
+
+
+def _demo_navbar_olustur(aktif_sayfa_ad: str):
+    """5 sekmeli, GERÇEKTEN çalışan alt navbar — her sekme kendi 'Sayfaya
+    Git' butonu, aktif sekme parlak/kalın + arkasında vurgu (pill) ile
+    gösterilir. Kaydırma sırasında ekranda sabit kalması için tüm
+    elementler sabit_konum='alt' taşır (bkz. runtime #tuval-sabit-alt)."""
     def _id():
         return 'el_' + secrets.token_hex(4)
 
-    ekstra = {}
-    if sablon_kaynagi:
-        ekstra['sablon_kaynagi'] = sablon_kaynagi
-    if kilitli:
-        ekstra['kilitli'] = True
+    n = len(DEMO_NAVBAR_SEKMELERI)
+    kenar, aralik, toplam_w = 4, 4, 420
+    tab_w = (toplam_w - 2 * kenar - (n - 1) * aralik) / n
 
-    def _sekil(**kw):
-        d = {
-            'id': _id(), 'type': 'sekil',
-            'sekil_kenarlik': 'transparent', 'sekil_kenarlik_kalinlik': 0,
-            'sekil_kose_solust': 0, 'sekil_kose_sagust': 0, 'sekil_kose_solalt': 0, 'sekil_kose_sagalt': 0,
-            'sekil_gradient_aktif': False, 'sekil_gradient_renk1': '#2e9ed9', 'sekil_gradient_renk2': '#1f7bb0',
-            'sekil_gradient_yon': 'to bottom', 'custom_css': '',
-            # Navbar + FAB, kaydırma sırasında ekranda sabit kalmalı.
+    elementler = [
+        {
+            'id': _id(), 'type': 'sekil', 'x': 0, 'y': 796, 'w': 420, 'h': 64,
+            'sekil_dolgu': '#17222e', 'sekil_kenarlik': '#2a3b4c', 'sekil_kenarlik_kalinlik': 1,
+            'sekil_kose_solust': 20, 'sekil_kose_sagust': 20, 'sekil_kose_solalt': 0, 'sekil_kose_sagalt': 0,
+            'sekil_gradient_aktif': True, 'sekil_gradient_renk1': '#1e2d3d', 'sekil_gradient_renk2': '#0f1720',
+            'sekil_gradient_yon': 'to bottom', 'custom_css': 'box-shadow: 0 -4px 20px rgba(0,0,0,0.35);',
             'sabit_konum': 'alt',
-        }
-        d.update(kw)
-        d.update(ekstra)
-        return d
-
-    def _label(**kw):
-        d = {
-            'id': _id(), 'type': 'label', 'tag_id': None,
-            'renk_arkaplan': 'transparent', 'custom_css': '',
-            'sabit_konum': 'alt',
-        }
-        d.update(kw)
-        d.update(ekstra)
-        return d
-
-    return [
-        # Alt navbar zemini — üst köşeleri yuvarlak, gradient koyu lacivert.
-        _sekil(
-            x=0, y=796, w=420, h=64,
-            sekil_dolgu='#17222e', sekil_kenarlik='#2a3b4c', sekil_kenarlik_kalinlik=1,
-            sekil_kose_solust=20, sekil_kose_sagust=20,
-            sekil_gradient_aktif=True, sekil_gradient_renk1='#1e2d3d', sekil_gradient_renk2='#0f1720',
-            sekil_gradient_yon='to bottom',
-            custom_css='box-shadow: 0 -4px 20px rgba(0,0,0,0.35);',
-        ),
-        # "Ana Sayfa" sekmesinin aktif olduğunu gösteren yarı saydam pill —
-        # gemba'daki `.bottom-nav-item.active .icon` vurgusunun karşılığı.
-        # Etiketten ÖNCE eklenir ki katman sırasında ARKADA kalsın.
-        _sekil(
-            x=16, y=800, w=80, h=30,
-            sekil_dolgu='#2e9ed933', sekil_kenarlik='transparent', sekil_kenarlik_kalinlik=0,
-            sekil_kose_solust=15, sekil_kose_sagust=15, sekil_kose_solalt=15, sekil_kose_sagalt=15,
-        ),
-        # 4 navbar sekmesi (ikon üstte, metin altta) — ilki (Ana Sayfa) aktif renkte.
-        _label(x=8, y=806, w=96, h=46, label='🏠\nAna Sayfa', renk_yazi='#ffffff', font_boyutu=11,
-               custom_css='white-space:pre-line;line-height:1.5;font-weight:700;'),
-        _label(x=112, y=806, w=96, h=46, label='🔥\nFırınlar', renk_yazi='#cfd8e3', font_boyutu=11,
-               custom_css='white-space:pre-line;line-height:1.5;font-weight:600;'),
-        _label(x=216, y=806, w=96, h=46, label='📊\nVeriler', renk_yazi='#cfd8e3', font_boyutu=11,
-               custom_css='white-space:pre-line;line-height:1.5;font-weight:600;'),
-        _label(x=320, y=806, w=92, h=46, label='⚙️\nAyarlar', renk_yazi='#cfd8e3', font_boyutu=11,
-               custom_css='white-space:pre-line;line-height:1.5;font-weight:600;'),
-        # "+" hızlı-erişim (speed dial) FAB — navbar'ın üzerinde yüzen daire.
-        _sekil(
-            x=348, y=726, w=56, h=56,
-            sekil_dolgu='#2e9ed9', sekil_kenarlik='#1f7bb0', sekil_kenarlik_kalinlik=0,
-            sekil_kose_solust=28, sekil_kose_sagust=28, sekil_kose_solalt=28, sekil_kose_sagalt=28,
-            sekil_gradient_aktif=True, sekil_gradient_renk1='#2e9ed9', sekil_gradient_renk2='#1f7bb0',
-            sekil_gradient_yon='to bottom',
-            custom_css='box-shadow: 0 6px 16px rgba(0,0,0,0.4);',
-        ),
-        _label(x=348, y=726, w=56, h=56, label='+', renk_yazi='#ffffff', font_boyutu=30,
-               custom_css='font-weight:700;'),
+        },
     ]
+    for i, (ikon, hedef) in enumerate(DEMO_NAVBAR_SEKMELERI):
+        x = round(kenar + i * (tab_w + aralik), 1)
+        aktif = (hedef == aktif_sayfa_ad)
+        if aktif:
+            elementler.append({
+                'id': _id(), 'type': 'sekil', 'x': round(x - 3, 1), 'y': 800, 'w': round(tab_w + 6, 1), 'h': 50,
+                'sekil_dolgu': '#2e9ed933', 'sekil_kenarlik': 'transparent', 'sekil_kenarlik_kalinlik': 0,
+                'sekil_kose_solust': 14, 'sekil_kose_sagust': 14, 'sekil_kose_solalt': 14, 'sekil_kose_sagalt': 14,
+                'sekil_gradient_aktif': False, 'sekil_gradient_renk1': '#2e9ed9', 'sekil_gradient_renk2': '#1f7bb0',
+                'sekil_gradient_yon': 'to bottom', 'custom_css': '', 'sabit_konum': 'alt',
+            })
+        elementler.append({
+            'id': _id(), 'type': 'button', 'x': x, 'y': 806, 'w': round(tab_w, 1), 'h': 46,
+            'label': f'{ikon}\n{hedef}', 'tag_id': None, 'mod': 'sayfaya_git', 'hedef_sayfa': hedef,
+            'acik_deger': '1', 'kapali_deger': '0',
+            'renk_acik': 'transparent', 'renk_kapali': 'transparent',
+            'renk_yazi': '#ffffff' if aktif else '#8aa0b3',
+            'resim_url_acik': '', 'resim_url_kapali': '',
+            'custom_css': 'white-space:pre-line;line-height:1.4;font-size:10px;box-shadow:none;padding:0 2px;'
+                          + ('font-weight:700;' if aktif else 'font-weight:600;'),
+            'sabit_konum': 'alt',
+        })
+    return elementler
+
+
+def _demo_baslik(baslik: str, alt_baslik: str = ''):
+    els = [{
+        'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+        'x': 20, 'y': 24, 'w': 380, 'h': 32,
+        'label': baslik, 'tag_id': None, 'renk_yazi': '#e8eef4',
+        'renk_arkaplan': 'transparent', 'font_boyutu': 21, 'custom_css': 'font-weight:700;'
+    }]
+    if alt_baslik:
+        els.append({
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 20, 'y': 56, 'w': 380, 'h': 22,
+            'label': alt_baslik, 'tag_id': None, 'renk_yazi': '#7f93a8',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 12, 'custom_css': ''
+        })
+    return els
+
+
+def _demo_sayfalari_olustur(cihaz_id: int, tid: dict):
+    ORTAK = dict(hedef='mobil', tuval_w=420, tuval_h=860,
+                 arkaplan_gradient_aktif=True, arkaplan_gradient_renk1='#1e2d3d',
+                 arkaplan_gradient_renk2='#0f1720', arkaplan_gradient_yon='to bottom')
+
+    # ---------------- Ana Sayfa ----------------
+    ana = _demo_baslik('Demo Fırın', 'Canlı İzleme Paneli') + [
+        {  # Alarm durum şeridi
+            'id': 'el_' + secrets.token_hex(4), 'type': 'durum',
+            'x': 20, 'y': 90, 'w': 380, 'h': 40,
+            'tag_id': tid['alarm'], 'durum_modu': 'metin', 'durum_onizleme_index': 0,
+            'durumlar': [
+                {'deger': '0', 'metin': '✅ Sistem Normal', 'renk_arkaplan': '#1c3326', 'renk_yazi': '#2ecc71', 'font_boyutu': 13},
+                {'deger': '1', 'metin': '⚠️ Alarm Aktif', 'renk_arkaplan': '#3a1f22', 'renk_yazi': '#e74c3c', 'font_boyutu': 13},
+            ],
+            'custom_css': 'border-radius:8px;font-weight:700;'
+        },
+        {  # Sıcaklık kartı
+            'id': 'el_' + secrets.token_hex(4), 'type': 'groupbox',
+            'x': 20, 'y': 146, 'w': 182, 'h': 100,
+            'baslik': '🌡️ Sıcaklık', 'renk_yazi': '#8aa0b3', 'font_boyutu': 11,
+            'renk_kenarlik': '#2a3b4c', 'kenarlik_kalinlik': 1,
+            'renk_arkaplan': '#17222e', 'kose_yaricapi': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'textbox',
+            'x': 32, 'y': 178, 'w': 158, 'h': 50,
+            'tag_id': tid['sicaklik'], 'on_ek': '', 'son_ek': ' °C', 'ondalik': 1, 'font_boyutu': 26,
+            'renk_arkaplan': 'transparent', 'renk_yazi': '#2e9ed9', 'renk_kenarlik': 'transparent',
+            'custom_css': 'font-weight:700;justify-content:flex-start;'
+        },
+        {  # Nem kartı
+            'id': 'el_' + secrets.token_hex(4), 'type': 'groupbox',
+            'x': 218, 'y': 146, 'w': 182, 'h': 100,
+            'baslik': '💧 Nem', 'renk_yazi': '#8aa0b3', 'font_boyutu': 11,
+            'renk_kenarlik': '#2a3b4c', 'kenarlik_kalinlik': 1,
+            'renk_arkaplan': '#17222e', 'kose_yaricapi': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'textbox',
+            'x': 230, 'y': 178, 'w': 158, 'h': 50,
+            'tag_id': tid['nem'], 'on_ek': '', 'son_ek': ' %', 'ondalik': 0, 'font_boyutu': 26,
+            'renk_arkaplan': 'transparent', 'renk_yazi': '#2ecc71', 'renk_kenarlik': 'transparent',
+            'custom_css': 'font-weight:700;justify-content:flex-start;'
+        },
+        {  # Isıtıcı hızlı kontrol
+            'id': 'el_' + secrets.token_hex(4), 'type': 'groupbox',
+            'x': 20, 'y': 262, 'w': 380, 'h': 74,
+            'baslik': '', 'renk_yazi': '#8aa0b3', 'font_boyutu': 11,
+            'renk_kenarlik': '#2a3b4c', 'kenarlik_kalinlik': 1,
+            'renk_arkaplan': '#17222e', 'kose_yaricapi': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 40, 'y': 286, 'w': 200, 'h': 26,
+            'label': '🔥  Isıtıcı', 'tag_id': None, 'renk_yazi': '#e8eef4',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 15, 'custom_css': 'font-weight:600;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'switch',
+            'x': 320, 'y': 286, 'w': 60, 'h': 26,
+            'tag_id': tid['isitici'], 'acik_deger': '1', 'kapali_deger': '0',
+            'metin_acik': 'ON', 'metin_kapali': 'OFF',
+            'renk_acik': '#2ecc71', 'renk_kapali': '#3a4a5c', 'daire_rengi': '#ffffff', 'font_boyutu': 9,
+            'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 20, 'y': 352, 'w': 380, 'h': 60,
+            'label': 'Alt menüden Fırın, Grafik, Konveyör ve Ayarlar sayfalarına geçebilirsin — her biri kendi kayma efektiyle açılır.',
+            'tag_id': None, 'renk_yazi': '#7f93a8', 'renk_arkaplan': 'transparent', 'font_boyutu': 12,
+            'custom_css': 'white-space:normal;line-height:1.5;'
+        },
+    ] + _demo_navbar_olustur('Ana Sayfa')
+    sayfa_kaydet(cihaz_id, 'Ana Sayfa', ana, arkaplan='#1e2d3d', sayfa_turu='normal',
+                 giris_animasyonu='fade', **ORTAK)
+
+    # ---------------- Fırın ----------------
+    firin = _demo_baslik('Fırın Kontrolü', 'Sıcaklık ve ısıtıcı yönetimi') + [
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'durum',
+            'x': 20, 'y': 90, 'w': 380, 'h': 40,
+            'tag_id': tid['isitici'], 'durum_modu': 'metin', 'durum_onizleme_index': 1,
+            'durumlar': [
+                {'deger': '0', 'metin': '⏸️ Duruyor', 'renk_arkaplan': '#2a2f38', 'renk_yazi': '#9fb3c8', 'font_boyutu': 13},
+                {'deger': '1', 'metin': '🔥 Isıtıyor', 'renk_arkaplan': '#3a2c1c', 'renk_yazi': '#f39c12', 'font_boyutu': 13},
+            ],
+            'custom_css': 'border-radius:8px;font-weight:700;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 20, 'y': 148, 'w': 200, 'h': 20,
+            'label': 'Fırın Sıcaklığı', 'tag_id': None, 'renk_yazi': '#8aa0b3',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'progressbar',
+            'x': 20, 'y': 172, 'w': 380, 'h': 34,
+            'tag_id': tid['sicaklik'], 'min_deger': 0, 'max_deger': 250, 'yon': 'yatay',
+            'renk_dolgu': '#e74c3c', 'renk_arkaplan': '#17222e', 'birim': ' °C',
+            'deger_goster': True, 'custom_css': 'border-radius:8px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 20, 'y': 226, 'w': 200, 'h': 20,
+            'label': 'Hedef Sıcaklık (°C)', 'tag_id': None, 'renk_yazi': '#8aa0b3',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'inputbox',
+            'x': 20, 'y': 250, 'w': 180, 'h': 40,
+            'tag_id': tid['hedef_sicaklik'], 'giris_turu': 'sayi', 'placeholder': 'örn. 180', 'font_boyutu': 16,
+            'renk_arkaplan': '#17222e', 'renk_yazi': '#e8eef4', 'renk_kenarlik': '#2e9ed9',
+            'custom_css': 'border-radius:8px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 220, 'y': 226, 'w': 180, 'h': 20,
+            'label': 'Isıtıcı', 'tag_id': None, 'renk_yazi': '#8aa0b3',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'button',
+            'x': 220, 'y': 250, 'w': 180, 'h': 40,
+            'label': 'Isıtıcı Aç/Kapa', 'tag_id': tid['isitici'], 'mod': 'toggle', 'hedef_sayfa': '',
+            'acik_deger': '1', 'kapali_deger': '0',
+            'renk_acik': '#2ecc71', 'renk_kapali': '#e74c3c', 'renk_yazi': '#ffffff',
+            'resim_url_acik': '', 'resim_url_kapali': '', 'custom_css': 'border-radius:8px;font-size:13px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'grafik',
+            'x': 20, 'y': 308, 'w': 380, 'h': 130,
+            'baslik': 'Son 20 Ölçüm', 'birim': '°C', 'nokta_sayisi': 20, 'arkaplan_rengi': '#17222e',
+            'seriler': [{'tag_id': tid['sicaklik'], 'etiket': 'Sıcaklık', 'renk': '#e74c3c'}],
+            'custom_css': 'border-radius:10px;'
+        },
+    ] + _demo_navbar_olustur('Fırın')
+    sayfa_kaydet(cihaz_id, 'Fırın', firin, arkaplan='#1e2d3d', sayfa_turu='normal',
+                 giris_animasyonu='soldan-saga', **ORTAK)
+
+    # ---------------- Grafik ----------------
+    grafik = _demo_baslik('Canlı Grafik', 'Sıcaklık · Nem · Basınç') + [
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'grafik',
+            'x': 20, 'y': 90, 'w': 380, 'h': 220,
+            'baslik': 'Ortam Verileri', 'birim': '', 'nokta_sayisi': 40, 'arkaplan_rengi': '#17222e',
+            'seriler': [
+                {'tag_id': tid['sicaklik'], 'etiket': 'Sıcaklık °C', 'renk': '#e74c3c'},
+                {'tag_id': tid['nem'], 'etiket': 'Nem %', 'renk': '#2ecc71'},
+                {'tag_id': tid['basinc'], 'etiket': 'Basınç bar', 'renk': '#f39c12'},
+            ],
+            'custom_css': 'border-radius:10px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'grafik',
+            'x': 20, 'y': 326, 'w': 380, 'h': 140,
+            'baslik': 'Konveyör Hızı', 'birim': ' m/dk', 'nokta_sayisi': 40, 'arkaplan_rengi': '#17222e',
+            'seriler': [{'tag_id': tid['konveyor_hiz'], 'etiket': 'Hız', 'renk': '#2e9ed9'}],
+            'custom_css': 'border-radius:10px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 20, 'y': 480, 'w': 380, 'h': 44,
+            'label': 'Grafikler gerçek geçmiş veriyi gösterir — sayfayı kapatıp tekrar açsan da veriler kalıcıdır.',
+            'tag_id': None, 'renk_yazi': '#7f93a8', 'renk_arkaplan': 'transparent', 'font_boyutu': 11,
+            'custom_css': 'white-space:normal;line-height:1.5;'
+        },
+    ] + _demo_navbar_olustur('Grafik')
+    sayfa_kaydet(cihaz_id, 'Grafik', grafik, arkaplan='#1e2d3d', sayfa_turu='normal',
+                 giris_animasyonu='sagdan-sola', **ORTAK)
+
+    # ---------------- Konveyör ----------------
+    konveyor = _demo_baslik('Konveyör Kontrolü', 'Hız ve çalışma durumu') + [
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'durum',
+            'x': 20, 'y': 90, 'w': 380, 'h': 40,
+            'tag_id': tid['konveyor_calisiyor'], 'durum_modu': 'metin', 'durum_onizleme_index': 1,
+            'durumlar': [
+                {'deger': '0', 'metin': '⏹️ Durdu', 'renk_arkaplan': '#2a2f38', 'renk_yazi': '#9fb3c8', 'font_boyutu': 13},
+                {'deger': '1', 'metin': '▶️ Çalışıyor', 'renk_arkaplan': '#1c3326', 'renk_yazi': '#2ecc71', 'font_boyutu': 13},
+            ],
+            'custom_css': 'border-radius:8px;font-weight:700;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 20, 'y': 148, 'w': 200, 'h': 20,
+            'label': 'Anlık Hız', 'tag_id': None, 'renk_yazi': '#8aa0b3',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'progressbar',
+            'x': 20, 'y': 172, 'w': 380, 'h': 34,
+            'tag_id': tid['konveyor_hiz'], 'min_deger': 0, 'max_deger': 60, 'yon': 'yatay',
+            'renk_dolgu': '#2e9ed9', 'renk_arkaplan': '#17222e', 'birim': ' m/dk',
+            'deger_goster': True, 'custom_css': 'border-radius:8px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 20, 'y': 226, 'w': 200, 'h': 20,
+            'label': 'Hız Ayarı (m/dk)', 'tag_id': None, 'renk_yazi': '#8aa0b3',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'inputbox',
+            'x': 20, 'y': 250, 'w': 180, 'h': 40,
+            'tag_id': tid['konveyor_hiz'], 'giris_turu': 'sayi', 'placeholder': 'örn. 30', 'font_boyutu': 16,
+            'renk_arkaplan': '#17222e', 'renk_yazi': '#e8eef4', 'renk_kenarlik': '#2e9ed9',
+            'custom_css': 'border-radius:8px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 220, 'y': 226, 'w': 180, 'h': 20,
+            'label': 'Motor', 'tag_id': None, 'renk_yazi': '#8aa0b3',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'switch',
+            'x': 220, 'y': 254, 'w': 70, 'h': 30,
+            'tag_id': tid['konveyor_calisiyor'], 'acik_deger': '1', 'kapali_deger': '0',
+            'metin_acik': 'ÇALIŞ', 'metin_kapali': 'DUR',
+            'renk_acik': '#2ecc71', 'renk_kapali': '#3a4a5c', 'daire_rengi': '#ffffff', 'font_boyutu': 9,
+            'custom_css': ''
+        },
+    ] + _demo_navbar_olustur('Konveyör')
+    sayfa_kaydet(cihaz_id, 'Konveyör', konveyor, arkaplan='#1e2d3d', sayfa_turu='normal',
+                 giris_animasyonu='yukaridan-asagi', **ORTAK)
+
+    # ---------------- Ayarlar ----------------
+    ayarlar = _demo_baslik('Ayarlar', 'Fırın davranışını özelleştir') + [
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'groupbox',
+            'x': 20, 'y': 90, 'w': 380, 'h': 110,
+            'baslik': 'Sıcaklık Hedefi', 'renk_yazi': '#8aa0b3', 'font_boyutu': 12,
+            'renk_kenarlik': '#2a3b4c', 'kenarlik_kalinlik': 1,
+            'renk_arkaplan': '#17222e', 'kose_yaricapi': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 40, 'y': 122, 'w': 200, 'h': 20,
+            'label': 'Hedef Sıcaklık (°C)', 'tag_id': None, 'renk_yazi': '#e8eef4',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 13, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'inputbox',
+            'x': 40, 'y': 148, 'w': 340, 'h': 40,
+            'tag_id': tid['hedef_sicaklik'], 'giris_turu': 'sayi', 'placeholder': 'örn. 180', 'font_boyutu': 16,
+            'renk_arkaplan': '#0f1720', 'renk_yazi': '#e8eef4', 'renk_kenarlik': '#2e9ed9',
+            'custom_css': 'border-radius:8px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'groupbox',
+            'x': 20, 'y': 214, 'w': 380, 'h': 110,
+            'baslik': 'Çalışma Modu', 'renk_yazi': '#8aa0b3', 'font_boyutu': 12,
+            'renk_kenarlik': '#2a3b4c', 'kenarlik_kalinlik': 1,
+            'renk_arkaplan': '#17222e', 'kose_yaricapi': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'label',
+            'x': 40, 'y': 246, 'w': 200, 'h': 20,
+            'label': 'Fırın Modu', 'tag_id': None, 'renk_yazi': '#e8eef4',
+            'renk_arkaplan': 'transparent', 'font_boyutu': 13, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'combobox',
+            'x': 40, 'y': 272, 'w': 340, 'h': 40,
+            'tag_id': tid['calisma_modu'], 'font_boyutu': 14,
+            'secenekler': [
+                {'deger': '0', 'etiket': 'Kapalı'},
+                {'deger': '1', 'etiket': 'Otomatik'},
+                {'deger': '2', 'etiket': 'Manuel'},
+            ],
+            'custom_css': 'border-radius:8px;'
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'groupbox',
+            'x': 20, 'y': 338, 'w': 380, 'h': 66,
+            'baslik': '', 'renk_yazi': '#8aa0b3', 'font_boyutu': 12,
+            'renk_kenarlik': '#2a3b4c', 'kenarlik_kalinlik': 1,
+            'renk_arkaplan': '#17222e', 'kose_yaricapi': 12, 'custom_css': ''
+        },
+        {
+            'id': 'el_' + secrets.token_hex(4), 'type': 'checkbox',
+            'x': 40, 'y': 362, 'w': 340, 'h': 24,
+            'tag_id': tid['alarm_bildirim'], 'acik_deger': '1', 'kapali_deger': '0',
+            'metin': '🔔  Alarm Bildirimlerini Aç', 'renk_yazi': '#e8eef4', 'renk_acik': '#2e9ed9',
+            'font_boyutu': 14, 'custom_css': ''
+        },
+    ] + _demo_navbar_olustur('Ayarlar')
+    sayfa_kaydet(cihaz_id, 'Ayarlar', ayarlar, arkaplan='#1e2d3d', sayfa_turu='normal',
+                 giris_animasyonu='asagidan-yukari', **ORTAK)
+
+
+# ============================================================
+# DEMO SİMÜLATÖRÜ — gerçek bir ESP32/PLC bağlı değilken demo tag'lerine
+# canlı, gerçekçi değerler üretir; grafik/durum/progressbar elementleri
+# boş görünmesin ve tag_deger_gecmis gerçekten dolsun diye. Kullanıcının
+# yazdığı (readwrite) değerleri de "cihaz uyguladı" gibi anında geri
+# yansıtır (yazilacak_deger -> deger) — böylece switch/inputbox/combobox
+# gerçekten TEPKİ VEREN bir demo gibi çalışır.
+# ============================================================
+
+_demo_simulator_calisiyor = False
+
+
+def demo_simulator_baslat():
+    global _demo_simulator_calisiyor
+    if _demo_simulator_calisiyor:
+        return
+    _demo_simulator_calisiyor = True
+
+    def _dongu():
+        t = 0
+        while True:
+            try:
+                proje = proje_getir_kod('demo')
+                if proje:
+                    for c in proje_cihazlari(proje['id']):
+                        for tag in cihaz_tagleri(c['id']):
+                            yeni_deger = _demo_tag_simule_et(tag, t)
+                            if yeni_deger is not None:
+                                tag_deger_guncelle(tag['id'], yeni_deger)
+            except Exception:
+                pass  # simülatör asla uygulamayı düşürmesin
+            t += 1
+            time.sleep(4)
+
+    th = threading.Thread(target=_dongu, name='demo-simulator', daemon=True)
+    th.start()
+
+
+def _demo_tag_simule_et(tag: dict, t: int):
+    """Bir tag için bu tick'te yazılacak yeni değeri döner (değişiklik
+    yoksa None). readwrite/write tag'lerde kullanıcının en son yazdığı
+    (yazilacak_deger) varsa onu 'cihaz uyguladı' gibi deger'e yansıtır —
+    aksi halde tag adına göre gerçekçi bir dalga/rastgelelik üretir."""
+    ad = tag['ad']
+    if tag['erisim'] in ('write', 'readwrite') and tag.get('yazilacak_deger') not in (None, ''):
+        if str(tag.get('deger')) != str(tag['yazilacak_deger']):
+            return tag['yazilacak_deger']
+        return None
+    if ad == 'Sıcaklık':
+        return round(120 + 60 * math.sin(t / 9) + random.uniform(-2, 2), 1)
+    if ad == 'Nem':
+        return round(45 + 12 * math.sin(t / 7 + 1) + random.uniform(-1, 1), 1)
+    if ad == 'Basınç':
+        return round(1.0 + 0.15 * math.sin(t / 11 + 2) + random.uniform(-0.02, 0.02), 2)
+    if ad == 'Alarm':
+        return '1' if random.random() < 0.015 else '0'
+    if ad == 'Isıtıcı' and tag.get('deger') is None:
+        return '0'
+    if ad == 'Konveyör Çalışıyor' and tag.get('deger') is None:
+        return '0'
+    if ad == 'Konveyör Hız' and tag.get('deger') is None:
+        return '0'
+    return None
 
 
 def proje_tum_sayfalari(proje_id: int):

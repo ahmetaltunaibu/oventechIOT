@@ -616,19 +616,21 @@
     </div>
 
     <div id="ozAlanGrafik" class="ozel-alan">
-        <label>Bağlı Tag</label>
-        <select id="ozGrafikTag"><option value="">— seçilmedi —</option></select>
         <label>Başlık (opsiyonel)</label>
-        <input type="text" id="ozGrafikBaslik" placeholder="örn. Sıcaklık">
-        <label>Birim (değer yanında gösterilir)</label>
+        <input type="text" id="ozGrafikBaslik" placeholder="örn. Fırın Verileri">
+        <label>Birim (değerlerin yanında gösterilir)</label>
         <input type="text" id="ozGrafikBirim" placeholder="örn. °C">
         <label>Gösterilecek Nokta Sayısı (son N ölçüm)</label>
-        <input type="number" id="ozGrafikNoktaSayisi" value="20" min="2" max="100">
-        <label>Çizgi Rengi</label>
-        <input type="color" id="ozGrafikCizgiRengi" value="#2e9ed9" style="height:38px;">
+        <input type="number" id="ozGrafikNoktaSayisi" value="30" min="2" max="200">
         <label>Arka Plan Rengi</label>
         <input type="color" id="ozGrafikArkaplanRengi" value="#17222e" style="height:38px;">
-        <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Grafik, sayfa açık kaldığı sürece gelen canlı değerleri biriktirip çizer (uygulama DB'sinde geçmiş tutulmuyor — sayfa yeniden açılınca sıfırdan başlar).</p>
+        <label>Seri Sayısı (aynı grafikte birden fazla tag'in çizgisi)</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <input type="number" id="ozGrafikSeriSayisi" value="1" min="1" max="8" style="margin-bottom:0;">
+            <button type="button" onclick="grafikSeriSayisiUygula()" style="padding:8px 12px;font-size:12px;white-space:nowrap;">Uygula</button>
+        </div>
+        <div id="ozGrafikSeriler" style="margin-top:8px;"></div>
+        <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Grafik gerçek geçmiş verileri sunucudan çeker (tag değerleri güncellendikçe kalıcı olarak biriktirilir) — sayfa yeniden açılınca da geçmiş korunur.</p>
     </div>
 
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
@@ -959,7 +961,6 @@ tagSecenekleriDoldur(document.getElementById('ozInputboxTag'), '— seçilmedi �
 tagSecenekleriDoldur(document.getElementById('ozComboboxTag'), '— seçilmedi —');
 tagSecenekleriDoldur(document.getElementById('ozCheckboxTag'), '— seçilmedi —');
 tagSecenekleriDoldur(document.getElementById('ozProgressbarTag'), '— seçilmedi —');
-tagSecenekleriDoldur(document.getElementById('ozGrafikTag'), '— seçilmedi —');
 
 // ---------- Hızlı Bağlantı modalı (tuvaldeki 🔗 rozeti) ----------
 let baglantiElementId = null;
@@ -1327,12 +1328,13 @@ function groupboxEkle(x, y) {
     });
 }
 
+const GRAFIK_RENK_PALETI = ['#2e9ed9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e84393', '#95a5a6'];
 function grafikEkle(x, y) {
     elementEkle({
         id: uid(), type: 'grafik',
-        x: Math.max(0, x - 110), y: Math.max(0, y - 70), w: 220, h: 140,
-        tag_id: null, baslik: '', birim: '', nokta_sayisi: 20,
-        cizgi_rengi: '#2e9ed9', arkaplan_rengi: '#17222e',
+        x: Math.max(0, x - 110), y: Math.max(0, y - 70), w: 240, h: 160,
+        baslik: '', birim: '', nokta_sayisi: 30, arkaplan_rengi: '#17222e',
+        seriler: [{ tag_id: null, etiket: '', renk: GRAFIK_RENK_PALETI[0] }],
         custom_css: ''
     });
 }
@@ -1574,22 +1576,41 @@ function render() {
             div.style.padding = '6px';
             div.style.overflow = 'hidden';
             div.textContent = '';
-            // Tasarımda gerçek veri olmadığından örnek dalga çizilir.
+            // Tasarımda gerçek veri olmadığından her seri için örnek bir dalga çizilir.
             const svgNs = 'http://www.w3.org/2000/svg';
             const svg = document.createElementNS(svgNs, 'svg');
             svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%');
             svg.style.display = 'block';
-            const genislik = el.w - 12, yukseklik = el.h - (el.baslik ? 28 : 12);
-            const ornekNoktalar = Array.from({ length: 12 }, (_, i) => 0.5 + 0.35 * Math.sin(i * 0.8));
-            const puanlar = ornekNoktalar.map((v, i) =>
-                `${(i / (ornekNoktalar.length - 1)) * genislik},${yukseklik - v * yukseklik}`).join(' ');
-            const polyline = document.createElementNS(svgNs, 'polyline');
-            polyline.setAttribute('points', puanlar);
-            polyline.setAttribute('fill', 'none');
-            polyline.setAttribute('stroke', el.cizgi_rengi || '#2e9ed9');
-            polyline.setAttribute('stroke-width', '2');
-            polyline.setAttribute('transform', `translate(6,${el.baslik ? 22 : 6})`);
-            svg.appendChild(polyline);
+            const seriler = (el.seriler && el.seriler.length) ? el.seriler : [{ renk: el.cizgi_rengi || '#2e9ed9' }];
+            const ustBosluk = el.baslik ? 22 : 6;
+            const genislik = el.w - 12, yukseklik = el.h - ustBosluk - (seriler.length > 1 ? 18 : 6);
+            seriler.forEach((s, sIdx) => {
+                const faz = sIdx * 1.3;
+                const genlik = 0.3 - sIdx * 0.03;
+                const ornekNoktalar = Array.from({ length: 14 }, (_, i) => 0.5 + genlik * Math.sin(i * 0.7 + faz));
+                const puanlar = ornekNoktalar.map((v, i) =>
+                    `${(i / (ornekNoktalar.length - 1)) * genislik},${yukseklik - v * yukseklik}`).join(' ');
+                const polyline = document.createElementNS(svgNs, 'polyline');
+                polyline.setAttribute('points', puanlar);
+                polyline.setAttribute('fill', 'none');
+                polyline.setAttribute('stroke', s.renk || GRAFIK_RENK_PALETI[sIdx % GRAFIK_RENK_PALETI.length]);
+                polyline.setAttribute('stroke-width', '2');
+                polyline.setAttribute('stroke-linejoin', 'round'); polyline.setAttribute('stroke-linecap', 'round');
+                polyline.setAttribute('transform', `translate(6,${ustBosluk})`);
+                svg.appendChild(polyline);
+            });
+            if (seriler.length > 1) {
+                const legend = document.createElement('div');
+                legend.style.cssText = 'position:absolute;left:6px;right:6px;bottom:3px;display:flex;'
+                    + 'flex-wrap:wrap;gap:6px;font-size:9px;color:var(--text-secondary);';
+                seriler.forEach((s, i) => {
+                    const item = document.createElement('span');
+                    item.style.cssText = 'display:inline-flex;align-items:center;gap:3px;';
+                    item.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:${s.renk || GRAFIK_RENK_PALETI[i % GRAFIK_RENK_PALETI.length]};display:inline-block;"></span>${s.etiket || ('Seri ' + (i + 1))}`;
+                    legend.appendChild(item);
+                });
+                div.appendChild(legend);
+            }
             if (el.baslik) {
                 const baslikEl = document.createElement('div');
                 baslikEl.textContent = el.baslik;
@@ -1844,9 +1865,14 @@ function baslaSurukle(e, id) {
     e.stopPropagation();
     const tiklananEl = bul(id);
     const hedefIdler = (tiklananEl && tiklananEl.grup_id) ? grupUyeleri(tiklananEl.grup_id) : [id];
-    if (!hedefIdler.every(hid => seciliSet.has(hid)) || seciliSet.size !== hedefIdler.length) {
-        if (e.shiftKey || e.ctrlKey || e.metaKey) hedefIdler.forEach(hid => secEkle(hid));
-        else secCoklu(hedefIdler);
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        hedefIdler.forEach(hid => secEkle(hid));
+    } else if (seciliSet.has(id) && seciliSet.size > 1) {
+        // Tıklanan element zaten mevcut çoklu seçimin bir parçası —
+        // seçimi TEK elemente daraltma, hepsi birlikte sürüklenecek
+        // (kullanıcı isteği: gruplanmamış çoklu seçim de birlikte taşınmalı).
+    } else if (!hedefIdler.every(hid => seciliSet.has(hid)) || seciliSet.size !== hedefIdler.length) {
+        secCoklu(hedefIdler);
     }
     if (tiklananEl && tiklananEl.kilitli) return; // kilitli element sürüklenemez, sadece seçilir
     gecmiseKaydet();
@@ -2616,12 +2642,18 @@ function guncellePanel() {
         document.getElementById('ozGroupboxRenkArkaplan').value = seffaf ? '#17222e' : el.renk_arkaplan;
         document.getElementById('ozGroupboxKose').value = el.kose_yaricapi || 0;
     } else if (el.type === 'grafik') {
-        document.getElementById('ozGrafikTag').value = el.tag_id || '';
+        // Geriye dönük uyumluluk: eski tek-seri kayıtlarda seriler yoktu.
+        if (!el.seriler || !el.seriler.length) {
+            el.seriler = el.tag_id
+                ? [{ tag_id: el.tag_id, etiket: el.baslik || '', renk: el.cizgi_rengi || '#2e9ed9' }]
+                : [{ tag_id: null, etiket: '', renk: '#2e9ed9' }];
+        }
         document.getElementById('ozGrafikBaslik').value = el.baslik || '';
         document.getElementById('ozGrafikBirim').value = el.birim || '';
-        document.getElementById('ozGrafikNoktaSayisi').value = el.nokta_sayisi || 20;
-        document.getElementById('ozGrafikCizgiRengi').value = el.cizgi_rengi || '#2e9ed9';
+        document.getElementById('ozGrafikNoktaSayisi').value = el.nokta_sayisi || 30;
         document.getElementById('ozGrafikArkaplanRengi').value = el.arkaplan_rengi || '#17222e';
+        document.getElementById('ozGrafikSeriSayisi').value = el.seriler.length;
+        grafikSeriSatirlariCiz();
     }
 
     document.getElementById('ozCustomCss').value = el.custom_css || '';
@@ -2772,6 +2804,54 @@ function _comboboxSatirlariniOku(el) {
     }));
 }
 
+// ---------- Grafik: dinamik seri (birden fazla tag/çizgi) satırları ----------
+function grafikSeriSatirlariCiz() {
+    const el = bul(seciliId);
+    if (!el || el.type !== 'grafik') return;
+    const seriler = el.seriler || [];
+    const kapsayici = document.getElementById('ozGrafikSeriler');
+    kapsayici.innerHTML = '';
+    seriler.forEach((s, i) => {
+        const satir = document.createElement('div');
+        satir.className = 'durum-satir';
+        satir.dataset.idx = i;
+        satir.innerHTML = `
+            <div class="durum-satir-baslik">Seri ${i + 1}</div>
+            <label>Tag</label>
+            <select class="grafik-seri-tag"></select>
+            <label>Etiket (gösterge/legend'da görünür)</label>
+            <input type="text" class="grafik-seri-etiket" value="${(s.etiket || '').replace(/"/g, '&quot;')}" placeholder="örn. Sıcaklık">
+            <label>Çizgi Rengi</label>
+            <input type="color" class="grafik-seri-renk" value="${s.renk || GRAFIK_RENK_PALETI[i % GRAFIK_RENK_PALETI.length]}" style="height:34px;">
+        `;
+        kapsayici.appendChild(satir);
+        const tagSelect = satir.querySelector('.grafik-seri-tag');
+        tagSecenekleriDoldur(tagSelect, '— seçilmedi —');
+        tagSelect.value = s.tag_id || '';
+    });
+    renkAlanlariniZenginlestir(kapsayici);
+}
+function grafikSeriSayisiUygula() {
+    const el = bul(seciliId);
+    if (!el || el.type !== 'grafik') return;
+    _grafikSeriSatirlariniOku(el);
+    const yeniSayi = Math.max(1, Math.min(8, parseInt(document.getElementById('ozGrafikSeriSayisi').value) || 1));
+    while (el.seriler.length < yeniSayi) {
+        el.seriler.push({ tag_id: null, etiket: '', renk: GRAFIK_RENK_PALETI[el.seriler.length % GRAFIK_RENK_PALETI.length] });
+    }
+    el.seriler.length = yeniSayi;
+    grafikSeriSatirlariCiz();
+}
+function _grafikSeriSatirlariniOku(el) {
+    const satirlar = [...document.querySelectorAll('#ozGrafikSeriler .durum-satir')];
+    if (!satirlar.length) return;
+    el.seriler = satirlar.map(satir => ({
+        tag_id: satir.querySelector('.grafik-seri-tag').value ? parseInt(satir.querySelector('.grafik-seri-tag').value) : null,
+        etiket: satir.querySelector('.grafik-seri-etiket').value,
+        renk: satir.querySelector('.grafik-seri-renk').value,
+    }));
+}
+
 function butonModuGuncelle() {
     const sayfayaGitMi = document.getElementById('ozMod').value === 'sayfaya_git';
     document.getElementById('ozButonTagAlani').style.display = sayfayaGitMi ? 'none' : 'block';
@@ -2877,11 +2957,10 @@ function uygula() {
         el.renk_arkaplan = document.getElementById('ozGroupboxSeffaf').checked ? 'transparent' : document.getElementById('ozGroupboxRenkArkaplan').value;
         el.kose_yaricapi = parseInt(document.getElementById('ozGroupboxKose').value) || 0;
     } else if (el.type === 'grafik') {
-        el.tag_id = document.getElementById('ozGrafikTag').value ? parseInt(document.getElementById('ozGrafikTag').value) : null;
+        _grafikSeriSatirlariniOku(el);
         el.baslik = document.getElementById('ozGrafikBaslik').value;
         el.birim = document.getElementById('ozGrafikBirim').value;
-        el.nokta_sayisi = parseInt(document.getElementById('ozGrafikNoktaSayisi').value) || 20;
-        el.cizgi_rengi = document.getElementById('ozGrafikCizgiRengi').value;
+        el.nokta_sayisi = parseInt(document.getElementById('ozGrafikNoktaSayisi').value) || 30;
         el.arkaplan_rengi = document.getElementById('ozGrafikArkaplanRengi').value;
     } else if (el.type === 'sekil') {
         el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;

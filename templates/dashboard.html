@@ -91,14 +91,17 @@
     <h2>Cihazlar</h2>
     {% if cihazlar %}
     <table>
-        <thead><tr><th>Ad</th><th>Cihaz Kimliği</th><th>Son Görülme</th><th></th></tr></thead>
+        <thead><tr><th>Ad</th><th>Son Görülme</th><th></th></tr></thead>
         <tbody>
         {% for c in cihazlar %}
+            {% set hedef_url = url_for('sayfa.sayfa_calistir', cihaz_id=c.id, sayfa_ad=c.baslangic_sayfa) if c.baslangic_sayfa else url_for('dashboard.cihaz_detay', cihaz_id=c.id) %}
             <tr>
-                <td>{{ c.ad }}</td>
-                <td style="font-family:monospace;font-size:12px;">{{ c.cihaz_kimlik }}</td>
+                <td><a class="item-link" href="{{ hedef_url }}">{{ c.ad }}</a></td>
                 <td>{{ c.son_gorulme if c.son_gorulme else '—' }}</td>
-                <td><a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=c.id) }}">Detay &rarr;</a></td>
+                <td style="white-space:nowrap;text-align:right;">
+                    <a class="item-link" href="{{ hedef_url }}">Aç &rarr;</a>
+                    {% if c.baslangic_sayfa %}<a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=c.id) }}" style="margin-left:10px;color:var(--text-secondary);font-size:12px;">Yönet</a>{% endif %}
+                </td>
             </tr>
         {% endfor %}
         </tbody>
