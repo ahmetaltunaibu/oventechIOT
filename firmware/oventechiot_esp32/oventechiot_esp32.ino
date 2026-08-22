@@ -352,6 +352,23 @@ String tagOku(const TagTanimi &tag) {
     // Debug: ham register değerlerini hex olarak yazdır.
     Serial.printf("    [ham] reg0(adr=%u)=0x%04X reg1(adr=%u)=0x%04X\n",
       tag.modbusAdres, reg0, tag.modbusAdres + 1, reg1);
+
+    // GEÇİCİ TEŞHİS: adres+1'de (4098) hep 0x0000 çıkıyor — düşük word
+    // farklı bir adreste olabilir (örn. adres-1). Etraftaki 5 adresi tek
+    // seferde tarayıp hangisinin gerçekten değişen/anlamlı bir değer
+    // taşıdığını görelim; bu blok sorun çözülünce kaldırılabilir.
+    Serial.print("    [tarama] ");
+    for (int off = -2; off <= 2; off++) {
+      uint16_t komsuAdres = (uint16_t)(tag.modbusAdres + off);
+      uint8_t s = modbus.readHoldingRegisters(komsuAdres, 1);
+      if (s == modbus.ku8MBSuccess) {
+        Serial.printf("adr%+d(%u)=0x%04X  ", off, komsuAdres, modbus.getResponseBuffer(0));
+      } else {
+        Serial.printf("adr%+d(%u)=HATA  ", off, komsuAdres);
+      }
+    }
+    Serial.println();
+
     uint32_t ham = ((uint32_t)reg0 << 16) | reg1;
     if (tip == "float") {
       float f;
