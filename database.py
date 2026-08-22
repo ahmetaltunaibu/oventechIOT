@@ -291,6 +291,38 @@ def init_db():
     ''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_alarm_kayit_cihaz ON alarm_kayitlari(cihaz_id, olusma_zamani)')
 
+    # ESP32 UZAKTAN GÜNCELLEME (OTA) — gemba/gemba-iot-gateway'deki çalışan
+    # sistemden esinlenildi. Dosyalar (medya tablosundaki gibi) BLOB olarak
+    # saklanıyor — Render'ın diski her deploy'da sıfırlanıyor, .db her zaman
+    # yedekleniyor. cihaz_id NULL ise bu firmware o PROJENİN tüm cihazlarını
+    # hedefler ("ALL"); dolu ise sadece o cihazı.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS firmware_dosyalari (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            proje_id INTEGER NOT NULL REFERENCES projeler(id) ON DELETE CASCADE,
+            cihaz_id INTEGER REFERENCES cihazlar(id) ON DELETE CASCADE,
+            dosya_adi TEXT NOT NULL,
+            versiyon TEXT NOT NULL DEFAULT '1.0.0',
+            aciklama TEXT,
+            boyut INTEGER,
+            md5_hash TEXT,
+            veri BLOB NOT NULL,
+            aktif INTEGER NOT NULL DEFAULT 1,
+            yukleme_zamani TIMESTAMP DEFAULT (datetime('now', '+3 hours'))
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS firmware_gecmisi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            firmware_id INTEGER REFERENCES firmware_dosyalari(id) ON DELETE CASCADE,
+            cihaz_id INTEGER NOT NULL REFERENCES cihazlar(id) ON DELETE CASCADE,
+            durum TEXT NOT NULL,   -- 'indiriliyor' | 'basarili' | 'hata'
+            hata_mesaji TEXT,
+            zaman TIMESTAMP DEFAULT (datetime('now', '+3 hours'))
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_fw_gecmis_cihaz ON firmware_gecmisi(cihaz_id, zaman)')
+
     conn.commit()
     conn.close()
 
@@ -593,6 +625,155 @@ def medya_getir(medya_id: int):
     try:
         row = conn.execute('SELECT * FROM medya WHERE id = ?', (medya_id,)).fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+# ============================================================
+# FIRMWARE (ESP32 uzaktan güncelleme / OTA)
+# ============================================================
+
+def firmware_yukle(proje_id: int, cihaz_id, dosya_adi: str, veri: bytes,
+                    versiyon: str = '1.0.0', aciklama: str = ''):
+    """Yeni firmware yükler. cihaz_id None ise projedeki TÜM cihazları
+    hedefler. Aynı hedefe (proje+cihaz) ait önceki aktif firmware'ler
+    otomatik pasife çekilir — bir hedefte aynı anda tek aktif sürüm olur."""
+    conn = get_db()
+    try:
+        md5_hash = hashlib.md5(veri).hexdigest()
+        if cihaz_id:
+            conn.execute(
+                'UPDATE firmware_dosyalari SET aktif = 0 WHERE proje_id = ? AND cihaz_id = ? AND aktif = 1',
+                (proje_id, cihaz_id)
+            )
+        else:
+            conn.execute(
+                'UPDATE firmware_dosyalari SET aktif = 0 WHERE proje_id = ? AND cihaz_id IS NULL AND aktif = 1',
+                (proje_id,)
+            )
+        cur = conn.execute('''
+            INSERT INTO firmware_dosyalari (proje_id, cihaz_id, dosya_adi, versiyon, aciklama, boyut, md5_hash, veri, aktif)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ''', (proje_id, cihaz_id, dosya_adi, versiyon.strip() or '1.0.0', aciklama, len(veri), md5_hash, veri))
+        conn.commit()
+        return True, cur.lastrowid
+    finally:
+        conn.close()
+
+
+def firmware_listesi(proje_id: int):
+    """Yönetim ekranı için — dosya BLOB'u hariç metadata listesi."""
+    conn = get_db()
+    try:
+        rows = conn.execute('''
+            SELECT f.id, f.proje_id, f.cihaz_id, f.dosya_adi, f.versiyon, f.aciklama,
+                   f.boyut, f.md5_hash, f.aktif, f.yukleme_zamani, c.ad AS cihaz_ad
+            FROM firmware_dosyalari f
+            LEFT JOIN cihazlar c ON c.id = f.cihaz_id
+            WHERE f.proje_id = ?
+            ORDER BY f.yukleme_zamani DESC
+        ''', (proje_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def firmware_getir(firmware_id: int):
+    """BLOB dahil tam kayıt — indirme (ESP32'ye gönderme) için."""
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT * FROM firmware_dosyalari WHERE id = ?', (firmware_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def firmware_aktiflik_ayarla(firmware_id: int, aktif: bool):
+    conn = get_db()
+    try:
+        conn.execute('UPDATE firmware_dosyalari SET aktif = ? WHERE id = ?', (1 if aktif else 0, firmware_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def firmware_sil(firmware_id: int):
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM firmware_dosyalari WHERE id = ?', (firmware_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def firmware_kontrol(cihaz_id: int, mevcut_versiyon: str = ''):
+    """Bir cihaz için uygulanacak aktif firmware var mı? Önce CİHAZA ÖZEL
+    aktif firmware'e bakar, yoksa PROJENİN TÜMÜNE (cihaz_id NULL) aktif
+    firmware'ine bakar — ama 'ALL' hedefliyse bu cihaz onu daha önce
+    başarıyla almışsa BİR DAHA teklif etmez (gemba'daki 'ALL' mantığıyla
+    aynı). Cihazın gönderdiği versiyon sunucudakinden büyük/eşitse None döner."""
+    conn = get_db()
+    try:
+        cihaz = conn.execute('SELECT proje_id FROM cihazlar WHERE id = ?', (cihaz_id,)).fetchone()
+        if not cihaz:
+            return None
+        fw = conn.execute(
+            'SELECT * FROM firmware_dosyalari WHERE cihaz_id = ? AND aktif = 1 ORDER BY yukleme_zamani DESC LIMIT 1',
+            (cihaz_id,)
+        ).fetchone()
+        if not fw:
+            fw = conn.execute(
+                'SELECT * FROM firmware_dosyalari WHERE proje_id = ? AND cihaz_id IS NULL AND aktif = 1 ORDER BY yukleme_zamani DESC LIMIT 1',
+                (cihaz['proje_id'],)
+            ).fetchone()
+            if fw:
+                zaten_aldi = conn.execute(
+                    "SELECT 1 FROM firmware_gecmisi WHERE cihaz_id = ? AND firmware_id = ? AND durum = 'basarili' LIMIT 1",
+                    (cihaz_id, fw['id'])
+                ).fetchone()
+                if zaten_aldi:
+                    return None
+        if not fw:
+            return None
+
+        if mevcut_versiyon:
+            def _ver_tuple(v):
+                try:
+                    return tuple(int(x) for x in v.strip().lstrip('v').split('.'))
+                except (ValueError, AttributeError):
+                    return (0,)
+            if _ver_tuple(fw['versiyon']) <= _ver_tuple(mevcut_versiyon):
+                return None
+        return dict(fw)
+    finally:
+        conn.close()
+
+
+def firmware_gecmis_kaydet(cihaz_id: int, firmware_id: int, durum: str, hata_mesaji: str = None):
+    conn = get_db()
+    try:
+        conn.execute(
+            'INSERT INTO firmware_gecmisi (cihaz_id, firmware_id, durum, hata_mesaji) VALUES (?, ?, ?, ?)',
+            (cihaz_id, firmware_id, durum, hata_mesaji)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def firmware_gecmisi_listele(cihaz_id: int, limit: int = 30):
+    conn = get_db()
+    try:
+        rows = conn.execute('''
+            SELECT g.*, f.dosya_adi, f.versiyon
+            FROM firmware_gecmisi g
+            LEFT JOIN firmware_dosyalari f ON f.id = g.firmware_id
+            WHERE g.cihaz_id = ?
+            ORDER BY g.id DESC LIMIT ?
+        ''', (cihaz_id, limit)).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 

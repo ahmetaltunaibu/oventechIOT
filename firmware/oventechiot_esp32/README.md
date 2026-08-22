@@ -44,6 +44,12 @@ Ayarları sıfırlamak (yeni WiFi/sunucu girmek) istersen: açılışta **BOOT**
 - **Alarm mantığı firmware'de YOK** — sunucu her gelen değeri kendisi değerlendirir (bkz. `database.alarm_degerlendir`), böylece tarayıcı kapalı olsa bile alarm oluşur/kaydedilir.
 - Grafik geçmişi de sunucu tarafında en fazla ~20 saniyede bir satır olacak şekilde otomatik seyreltilir — firmware'in bunu bilmesine gerek yok, istediği sıklıkla gönderebilir.
 
+## Uzaktan güncelleme (OTA)
+
+oventechIOT'ta cihazın yönetim sayfasında (cihaz_detay) bir "📡 Firmware" kartı var — oradan `.bin` dosyası yüklersin, hedef olarak "Bu Cihaz" ya da "Tüm Cihazlar" seçersin. ESP32 her 10 dakikada bir sunucuya sorar (`GET /esp32/<kimlik>/firmware/kontrol`), yeni sürüm varsa indirip kendini flaslar ve yeniden başlar — kabloya bağlamana gerek yok.
+
+**Yeni bir sürüm derleyip yüklerken** `.ino` dosyasının başındaki `FIRMWARE_VERSION` sabitini artırmayı unutma (örn. `"1.0.0"` → `"1.1.0"`) — sürüm karşılaştırması bu string'e göre yapılıyor, artırmazsan ESP32 "zaten güncelim" diyip indirmez.
+
 ## Veri tipi ↔ Modbus eşlemesi
 
 | veri_tipi | Modbus | Register sayısı |

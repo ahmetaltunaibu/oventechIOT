@@ -44,11 +44,23 @@
  *   4) Kaydet — ESP32 yeniden başlar, artık o WiFi'ye otomatik bağlanır.
  *   5) Ayarları sıfırlamak istersen: BOOT butonuna açılışta ~5sn basılı tut.
  * ---------------------------------------------------------------
+ * UZAKTAN GÜNCELLEME (OTA): oventechIOT'ta cihazın yönetim sayfasına
+ * (cihaz_detay) .bin dosyası yüklersin, "Bu Cihaz" ya da "Tüm Cihazlar"ı
+ * hedeflersin. ESP32 her OTA_CHECK_INTERVAL_MS'de bir sunucuya sorar,
+ * yeni sürüm varsa indirip kendini flaslar ve yeniden başlar. Yeni bir
+ * sürüm derleyip yüklerken FIRMWARE_VERSION sabitini de artırmayı unutma
+ * — sunucu ile cihazdaki sürüm STRING karşılaştırması ("1.2.0" > "1.1.0"
+ * gibi noktalı parçalar halinde) ile yapılıyor.
+ * ---------------------------------------------------------------
  */
+
+#define FIRMWARE_VERSION "1.0.0"
 
 #include <WiFi.h>
 #include <WiFiManager.h>          // tzapu/WiFiManager
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <Update.h>
 #include <ArduinoJson.h>          // bblanchon/ArduinoJson v6
 #include <Preferences.h>
 #include <ModbusMaster.h>         // 4-20ma/ModbusMaster
@@ -317,6 +329,132 @@ void sunucuIleSenkronOl() {
   Serial.printf("Senkron OK — okunan:%d yazilan:%d\n", okunanSayisi, yazilanSayisi);
 }
 
+// ================== UZAKTAN GÜNCELLEME (OTA) ==================
+// gemba-iot-gateway'deki çalışan sistemle aynı mantık: periyodik kontrol
+// et, güncelleme varsa Update.h ile parça parça flash'a yaz, bitince
+// yeniden başlat. Sunucuya "başarılı" bildirimi de gönderiyoruz ki
+// cihaz_detay sayfasındaki geçmişte görünsün.
+#define OTA_CHECK_INTERVAL_MS  (10UL * 60UL * 1000UL)   // 10 dakikada bir kontrol
+unsigned long sonOtaKontrol = 0;
+
+bool otaGuncellemeUygula(const String &firmwareUrl, int firmwareId, const String &firmwareFilename) {
+  Serial.println("OTA: guncelleme indiriliyor...");
+
+  WiFiClientSecure client;
+  client.setInsecure(); // sunucu sertifikasi Render tarafinda yonetiliyor
+  HTTPClient http;
+  if (!http.begin(client, firmwareUrl)) {
+    Serial.println("OTA: HTTP baslatilamadi");
+    return false;
+  }
+
+  int kod = http.GET();
+  if (kod != HTTP_CODE_OK) {
+    Serial.printf("OTA: indirme basarisiz, HTTP %d\n", kod);
+    http.end();
+    return false;
+  }
+
+  size_t boyut = http.getSize();
+  if (boyut <= 0) {
+    Serial.println("OTA: dosya boyutu bilinmiyor, iptal");
+    http.end();
+    return false;
+  }
+
+  if (!Update.begin(boyut, U_FLASH)) {
+    Serial.println("OTA: Update.begin hatasi: " + String(Update.getError()));
+    http.end();
+    return false;
+  }
+
+  WiFiClient *stream = http.getStreamPtr();
+  uint8_t buf[1024];
+  size_t toplamOkunan = 0;
+  while (http.connected() && toplamOkunan < boyut) {
+    size_t hazir = stream->available();
+    if (hazir) {
+      size_t okunacak = min(hazir, sizeof(buf));
+      size_t n = stream->readBytes(buf, okunacak);
+      if (Update.write(buf, n) != n) {
+        Serial.println("OTA: flash yazma hatasi");
+        http.end();
+        Update.end(false);
+        return false;
+      }
+      toplamOkunan += n;
+    }
+    delay(1);
+  }
+  http.end();
+
+  if (!Update.end(true)) {
+    Serial.println("OTA: finalizasyon hatasi: " + String(Update.getError()));
+    return false;
+  }
+
+  Serial.println("OTA: flash tamamlandi");
+
+  // Sunucuya "basarili" bildirimi gonder (restart oncesi — restart sonrasi
+  // ayrica denenmez, tek seferlik best-effort bildirim yeterli).
+  HTTPClient bildirimHttp;
+  String bildirimUrl = sunucuAdresi + "/esp32/" + cihazKimlik + "/firmware/basarili";
+  bildirimHttp.begin(bildirimUrl);
+  bildirimHttp.addHeader("Content-Type", "application/json");
+  DynamicJsonDocument bildirim(256);
+  bildirim["firmware_id"] = firmwareId;
+  bildirim["firmware_filename"] = firmwareFilename;
+  String bildirimStr;
+  serializeJson(bildirim, bildirimStr);
+  bildirimHttp.POST(bildirimStr);
+  bildirimHttp.end();
+
+  return true;
+}
+
+void otaKontrolEt() {
+  if (cihazKimlik.length() == 0) return;
+
+  HTTPClient http;
+  String url = sunucuAdresi + "/esp32/" + cihazKimlik + "/firmware/kontrol?version=" FIRMWARE_VERSION;
+  http.begin(url);
+  int kod = http.GET();
+  if (kod != 200) {
+    Serial.printf("OTA kontrol basarisiz, HTTP %d\n", kod);
+    http.end();
+    return;
+  }
+  String govde = http.getString();
+  http.end();
+
+  DynamicJsonDocument doc(2048);
+  if (deserializeJson(doc, govde)) {
+    Serial.println("OTA kontrol cevabi parse edilemedi");
+    return;
+  }
+
+  bool guncellemeVar = doc["update_available"] | false;
+  if (!guncellemeVar) {
+    Serial.println("OTA: firmware guncel");
+    return;
+  }
+
+  String firmwareUrl = doc["firmware_url"] | "";
+  String firmwareFilename = doc["firmware_filename"] | "";
+  int firmwareId = doc["firmware_id"] | 0;
+  String yeniSurum = doc["latest_version"] | "";
+
+  Serial.println("OTA: yeni surum bulundu: v" + yeniSurum);
+
+  if (otaGuncellemeUygula(firmwareUrl, firmwareId, firmwareFilename)) {
+    Serial.println("OTA: basarili, yeniden baslatiliyor...");
+    delay(1500);
+    ESP.restart();
+  } else {
+    Serial.println("OTA: basarisiz, bir sonraki kontrolde tekrar denenecek");
+  }
+}
+
 // ================== SETUP / LOOP ==================
 void setup() {
   Serial.begin(115200);
@@ -369,5 +507,11 @@ void loop() {
   if (simdi - sonSenkron >= SENKRON_ARALIK_MS) {
     sunucuIleSenkronOl();
     sonSenkron = simdi;
+  }
+
+  // Uzaktan güncelleme (OTA) kontrolü — 10 dakikada bir.
+  if (simdi - sonOtaKontrol >= OTA_CHECK_INTERVAL_MS) {
+    otaKontrolEt();
+    sonOtaKontrol = simdi;
   }
 }

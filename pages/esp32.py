@@ -16,7 +16,7 @@ değil, kimliğini URL'deki `cihaz_kimlik` (cihaz eklenirken tek seferlik
    VE o tag'e bağlı alarm kuralları varsa değerlendirir (database.alarm_degerlendir)
    — böylece tarayıcı hiç açık olmasa bile alarm sunucuda oluşur/kapanır.
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 import database
 
 esp32_bp = Blueprint('esp32', __name__)
@@ -74,3 +74,60 @@ def esp32_xchange(cihaz_kimlik):
             yazilacaklar[str(t['id'])] = t['yazilacak_deger']
 
     return jsonify({'success': True, 'islenen': islenen, 'yazilacaklar': yazilacaklar})
+
+
+# ============================================================
+# UZAKTAN GÜNCELLEME (OTA) — gemba/gemba-iot-gateway'deki çalışan sistemle
+# aynı akış: kontrol et -> güncelleme varsa indir -> başarılıyı bildir.
+# ============================================================
+
+@esp32_bp.route('/esp32/<cihaz_kimlik>/firmware/kontrol')
+def esp32_firmware_kontrol(cihaz_kimlik):
+    cihaz = database.cihaz_getir_kimlik(cihaz_kimlik)
+    if not cihaz:
+        return jsonify({'error': 'Geçersiz cihaz kimliği'}), 404
+    mevcut_versiyon = request.args.get('version', '').strip()
+    fw = database.firmware_kontrol(cihaz['id'], mevcut_versiyon)
+    if not fw:
+        return jsonify({'update_available': False, 'current_version': mevcut_versiyon or '?'})
+
+    database.firmware_gecmis_kaydet(cihaz['id'], fw['id'], 'indiriliyor')
+    indirme_url = f"{request.url_root.rstrip('/')}/esp32/{cihaz_kimlik}/firmware/indir/{fw['id']}"
+    return jsonify({
+        'update_available': True,
+        'current_version': mevcut_versiyon or '?',
+        'latest_version': fw['versiyon'],
+        'firmware_id': fw['id'],
+        'firmware_url': indirme_url,
+        'firmware_filename': fw['dosya_adi'],
+        'file_size': fw['boyut'],
+        'md5_hash': fw['md5_hash'],
+        'release_notes': fw.get('aciklama') or '',
+    })
+
+
+@esp32_bp.route('/esp32/<cihaz_kimlik>/firmware/indir/<int:firmware_id>')
+def esp32_firmware_indir(cihaz_kimlik, firmware_id):
+    cihaz = database.cihaz_getir_kimlik(cihaz_kimlik)
+    if not cihaz:
+        return jsonify({'error': 'Geçersiz cihaz kimliği'}), 404
+    fw = database.firmware_getir(firmware_id)
+    if not fw or fw['proje_id'] != cihaz['proje_id']:
+        return jsonify({'error': 'Firmware bulunamadı'}), 404
+    return Response(
+        fw['veri'], mimetype='application/octet-stream',
+        headers={'Content-Disposition': f'attachment; filename="{fw["dosya_adi"]}"'}
+    )
+
+
+@esp32_bp.route('/esp32/<cihaz_kimlik>/firmware/basarili', methods=['POST'])
+def esp32_firmware_basarili(cihaz_kimlik):
+    cihaz = database.cihaz_getir_kimlik(cihaz_kimlik)
+    if not cihaz:
+        return jsonify({'error': 'Geçersiz cihaz kimliği'}), 404
+    veri = request.get_json(silent=True) or {}
+    firmware_id = veri.get('firmware_id')
+    if not firmware_id:
+        return jsonify({'error': 'firmware_id gerekli'}), 400
+    database.firmware_gecmis_kaydet(cihaz['id'], firmware_id, 'basarili')
+    return jsonify({'success': True})
