@@ -131,8 +131,45 @@ void wifiVeSunucuAyarlariniKaydet() {
   ayarlar.end();
 }
 
+// oventechIOT web arayüzüyle aynı görsel dil (koyu lacivert zemin, mavi
+// accent, yuvarlak köşeli kartlar) — WiFiManager'ın varsayılan (çok sade)
+// temasını setCustomHeadElement() ile ezip kaliteli/profesyonel bir kurulum
+// ekranı veriyoruz. WiFiManager'ın kendi HTML'i .wrap/.msg/button/input gibi
+// sabit sınıf adları kullanıyor, kütüphaneyi değiştirmeden sadece CSS ile
+// yeniden derliyoruz.
+const char OVENTECH_PORTAL_CSS[] PROGMEM = R"rawliteral(
+<style>
+  :root{--bg:#0f1720;--panel:#17222e;--panel2:#1e2d3d;--border:#2a3b4c;--accent:#2e9ed9;--accent-dark:#1f7bb0;--text:#e8eef4;--text-secondary:#8aa0b3;}
+  body{background:var(--bg) !important;color:var(--text) !important;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif !important;margin:0;padding:16px;}
+  .wrap{max-width:420px;margin:24px auto;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px 20px;box-shadow:0 8px 28px rgba(0,0,0,0.45);}
+  h1,h2,h3{color:var(--text) !important;text-align:center;}
+  h1{font-size:20px !important;margin:0 0 4px !important;}
+  h3{font-size:13px !important;color:var(--text-secondary) !important;font-weight:400 !important;margin:0 0 18px !important;}
+  h1::before{content:"⚙️ ";}
+  hr{border:none;border-top:1px solid var(--border);margin:16px 0;}
+  a{color:var(--accent) !important;}
+  button,input[type='submit'],input[type='button']{background:var(--accent) !important;color:#fff !important;border:none !important;border-radius:8px !important;padding:12px !important;font-size:15px !important;font-weight:600 !important;width:100% !important;box-sizing:border-box !important;cursor:pointer;margin:6px 0 !important;}
+  button:hover,input[type='submit']:hover{background:var(--accent-dark) !important;}
+  input[type='text'],input[type='password']{background:var(--panel2) !important;color:var(--text) !important;border:1px solid var(--border) !important;border-radius:8px !important;padding:11px !important;font-size:14px !important;box-sizing:border-box !important;width:100% !important;margin:4px 0 10px !important;}
+  input:focus{outline:none !important;border-color:var(--accent) !important;}
+  label{color:var(--text-secondary) !important;font-size:12px !important;}
+  .msg{background:var(--panel2) !important;border:1px solid var(--border) !important;border-radius:8px !important;padding:10px !important;color:var(--text) !important;}
+  .msg.S{border-color:#2ecc71 !important;} .msg.D{border-color:#e74c3c !important;}
+  .q{background:var(--panel2) !important;border:1px solid var(--border) !important;border-radius:8px !important;margin:6px 0 !important;}
+  .q a{color:var(--text) !important;text-decoration:none !important;display:block;padding:10px !important;}
+  .q a:hover{background:var(--border) !important;}
+  .qi{color:var(--text-secondary) !important;}
+  div.wifi-cover-image{display:none !important;}
+</style>
+)rawliteral";
+
 void kurulumPortaliBaslat(bool zorlaSifirla) {
   WiFiManager wm;
+  wm.setCustomHeadElement(OVENTECH_PORTAL_CSS);
+  wm.setTitle("OventechIOT Kurulum");
+  // Not: setDarkMode() bilerek kullanılmıyor — WiFiManager sürümüne göre
+  // bulunmayabilir (derleme hatası riski); yukarıdaki özel CSS zaten
+  // !important ile koyu temayı garantiliyor, ayrıca gerek yok.
   if (zorlaSifirla) {
     wm.resetSettings();
   }
