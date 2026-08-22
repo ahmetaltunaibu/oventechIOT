@@ -2,7 +2,17 @@
 {% block title %}{{ sayfa_ad }} - {{ cihaz.ad }}{% endblock %}
 {% block extra_css %}
 <style>
+    /* Kullanıcı raporu: alt sabitlenen (📌) navbar telefonda ekranın en
+       altına değil, bir miktar yukarısına yapışıyordu — sadece gerçek
+       telefonda, masaüstü/emülatör testinde görünmüyordu. Bilinen sebep:
+       mobil Safari/Chrome'da adres çubuğu açılıp kapanınca 100vh, tarayıcı
+       arayüzü GİZLİYKEN sayılan (daha büyük) yüksekliği baz alıyor —
+       position:fixed;bottom:0 olan elementler o "fazladan" boşluğun
+       üstünde kalıyor. 100dvh (dynamic viewport height) tam bunun için var
+       — gerçek/o anki görünür yüksekliği takip ediyor. Eski tarayıcılar
+       dvh'yi tanımadığında satırı yok sayar, 100vh fallback olarak kalır. */
     .container { max-width: none; padding: 0; display: flex; flex-direction: column; height: {{ '100vh' if tam_ekran else 'calc(100vh - 62px)' }}; }
+    .container { height: {{ '100dvh' if tam_ekran else 'calc(100dvh - 62px)' }}; }
     #sayfa-nav {
         display: flex;
         align-items: center;
@@ -745,19 +755,32 @@ function sabitKatmanGetirYaOlustur(id, kenar) {
     if (!el) {
         el = document.createElement('div');
         el.id = id;
-        el.style.cssText = 'position:fixed;left:50%;pointer-events:none;'
-            + (kenar === 'ust' ? 'top:0;transform-origin:top center;' : 'bottom:0;transform-origin:bottom center;');
+        // Kullanıcı raporu: sabitlenmiş (📌) navbar bazı PC tarayıcı
+        // pencerelerinde tuvalin dışına taşıyordu. Kök neden: bu katman
+        // "left:50%; transform:translateX(-50%)" ile TARAYICI PENCERESİNE
+        // göre ortalanıyordu, ama kayan #tuval kendi konumunu #cerceve
+        // içinde flexbox ile alıyordu — #cerceve'de bir scrollbar varsa
+        // (klasik/yer kaplayan tipte, mobil emülasyonda hep görünmez
+        // olduğu için fark edilmemişti) ikisinin ortalama ekseni birkaç
+        // piksel kayıyordu. Artık left:50% YOK — konum, sabitKatmanlariKonumlandir()
+        // içinde her seferinde GERÇEK tuval konumu ÖLÇÜLEREK piksel
+        // cinsinden ayarlanıyor, ikisi HER ZAMAN bire bir aynı hizada.
+        el.style.cssText = 'position:fixed;pointer-events:none;'
+            + (kenar === 'ust' ? 'top:0;transform-origin:left top;' : 'bottom:0;transform-origin:left bottom;');
         document.body.appendChild(el);
     }
     return el;
 }
 function sabitKatmanlariKonumlandir() {
     if (!aktifSayfa) return;
+    const tuval = document.getElementById('tuval');
+    const tuvalRect = tuval.getBoundingClientRect();
     ['tuval-sabit-ust', 'tuval-sabit-alt'].forEach((id, i) => {
         const kat = sabitKatmanGetirYaOlustur(id, i === 0 ? 'ust' : 'alt');
         kat.style.width = aktifSayfa.tuval_w + 'px';
         kat.style.height = aktifSayfa.tuval_h + 'px';
-        kat.style.transform = `translateX(-50%) scale(${sonOlcek})`;
+        kat.style.left = tuvalRect.left + 'px';
+        kat.style.transform = `scale(${sonOlcek})`;
     });
 }
 
