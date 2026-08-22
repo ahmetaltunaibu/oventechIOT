@@ -336,14 +336,22 @@ String tagOku(const TagTanimi &tag) {
   }
 
   if (tag.cift_registerli) {
-    uint8_t sonuc = modbus.readHoldingRegisters(tag.modbusAdres, 2);
-    if (sonuc != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc)); return ""; }
+    // Kullanıcı raporu: tek seferde 2 register okuyunca (readHoldingRegisters(adres,2))
+    // İKİNCİ register her zaman 0x0000 geliyordu (145.5->145.0, 1245.5->1240.00 —
+    // ikisinde de sadece düşük word kayboluyordu). Bu, çoklu-register okumada bir
+    // sorun olduğuna işaret ediyor — bu yüzden iki register'ı AYRI AYRI, tek tek
+    // okuyoruz; daha güvenilir ve sorunu da kesin teşhis ediyor.
+    uint8_t sonuc0 = modbus.readHoldingRegisters(tag.modbusAdres, 1);
+    if (sonuc0 != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata (reg0, adres=%u): %s\n", tag.modbusAdres, modbusHataMetni(sonuc0)); return ""; }
     uint16_t reg0 = modbus.getResponseBuffer(0);
-    uint16_t reg1 = modbus.getResponseBuffer(1);
-    // Debug: ham register değerlerini hex olarak yazdır — beklenenden farklı
-    // bir değer okunursa (örn. 145.5 yerine 145.0) word sırası (endianness)
-    // sorunu mu, yoksa PLC'nin yazdığı değer mi diye ayırt edebilmek için.
-    Serial.printf("    [ham] reg0=0x%04X reg1=0x%04X\n", reg0, reg1);
+
+    uint8_t sonuc1 = modbus.readHoldingRegisters(tag.modbusAdres + 1, 1);
+    if (sonuc1 != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata (reg1, adres=%u): %s\n", tag.modbusAdres + 1, modbusHataMetni(sonuc1)); return ""; }
+    uint16_t reg1 = modbus.getResponseBuffer(0);
+
+    // Debug: ham register değerlerini hex olarak yazdır.
+    Serial.printf("    [ham] reg0(adr=%u)=0x%04X reg1(adr=%u)=0x%04X\n",
+      tag.modbusAdres, reg0, tag.modbusAdres + 1, reg1);
     uint32_t ham = ((uint32_t)reg0 << 16) | reg1;
     if (tip == "float") {
       float f;
@@ -380,10 +388,14 @@ bool tagYaz(const TagTanimi &tag, const String &degerStr) {
     } else {
       ham = (uint32_t)degerStr.toInt();
     }
+    // Okumada olduğu gibi (bkz. tagOku), çift-register yazmada da tek
+    // seferde 2 register yerine güvenlik için AYRI AYRI yazıyoruz.
     modbus.setTransmitBuffer(0, (uint16_t)(ham >> 16));
-    modbus.setTransmitBuffer(1, (uint16_t)(ham & 0xFFFF));
-    uint8_t sonuc = modbus.writeMultipleRegisters(tag.modbusAdres, 2);
-    return sonuc == modbus.ku8MBSuccess;
+    uint8_t sonuc0 = modbus.writeMultipleRegisters(tag.modbusAdres, 1);
+    if (sonuc0 != modbus.ku8MBSuccess) return false;
+    modbus.setTransmitBuffer(0, (uint16_t)(ham & 0xFFFF));
+    uint8_t sonuc1 = modbus.writeMultipleRegisters(tag.modbusAdres + 1, 1);
+    return sonuc1 == modbus.ku8MBSuccess;
   }
 
   modbus.setTransmitBuffer(0, (uint16_t)degerStr.toInt());
