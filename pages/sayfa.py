@@ -12,6 +12,7 @@ seçilir; mobil düzen tanımlanmamışsa masaüstü düzeni ölçeklenerek kull
 mod: 'set_on' | 'set_off' | 'toggle' | 'momentary'
 """
 import json
+import secrets
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify, Response
 from pages.login import login_required, tasarimci_required
 import database
@@ -122,6 +123,49 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
         elementler_json=json.dumps(sayfa['elementler'], ensure_ascii=False),
         tagler_json=json.dumps(tagler, ensure_ascii=False),
     )
+
+
+@sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/yeni-ada-kopyala', methods=['POST'])
+@tasarimci_required
+def sayfa_yeni_ada_kopyala(cihaz_id, sayfa_ad):
+    """Kullanıcı isteği: bir sayfayı TAMAMEN kopyalayıp yeni (bağımsız)
+    bir isimle kullanabilmeli — 'Şablon Uygula'dan farklı olarak burada
+    canlı bağlantı yok, tek seferlik tam kopya. Sayfanın var olan HER
+    düzeni (masaüstü + mobil, hangileri varsa) yeni ada kopyalanır."""
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    yeni_ad = (request.get_json(silent=True) or {}).get('yeni_ad', '').strip()
+    if not yeni_ad:
+        return jsonify({'error': 'Yeni sayfa adı zorunlu'}), 400
+    if yeni_ad == sayfa_ad:
+        return jsonify({'error': 'Yeni ad, mevcut sayfayla aynı olamaz'}), 400
+    kopyalanan = 0
+    for hedef in HEDEFLER:
+        kaynak = database.sayfa_getir(cihaz_id, sayfa_ad, hedef)
+        if not kaynak:
+            continue
+        if database.sayfa_getir(cihaz_id, yeni_ad, hedef):
+            return jsonify({'error': f'"{yeni_ad}" adında bir sayfa ({hedef}) zaten var'}), 400
+        # Element id'leri çakışmasın diye her elemente yeni id veriliyor.
+        yeni_elementler = []
+        for el in kaynak['elementler']:
+            e = dict(el)
+            e['id'] = 'el_' + secrets.token_hex(4)
+            yeni_elementler.append(e)
+        database.sayfa_kaydet(
+            cihaz_id, yeni_ad, yeni_elementler, hedef=hedef,
+            tuval_w=kaynak['tuval_w'], tuval_h=kaynak['tuval_h'], arkaplan=kaynak['arkaplan'],
+            arkaplan_resim=kaynak.get('arkaplan_resim'), arkaplan_sigdirma=kaynak.get('arkaplan_sigdirma'),
+            arkaplan_gradient_aktif=kaynak.get('arkaplan_gradient_aktif'),
+            arkaplan_gradient_renk1=kaynak.get('arkaplan_gradient_renk1'),
+            arkaplan_gradient_renk2=kaynak.get('arkaplan_gradient_renk2'),
+            arkaplan_gradient_yon=kaynak.get('arkaplan_gradient_yon'),
+            sayfa_turu=kaynak.get('sayfa_turu'), giris_animasyonu=kaynak.get('giris_animasyonu'),
+        )
+        kopyalanan += 1
+    if not kopyalanan:
+        return jsonify({'error': 'Kopyalanacak sayfa bulunamadı'}), 404
+    return jsonify({'success': True, 'yeni_ad': yeni_ad})
 
 
 @sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/<hedef>/diger-duzenden-kopyala', methods=['POST'])

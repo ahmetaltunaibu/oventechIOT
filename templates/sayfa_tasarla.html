@@ -59,6 +59,11 @@
     .mini-ikon:hover { background: var(--border); }
     .mini-ikon.aktif { background: var(--accent); color: #fff; }
     .mini-ikon.vurgulu { background: var(--green); color: #0f1720; }
+    #sayfaGecisSecim {
+        height: 32px; flex-shrink: 0; background: var(--panel2); color: var(--text);
+        border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
+        padding: 0 6px; margin: 0;
+    }
     .mini-bilgi { font-size: 11px; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0; cursor: default; }
     #zoom-yuzde { font-size: 11px; color: var(--text-secondary); min-width: 34px; text-align: center; flex-shrink: 0; }
     #durum { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
@@ -124,7 +129,11 @@
 {% block content %}
 <div id="mini-toolbar">
     <a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}" title="{{ cihaz.ad }}'a dön">&larr;</a>
-    <span id="mini-baslik" title="{{ sayfa_ad }}">{{ sayfa_ad }}</span>
+    <select id="sayfaGecisSecim" title="Sayfalar arası hızlı geçiş" onchange="sayfaGecisYap(this.value)" style="max-width:150px;">
+        {% for s in sayfalar %}
+        <option value="{{ s.ad }}" {{ 'selected' if s.ad == sayfa_ad else '' }}>{{ s.ad }}</option>
+        {% endfor %}
+    </select>
     <span class="mini-ayrac"></span>
     <a class="mini-ikon {{ 'aktif' if hedef == 'masaustu' else '' }}" title="Masaüstü Düzeni"
        href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad, hedef='masaustu') }}">🖥️</a>
@@ -140,9 +149,10 @@
         <button type="submit" class="mini-ikon" title="{{ 'Mobil' if diger_hedef=='mobil' else 'Masaüstü' }} Düzenden Kopyala">⧉</button>
     </form>
     {% endif %}
+    <button type="button" class="mini-ikon" title="Bu Sayfayı Yeni Bir İsimle Kopyala (bağımsız kopya)" onclick="sayfayiYeniAdaKopyala()">📑</button>
     <span class="mini-ayrac"></span>
     <span class="mini-bilgi" title="Tuval boyutu">📐 <span id="tuvalBoyutYazi">{{ tuval_w }}×{{ tuval_h }}</span></span>
-    <span class="mini-bilgi" title="Sağ tık: ekle/menü. Çift tık: özellikler. Shift/Ctrl+tık ya da boş alanda sürükle: çoklu seçim. Seçiliyken: ok tuşları taşır (Shift+ok = 10px), Del sil, Ctrl+D çoğalt, Ctrl+C/V kopyala-yapıştır, Ctrl+Z/Y geri al-yinele, Ctrl+A tümünü seç.">❓</span>
+    <span class="mini-bilgi" title="Sağ tık: ekle/menü. Çift tık: özellikler. Shift/Ctrl+tık ya da boş alanda sürükle: çoklu seçim. Seçiliyken: ok tuşları taşır (Shift+ok = 10px), Del sil, Ctrl+D çoğalt, Ctrl+C/V kopyala-yapıştır (BAŞKA SAYFAYA GEÇİP DE YAPIŞTIRABİLİRSİN), Ctrl+Z/Y geri al-yinele, Ctrl+A tümünü seç.">❓</span>
     <button type="button" class="mini-ikon" title="Uzaklaştır" onclick="zoomAyarla(zoom - 0.1)">－</button>
     <span id="zoom-yuzde">100%</span>
     <button type="button" class="mini-ikon" title="Yakınlaştır" onclick="zoomAyarla(zoom + 0.1)">＋</button>
@@ -2091,17 +2101,30 @@ function cogalt() {
     yanPanelGuncelle();
     durumYaz('⧉ Çoğaltıldı');
 }
+// Kullanıcı isteği: elementleri bir sayfada kopyalayıp BAŞKA bir sayfaya
+// geçip yapıştırabilmeli — bu yüzden pano artık sadece bellekte değil,
+// localStorage'da da tutuluyor (tarayıcı sekmesi/sayfa değişse de kalıcı).
+const PANO_ANAHTARI = 'oventech_pano_elementler';
 function kopyala() {
     if (!seciliSet.size) return;
     pano = [...seciliSet].map(id => JSON.parse(JSON.stringify(bul(id)))).filter(Boolean);
-    durumYaz(`📋 ${pano.length} element kopyalandı`);
+    try { localStorage.setItem(PANO_ANAHTARI, JSON.stringify(pano)); } catch (e) { /* yer yoksa sessiz geç */ }
+    durumYaz(`📋 ${pano.length} element kopyalandı — başka bir sayfaya geçip Ctrl+V ile yapıştırabilirsin`);
+}
+function _panoOku() {
+    try {
+        const ham = localStorage.getItem(PANO_ANAHTARI);
+        if (ham) return JSON.parse(ham);
+    } catch (e) { /* bozuksa bellektekine düş */ }
+    return pano;
 }
 function yapistir() {
-    if (!pano.length) return;
+    const kaynakListe = _panoOku();
+    if (!kaynakListe.length) return;
     gecmiseKaydet();
     const harita = {};
     const yeniIdler = [];
-    pano.forEach(kaynak => {
+    kaynakListe.forEach(kaynak => {
         const yeni = _grupIdEslestir(Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
             id: uid(),
             x: Math.max(0, Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16)),
@@ -2115,6 +2138,27 @@ function yapistir() {
     render();
     yanPanelGuncelle();
     durumYaz('📋 Yapıştırıldı');
+}
+
+// ---------- Sayfalar arası hızlı geçiş + tam sayfa kopyalama ----------
+function sayfaGecisYap(yeniAd) {
+    if (!yeniAd || yeniAd === {{ sayfa_ad | tojson }}) return;
+    const url = new URL(window.location.href);
+    url.pathname = url.pathname.replace(/\/sayfa\/[^/]+\/tasarla$/, '/sayfa/' + encodeURIComponent(yeniAd) + '/tasarla');
+    window.location.href = url.toString();
+}
+async function sayfayiYeniAdaKopyala() {
+    const yeniAd = prompt('Yeni sayfanın adı ne olsun?', {{ sayfa_ad | tojson }} + ' (Kopya)');
+    if (!yeniAd || !yeniAd.trim()) return;
+    try {
+        const res = await fetch("{{ url_for('sayfa.sayfa_yeni_ada_kopyala', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad) }}", {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ yeni_ad: yeniAd.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Kopyalama başarısız'); return; }
+        window.location.href = window.location.pathname.replace(/\/sayfa\/[^/]+\/tasarla$/, '/sayfa/' + encodeURIComponent(data.yeni_ad) + '/tasarla') + window.location.search;
+    } catch (e) { alert('İstek başarısız'); }
 }
 
 // ---------- Hizalama (2+ element seçiliyken, kilitli elementler hariç) ----------
