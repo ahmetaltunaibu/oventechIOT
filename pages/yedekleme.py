@@ -34,6 +34,18 @@ def yedek_indir():
         return jsonify({'error': 'Unauthorized'}), 401
     if not os.path.exists(database.DB_NAME):
         return jsonify({'error': 'Veritabanı dosyası henüz yok'}), 404
+    # KRİTİK: WAL modunda son yazılan satırlar bazen ana .db dosyasına değil
+    # yanındaki .db-wal dosyasına yazılı kalır (checkpoint olana kadar).
+    # Ana dosyayı doğrudan kopyalayıp göndermek bu yüzden GÜNCEL OLMAYAN bir
+    # yedek verebilirdi — bu bug'ın bulunma sebebi tam olarak buydu (yedek
+    # alındığı anda gerçekte var olan bir cihaz, yedekte hiç görünmüyordu).
+    # Göndermeden hemen önce WAL'ı ana dosyaya "checkpoint" ile taşıyoruz.
+    conn = database.get_db()
+    try:
+        conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        conn.commit()
+    finally:
+        conn.close()
     return send_file(database.DB_NAME, as_attachment=True, download_name='oventechiot_yedek.db')
 
 
@@ -45,6 +57,14 @@ def yedek_yukle():
     if not dosya or dosya.filename == '':
         return jsonify({'error': 'Dosya gönderilmedi (form alanı adı: dosya)'}), 400
     dosya.save(database.DB_NAME)
+    # Eski (yüklemeden önceki) çalışmadan kalmış -wal/-shm yan dosyaları
+    # varsa sil — yoksa SQLite yeni yüklenen dosyayı açarken eski WAL
+    # içeriğini "kurtarmaya" çalışıp yanlışlıkla eski verilerle
+    # karıştırabilir.
+    for uzanti in ('-wal', '-shm'):
+        yan_dosya = database.DB_NAME + uzanti
+        if os.path.exists(yan_dosya):
+            os.remove(yan_dosya)
     # NOT (bulunan hata): yüklenen yedek dosyası ESKİ bir şemaya sahip
     # olabilir (kod ilerlemiş, migration'lar eklenmiş ama yedek eski
     # tarihli) — init_db() normalde sadece uygulama açılışında bir kez
