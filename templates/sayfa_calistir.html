@@ -28,21 +28,28 @@
     #sayfa-nav a.aktif { background: var(--accent); color: #fff; }
     #sayfa-nav a.geri { background: transparent; color: var(--text-secondary); padding: 6px 8px; font-size: 16px; }
     #sayfa-nav .sayfa-nav-ayrac { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; margin: 0 2px; }
+    #sayfa-nav .sayfa-nav-sag { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
+    /* Kullanıcı isteği: sayfa telefon ekranına SIĞMIYORSA artık her şeyi
+       küçültmek yerine DİKEY KAYDIRILABİLİR oluyor (genişliğe göre
+       ölçekleniyor, yükseklik kırpılmıyor) — navbar/FAB gibi elementler
+       "Sabitle" ile bu kaydırmadan bağımsız, ekranda sabit kalabiliyor. */
     #cerceve {
         width: 100%;
         flex: 1;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
-        overflow: hidden;
+        overflow-y: auto;
+        overflow-x: hidden;
         background: var(--bg);
         min-height: 0;
     }
+    #tuval-sarici { margin: 0 auto; }
     #tuval {
         position: relative;
         background: var(--panel2);
-        transform-origin: center center;
+        transform-origin: top left;
         flex-shrink: 0;
     }
     .el-buton {
@@ -103,11 +110,12 @@
 </style>
 {% endblock %}
 {% block content %}
-{# Kullanıcı isteği: bu sayfadan nasıl çıkılacağı belli değildi (ne
-   masaüstünde ne mobilde geri butonu yoktu) — artık her zaman görünen bir
-   geri/çıkış oku var. #}
+{# Kullanıcı isteği: sayfa artık TAM EKRAN (platform üst çubuğu gizli) —
+   bu yüzden çıkış/geri dönüş yolu burada, küçük ve zarif bir şekilde
+   sağlanıyor: sol tarafta cihaz listesine dönüş, sağ tarafta (tasarımcıysa)
+   cihaz yönetimi + her zaman çıkış. #}
 <div id="sayfa-nav">
-    <a class="geri" title="Cihaz paneline dön" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}">&larr;</a>
+    <a class="geri" title="Cihaz Listesi" href="{{ url_for('dashboard.dashboard_page') }}">🏠</a>
     {% if sayfalar and sayfalar|length > 1 %}
     <span class="sayfa-nav-ayrac"></span>
     {% for s in sayfalar %}
@@ -115,9 +123,15 @@
        class="{{ 'aktif' if s.ad == sayfa_ad else '' }}">{{ s.ad }}</a>
     {% endfor %}
     {% endif %}
+    <div class="sayfa-nav-sag">
+        {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+        <a class="geri" title="Cihazı Yönet" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}">⚙️</a>
+        {% endif %}
+        <a class="geri" title="Çıkış Yap" href="{{ url_for('admin.admin_logout') if session.get('platform_admin') else url_for('login.logout') }}">🚪</a>
+    </div>
 </div>
 
-<div id="cerceve"><div id="tuval"></div></div>
+<div id="cerceve"><div id="tuval-sarici"><div id="tuval"></div></div></div>
 
 <!-- Popup ekranı (sayfa_turu='popup' hedefine "Sayfaya Git" ile gidilince) -->
 <div id="popup-arkaplan" onclick="if (event.target === this) popupKapat()">
@@ -176,6 +190,9 @@ function tuvalCiz() {
         tuval.style.backgroundImage = 'none';
     }
     tuval.innerHTML = '';
+    const sabitUst = sabitKatmanGetirYaOlustur('tuval-sabit-ust', 'ust');
+    const sabitAlt = sabitKatmanGetirYaOlustur('tuval-sabit-alt', 'alt');
+    sabitUst.innerHTML = ''; sabitAlt.innerHTML = '';
     aktifSayfa.elementler.forEach(el => {
         const div = document.createElement('div');
         div.style.left = el.x + 'px';
@@ -194,7 +211,7 @@ function tuvalCiz() {
                 div.textContent = degerler[el.tag_id].deger ?? '—';
             }
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -203,7 +220,7 @@ function tuvalCiz() {
             div.style.background = el.cizgi_renk || '#e8eef4';
             div.textContent = '';
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -214,7 +231,7 @@ function tuvalCiz() {
             div.style.borderRadius = koseCSS(el, 'sekil_kose');
             div.textContent = '';
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -233,7 +250,7 @@ function tuvalCiz() {
             }
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -264,7 +281,7 @@ function tuvalCiz() {
             }
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -289,7 +306,7 @@ function tuvalCiz() {
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             div.addEventListener('click', () => tikla(el));
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -312,7 +329,7 @@ function tuvalCiz() {
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             div.addEventListener('click', () => tikla(el));
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -332,7 +349,7 @@ function tuvalCiz() {
             div.textContent = (el.on_ek || '') + (deger ?? '—') + (el.son_ek || '');
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -354,7 +371,7 @@ function tuvalCiz() {
             div.appendChild(input);
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -376,7 +393,7 @@ function tuvalCiz() {
             div.appendChild(select);
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -406,7 +423,7 @@ function tuvalCiz() {
             }
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -457,7 +474,7 @@ function tuvalCiz() {
             div.appendChild(svg);
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -477,7 +494,7 @@ function tuvalCiz() {
             }
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            tuval.appendChild(div);
+            hedefKatmanaEkle(div, el, tuval);
             return;
         }
 
@@ -524,7 +541,7 @@ function tuvalCiz() {
         } else {
             div.addEventListener('click', () => tikla(el));
         }
-        tuval.appendChild(div);
+        hedefKatmanaEkle(div, el, tuval);
     });
     olcekle();
     if (!ilkCizimYapildiMi) {
@@ -598,12 +615,62 @@ function sekilArkaplanCSS(el) {
     return el.sekil_dolgu || '#2e9ed9';
 }
 
+let sonOlcek = 1;
 function olcekle() {
     const cerceve = document.getElementById('cerceve');
     const oranW = cerceve.clientWidth / aktifSayfa.tuval_w;
-    const oranH = cerceve.clientHeight / aktifSayfa.tuval_h;
-    const oran = Math.min(oranW, oranH, 1); // hiç büyütme yapma, sadece küçült
-    document.getElementById('tuval').style.transform = `scale(${oran})`;
+    sonOlcek = Math.min(oranW, 1); // sadece genişliğe göre — yükseklik kırpılmıyor/küçültülmüyor, taşarsa kaydırılır
+    const tuval = document.getElementById('tuval');
+    tuval.style.transform = `scale(${sonOlcek})`;
+    // Sarıcının GERÇEK layout boyutu ölçeklenmiş boyuta eşit olmalı, yoksa
+    // #cerceve'nin kaydırma alanı (transform layout'u etkilemediği için)
+    // hep ölçeksiz orijinal boyuta göre hesaplanır ve fazladan boş kaydırma
+    // alanı oluşur.
+    const sarici = document.getElementById('tuval-sarici');
+    sarici.style.width = (aktifSayfa.tuval_w * sonOlcek) + 'px';
+    sarici.style.height = (aktifSayfa.tuval_h * sonOlcek) + 'px';
+    sabitKatmanlariKonumlandir();
+}
+
+// ---------- Ekranda Sabit Elementler (navbar/FAB vb.) ----------
+// Kullanıcı isteği: mobilde sayfa kayarken navbar gibi elementler sabit
+// kalsın. Bu elementler normal (kayan) #tuval yerine ayrı, position:fixed
+// iki katmana (#tuval-sabit-ust / #tuval-sabit-alt) çiziliyor — katmanlar
+// tuvalle AYNI koordinat sistemini (tuval_w × tuval_h, aynı ölçek) kullanıp
+// sadece viewport'a göre üstte/altta sabitleniyor, böylece elementler
+// tasarımdaki x/y'leriyle BİREBİR aynı görünür ama kaymaz.
+// Bir element div'ini normal (kayan) tuval'e mi yoksa sabit (fixed)
+// katmana mı ekleyeceğine karar verir. Sabit katmanın kendisi
+// pointer-events:none (boş alanlarda alttaki içeriği/kaydırmayı
+// engellemesin diye) ama içine konan gerçek element div'leri tıklanabilir
+// kalmalı.
+function hedefKatmanaEkle(div, el, tuval) {
+    if (el.sabit_konum === 'ust' || el.sabit_konum === 'alt') {
+        div.style.pointerEvents = 'auto';
+        document.getElementById(el.sabit_konum === 'ust' ? 'tuval-sabit-ust' : 'tuval-sabit-alt').appendChild(div);
+    } else {
+        tuval.appendChild(div);
+    }
+}
+function sabitKatmanGetirYaOlustur(id, kenar) {
+    let el = document.getElementById(id);
+    if (!el) {
+        el = document.createElement('div');
+        el.id = id;
+        el.style.cssText = 'position:fixed;left:50%;pointer-events:none;'
+            + (kenar === 'ust' ? 'top:0;transform-origin:top center;' : 'bottom:0;transform-origin:bottom center;');
+        document.body.appendChild(el);
+    }
+    return el;
+}
+function sabitKatmanlariKonumlandir() {
+    if (!aktifSayfa) return;
+    ['tuval-sabit-ust', 'tuval-sabit-alt'].forEach((id, i) => {
+        const kat = sabitKatmanGetirYaOlustur(id, i === 0 ? 'ust' : 'alt');
+        kat.style.width = aktifSayfa.tuval_w + 'px';
+        kat.style.height = aktifSayfa.tuval_h + 'px';
+        kat.style.transform = `translateX(-50%) scale(${sonOlcek})`;
+    });
 }
 
 function renkGuncelle(div, el) {

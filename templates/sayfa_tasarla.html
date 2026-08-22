@@ -85,6 +85,13 @@
         background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
         padding: 20px; width: 320px; max-height: 86vh; overflow-y: auto;
     }
+    /* BUG FIX: emoji/ikon seçici modalları Element Özellikleri modalının
+       ÜZERİNDEN açılıyor ama aynı z-index'i paylaştıkları için DOM sırasına
+       göre (bunlar HTML'de daha önce tanımlı) ARKADA kalıp tıklanamıyorlardı.
+       Alt-modal (bir modalın üzerinden açılan modal) her zaman daha yüksek
+       z-index alır. */
+    #ikon-perde, #emoji-perde { z-index: 310; }
+    #ikon-modal, #emoji-modal { z-index: 311; }
     .ozel-alan { display: none; }
     .ozel-alan.gorunur { display: block; }
     .sablon-satir {
@@ -178,6 +185,7 @@
         <button type="button" class="mini-ikon coklu-gerekli" title="Grupla" onclick="grupla()">🔗</button>
         <button type="button" id="btnGrubuCoz" class="mini-ikon" title="Grubu Çöz" onclick="grubuCoz()" style="display:none;">✂</button>
         <button type="button" id="btnKilitToggle" class="mini-ikon" title="Kilitle" onclick="kilitToggle()">🔒</button>
+        <button type="button" id="btnSabitToggle" class="mini-ikon" title="Ekranda Sabitle (mobilde kayarken bu sabit kalır)" onclick="sabitKonumToggle()">📌</button>
     </div>
     <div id="yan-panel-donustur" style="display:flex;flex-direction:column;gap:4px;background:var(--panel);
          border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
@@ -1630,6 +1638,14 @@ function render() {
                 + 'background:var(--panel);border-radius:50%;padding:2px;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.5);';
             div.appendChild(rozet);
         }
+        if (el.sabit_konum && el.sabit_konum !== 'yok') {
+            const pinRozet = document.createElement('div');
+            pinRozet.textContent = '📌';
+            pinRozet.title = el.sabit_konum === 'alt' ? 'Ekranın altında sabit' : 'Ekranın üstünde sabit';
+            pinRozet.style.cssText = 'position:absolute;bottom:-9px;right:-9px;font-size:11px;line-height:1;'
+                + 'background:var(--panel);border-radius:50%;padding:2px;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.5);';
+            div.appendChild(pinRozet);
+        }
 
         // Kullanıcı isteği: tuvalde küçük bir bağlantı simgesi — tıklayınca
         // tam özellikler modalını açmadan hızlıca tag seçilebilsin.
@@ -1699,6 +1715,14 @@ function yanPanelGuncelle() {
         const digerKilitli = [...seciliSet].some(sid => { const e = bul(sid); return e && e.kilitli; });
         kilitBtn.textContent = digerKilitli ? '🔓' : '🔒';
         kilitBtn.title = digerKilitli ? 'Kilidi Aç' : 'Kilitle';
+    }
+    const sabitBtn = document.getElementById('btnSabitToggle');
+    if (sabitBtn && seciliSet.size) {
+        const ilkEl = bul([...seciliSet][0]);
+        const mevcut = (ilkEl && ilkEl.sabit_konum) || 'yok';
+        sabitBtn.style.opacity = mevcut === 'yok' ? '0.5' : '1';
+        sabitBtn.title = mevcut === 'yok' ? 'Ekranda Sabitle (mobilde kayarken sabit kalır)'
+            : (mevcut === 'alt' ? 'Alta sabit — tekrar tıkla: Üste sabitle' : 'Üste sabit — tekrar tıkla: sabitlemeyi kaldır');
     }
     const resimVarMi = [...seciliSet].some(sid => { const e = bul(sid); return e && e.type === 'resim'; });
     document.getElementById('yan-panel-resim').style.display = resimVarMi ? 'flex' : 'none';
@@ -2210,6 +2234,22 @@ function topluKilitle(kilit) {
     render();
     yanPanelGuncelle();
     durumYaz(kilit ? '🔒 Kilitlendi' : '🔓 Kilit açıldı');
+}
+
+// ---------- Ekranda Sabitleme (mobilde kaydırma sırasında navbar/FAB gibi
+// elementlerin ekranın üstünde/altında sabit kalması için) ----------
+// yok -> alt -> ust -> yok döngüsü.
+function sabitKonumToggle() {
+    if (!seciliSet.size) return;
+    gecmiseKaydet();
+    const ilkEl = bul([...seciliSet][0]);
+    const mevcut = (ilkEl && ilkEl.sabit_konum) || 'yok';
+    const sonraki = mevcut === 'yok' ? 'alt' : (mevcut === 'alt' ? 'ust' : 'yok');
+    seciliSet.forEach(id => { const el = bul(id); if (el) el.sabit_konum = sonraki; });
+    render();
+    yanPanelGuncelle();
+    const isimler = { yok: 'Sabitleme kaldırıldı', alt: '📌 Alta sabitlendi', ust: '📌 Üste sabitlendi' };
+    durumYaz(isimler[sonraki]);
 }
 
 // ---------- Döndürme / Aynalama ----------

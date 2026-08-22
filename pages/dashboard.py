@@ -14,7 +14,10 @@ def dashboard_page():
         flash('Herhangi bir projeye bağlı değilsiniz.', 'danger')
         return redirect(url_for('login.login_page'))
     cihazlar = database.proje_cihazlari(session['proje_id'])
-    return render_template('dashboard.html', cihazlar=cihazlar)
+    # Kullanıcı isteği: giriş sonrası ekranda platform üst çubuğu (logo/proje
+    # adı/rol/Çıkış) görünmesin, cihaz listesi "gerçek bir program" gibi
+    # tam ekran, görsel kartlar halinde gelsin.
+    return render_template('dashboard.html', cihazlar=cihazlar, tam_ekran=True)
 
 
 @dashboard_bp.route('/cihaz-ekle', methods=['POST'])
@@ -64,6 +67,18 @@ def cihaz_yeniden_adlandir(cihaz_id):
     else:
         database.cihaz_yeniden_adlandir(cihaz_id, yeni_ad)
         flash('Cihaz adı güncellendi.', 'success')
+    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/baslangic-sayfa', methods=['POST'])
+@tasarimci_required
+def cihaz_baslangic_sayfa(cihaz_id):
+    if not _cihaz_dogrula(cihaz_id):
+        flash('Cihaz bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    sayfa_ad = request.form.get('sayfa_ad', '').strip()
+    database.cihaz_baslangic_sayfa_guncelle(cihaz_id, sayfa_ad)
+    flash('Başlangıç sayfası güncellendi.' if sayfa_ad else 'Başlangıç sayfası kaldırıldı — cihaza tıklayınca yine yönetim sayfası açılacak.', 'success')
     return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
 

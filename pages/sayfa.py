@@ -202,6 +202,7 @@ def sayfa_calistir(cihaz_id, sayfa_ad):
         masaustu_json=paket(masaustu), mobil_json=paket(mobil),
         sayfalar=database.cihaz_sayfalari(cihaz_id),
         sayfa_bilgileri_json=json.dumps(database.cihaz_sayfa_bilgileri(cihaz_id), ensure_ascii=False),
+        tam_ekran=True,
     )
 
 

@@ -1,47 +1,87 @@
 {% extends "base.html" %}
 {% block title %}Cihazlar - OventechIOT{% endblock %}
+{% block extra_css %}
+<style>
+    /* Kullanıcı isteği: giriş sonrası ekranda platform üst çubuğu (logo,
+       proje adı, rol, Çıkış) görünmesin — bu ekran "gerçek bir program"ın
+       başlangıç/cihaz-seçim ekranı gibi hissettirmeli. */
+    .container { max-width: none; padding: 0; }
+    #ds-ust {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    #ds-ust h1 { font-size: 17px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    #ds-ust .ds-alt-baslik { font-size: 12px; color: var(--text-secondary); font-weight: 400; margin-left: 4px; }
+    #ds-ust-sag { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+    #ds-ust-sag a { color: var(--red); text-decoration: none; }
+    #ds-govde { padding: 20px; }
+    .cihaz-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 16px; margin-bottom: 24px;
+    }
+    .cihaz-kart {
+        position: relative; background: var(--panel); border: 1px solid var(--border);
+        border-radius: 14px; padding: 22px 16px; text-decoration: none; color: var(--text);
+        display: flex; flex-direction: column; align-items: center; gap: 10px;
+        transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+    .cihaz-kart:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+    .cihaz-kart:active { transform: scale(0.97); }
+    .cihaz-kart .cihaz-ikon {
+        width: 56px; height: 56px; border-radius: 50%; background: var(--panel2);
+        display: flex; align-items: center; justify-content: center; font-size: 26px;
+    }
+    .cihaz-kart .cihaz-ad { font-weight: 700; font-size: 14px; text-align: center; }
+    .cihaz-kart .cihaz-durum { font-size: 11px; color: var(--text-secondary); }
+    .cihaz-kart .cihaz-durum.on { color: var(--green); }
+    .cihaz-kart .cihaz-yonet {
+        position: absolute; top: 8px; right: 8px; width: 26px; height: 26px;
+        border-radius: 50%; background: var(--panel2); display: flex; align-items: center;
+        justify-content: center; font-size: 13px; text-decoration: none; color: var(--text-secondary);
+    }
+    .cihaz-kart .cihaz-yonet:hover { background: var(--border); color: var(--text); }
+</style>
+{% endblock %}
 {% block content %}
-<div class="card">
-    <h2>Cihazlar</h2>
-    {% if cihazlar %}
-    <table>
-        <thead><tr><th>Ad</th><th>Kimlik</th><th>Son Görülme</th>{% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}<th></th>{% endif %}</tr></thead>
-        <tbody>
-        {% for c in cihazlar %}
-            <tr>
-                <td><a class="item-link" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=c.id) }}">{{ c.ad }}</a></td>
-                <td style="font-family:monospace;font-size:11px;">{{ c.cihaz_kimlik }}</td>
-                <td>
-                    {% if c.son_gorulme %}
-                        <span class="badge on">{{ c.son_gorulme }}</span>
-                    {% else %}
-                        <span class="badge">Hiç bağlanmadı</span>
-                    {% endif %}
-                </td>
-                {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
-                <td style="white-space:nowrap;">
-                    <form method="POST" action="{{ url_for('dashboard.cihaz_sil', cihaz_id=c.id) }}" style="display:inline;" onsubmit="return confirm('{{ c.ad }} silinsin mi? Tüm tag ve sayfaları da silinir.');">
-                        <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
-                    </form>
-                </td>
-                {% endif %}
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p style="color:var(--text-secondary);font-size:14px;">Henüz cihaz eklenmedi.</p>
-    {% endif %}
+<div id="ds-ust">
+    <h1>⚙️ OventechIOT <span class="ds-alt-baslik">{{ session.get('proje_ad', '') }}</span></h1>
+    <div id="ds-ust-sag">
+        <span>{{ session.get('ad_soyad', session.get('kullanici_adi','')) }} ({{ session.get('rol', 'admin') }})</span>
+        <a href="{{ url_for('admin.admin_logout') if session.get('platform_admin') else url_for('login.logout') }}">🚪 Çıkış</a>
+    </div>
 </div>
 
-{% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
-<div class="card">
-    <h2>Yeni Cihaz Ekle</h2>
-    <form method="POST" action="{{ url_for('dashboard.cihaz_ekle') }}">
-        <label>Cihaz Adı</label>
-        <input type="text" name="ad" placeholder="örn. Kurutma Fırını 1" required>
-        <button type="submit">Ekle</button>
-    </form>
+<div id="ds-govde">
+    <div class="card" style="margin:0 0 20px;">
+        <h2>Cihazlar</h2>
+        {% if cihazlar %}
+        <div class="cihaz-grid">
+            {% for c in cihazlar %}
+            {% set hedef_url = url_for('sayfa.sayfa_calistir', cihaz_id=c.id, sayfa_ad=c.baslangic_sayfa) if c.baslangic_sayfa else url_for('dashboard.cihaz_detay', cihaz_id=c.id) %}
+            <a class="cihaz-kart" href="{{ hedef_url }}">
+                {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+                <a class="cihaz-yonet" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=c.id) }}" title="Cihazı Yönet" onclick="event.stopPropagation();">⚙️</a>
+                {% endif %}
+                <div class="cihaz-ikon">🏭</div>
+                <div class="cihaz-ad">{{ c.ad }}</div>
+                <div class="cihaz-durum {{ 'on' if c.son_gorulme }}">{{ c.son_gorulme if c.son_gorulme else 'Hiç bağlanmadı' }}</div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="color:var(--text-secondary);font-size:14px;">Henüz cihaz eklenmedi.</p>
+        {% endif %}
+    </div>
+
+    {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+    <div class="card">
+        <h2>Yeni Cihaz Ekle</h2>
+        <form method="POST" action="{{ url_for('dashboard.cihaz_ekle') }}">
+            <label>Cihaz Adı</label>
+            <input type="text" name="ad" placeholder="örn. Kurutma Fırını 1" required>
+            <button type="submit">Ekle</button>
+        </form>
+    </div>
+    {% endif %}
 </div>
-{% endif %}
 {% endblock %}

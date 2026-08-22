@@ -134,7 +134,7 @@
         <tbody>
         {% for s in sayfalar %}
             <tr>
-                <td>{{ s.ad }}</td>
+                <td>{{ s.ad }}{% if cihaz.baslangic_sayfa == s.ad %} <span class="badge on" title="Cihaza tıklanınca doğrudan bu sayfa tam ekran açılır">🏠 Başlangıç</span>{% endif %}</td>
                 <td>
                     {% if 'masaustu' in s.hedefler %}<span class="badge on">🖥️ masaüstü</span>{% endif %}
                     {% if 'mobil' in s.hedefler %}<span class="badge on">📱 mobil</span>{% endif %}
@@ -143,6 +143,17 @@
                 <td style="white-space:nowrap;">
                     <a class="btn" href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}?gorunum=masaustu" style="padding:5px 10px;font-size:12px;">🖥️ Aç</a>
                     <a class="btn" href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}?gorunum=mobil" style="padding:5px 10px;font-size:12px;">📱 Aç</a>
+                    {% if (session.get('rol') == 'tasarimci' or session.get('platform_admin')) and cihaz.baslangic_sayfa != s.ad %}
+                    <form method="POST" action="{{ url_for('dashboard.cihaz_baslangic_sayfa', cihaz_id=cihaz.id) }}" style="display:inline;">
+                        <input type="hidden" name="sayfa_ad" value="{{ s.ad }}">
+                        <button type="submit" style="padding:5px 10px;font-size:12px;background:var(--panel2);" title="Cihaz listesinde bu cihaza tıklanınca doğrudan bu sayfa tam ekran açılsın">🏠 Başlangıç Yap</button>
+                    </form>
+                    {% elif cihaz.baslangic_sayfa == s.ad %}
+                    <form method="POST" action="{{ url_for('dashboard.cihaz_baslangic_sayfa', cihaz_id=cihaz.id) }}" style="display:inline;">
+                        <input type="hidden" name="sayfa_ad" value="">
+                        <button type="submit" style="padding:5px 10px;font-size:12px;background:var(--panel2);" title="Başlangıç sayfası olmaktan çıkar">✕ Başlangıcı Kaldır</button>
+                    </form>
+                    {% endif %}
                     {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
                     <a class="btn" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=s.ad, hedef='masaustu') }}" style="padding:5px 10px;font-size:12px;background:var(--accent-dark);">🖥️ Düzenle</a>
                     <a class="btn" href="{{ url_for('sayfa.sayfa_tasarla', cihaz_id=cihaz.id, sayfa_ad=s.ad, hedef='mobil') }}" style="padding:5px 10px;font-size:12px;background:var(--accent-dark);">📱 Düzenle</a>

@@ -75,6 +75,13 @@ def init_db():
     if cihaz_kolonlari and 'nav_stili' not in cihaz_kolonlari:
         cursor.execute("ALTER TABLE cihazlar ADD COLUMN nav_stili TEXT NOT NULL DEFAULT 'ust_sekme'")
 
+    # Migration: BAŞLANGIÇ SAYFASI — kullanıcı isteği: cihaza tıklayınca
+    # doğrudan bu sayfa TAM EKRAN (chrome'suz) açılsın, "gerçek bir program"
+    # gibi hissettirsin. Boşsa eski davranış (cihaz yönetim sayfası) devam eder.
+    cihaz_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(cihazlar)").fetchall()}
+    if cihaz_kolonlari and 'baslangic_sayfa' not in cihaz_kolonlari:
+        cursor.execute("ALTER TABLE cihazlar ADD COLUMN baslangic_sayfa TEXT")
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tagler (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -426,6 +433,19 @@ def cihaz_yeniden_adlandir(cihaz_id: int, yeni_ad: str):
     conn = get_db()
     try:
         conn.execute('UPDATE cihazlar SET ad = ? WHERE id = ?', (yeni_ad.strip(), cihaz_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def cihaz_baslangic_sayfa_guncelle(cihaz_id: int, sayfa_ad: str):
+    """Boş string/None verilirse başlangıç sayfası kaldırılır (eski davranışa
+    — cihaz yönetim sayfasına dönülür)."""
+    conn = get_db()
+    try:
+        conn.execute('UPDATE cihazlar SET baslangic_sayfa = ? WHERE id = ?',
+                     (sayfa_ad.strip() if sayfa_ad and sayfa_ad.strip() else None, cihaz_id))
         conn.commit()
         return True
     finally:

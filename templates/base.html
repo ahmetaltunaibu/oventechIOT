@@ -99,7 +99,7 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    {% if session.get('kullanici_id') or session.get('platform_admin') %}
+    {% if (session.get('kullanici_id') or session.get('platform_admin')) and not tam_ekran %}
     <div class="topbar">
         <div>
             <span class="logo">⚙️ OventechIOT</span>
