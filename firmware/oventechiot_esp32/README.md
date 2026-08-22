@@ -72,3 +72,5 @@ oventechIOT'ta cihazın yönetim sayfasında (cihaz_detay) bir "📡 Firmware" k
 | string | — desteklenmiyor | (projene özel; gerekirse ayrıca konuşuruz) |
 
 `tagler.modbus_adres` alanındaki sayı doğrudan register/coil adresi olarak kullanılır.
+
+<!-- yedekleme boru hattı testi 2026-08-22T18:13:29Z -->
