@@ -822,6 +822,28 @@ def tag_yaz_iste(tag_id: int, deger):
         conn.close()
 
 
+def tagler_yazilacak_temizle(tag_idleri):
+    """Kullanıcı raporu: PLC'yi SCADA'nın yanı sıra bir de kendi fiziksel
+    HMI paneli kontrol ediyor — SCADA'nın yazdığı bir değer temizlenmediği
+    için ESP32'ye HER xchange döngüsünde (5sn'de bir) tekrar tekrar
+    gönderiliyordu, bu da PLC'ye sürekli zorla yazılıp HMI'den yapılan
+    değişiklikleri eziyordu. Doğru davranış: SCADA bir tag'i SADECE BİR KEZ
+    yazsın, sonraki bir kullanıcı işlemine kadar sadece okusun. Bu yüzden
+    bir tag'in yazilacak_deger'i ESP32'ye 'yazilacaklar' olarak gönderilir
+    gönderilmez (bkz. pages/esp32.py: esp32_xchange) burada temizlenir."""
+    if not tag_idleri:
+        return
+    conn = get_db()
+    try:
+        conn.executemany(
+            "UPDATE tagler SET yazilacak_deger = NULL WHERE id = ?",
+            [(tid,) for tid in tag_idleri]
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # Kullanıcı isteği: grafik geçmişine her canlı güncellemede değil, en fazla
 # şu aralıkla bir satır düşsün (10-30sn aralığı istendi, ortası seçildi) —
 # ESP32/simülatör çok daha sık senkron olsa bile veritabanı şişmesin.

@@ -68,10 +68,23 @@ def esp32_xchange(cihaz_kimlik):
         islenen += 1
 
     # Kullanıcının panelden yazdığı (henüz PLC'ye iletilmemiş) değerler.
+    #
+    # KRİTİK (kullanıcı raporu): PLC'yi SCADA'nın yanı sıra kendi fiziksel
+    # HMI paneli de kontrol ediyor. yazilacak_deger önceden burada hiç
+    # temizlenmiyordu — bu yüzden ESP32 aynı değeri HER xchange döngüsünde
+    # (5sn'de bir) tekrar tekrar PLC'ye zorla yazıyor, HMI'den yapılan
+    # değişiklikleri sürekli eziyordu. Artık: bir tag'in yazilacak_deger'i
+    # bu yanıtla ESP32'ye gönderilir gönderilmez temizleniyor — SCADA bir
+    # tag'i SADECE BİR KEZ yazar, sonraki bir panel işlemine kadar sadece
+    # okur (HMI'nin/PLC'nin kendi değişikliklerine karışmaz).
     yazilacaklar = {}
+    yazilan_tag_idleri = []
     for t in database.cihaz_tagleri(cihaz['id']):
         if t['erisim'] in ('write', 'readwrite') and t.get('yazilacak_deger') not in (None, ''):
             yazilacaklar[str(t['id'])] = t['yazilacak_deger']
+            yazilan_tag_idleri.append(t['id'])
+    if yazilan_tag_idleri:
+        database.tagler_yazilacak_temizle(yazilan_tag_idleri)
 
     return jsonify({'success': True, 'islenen': islenen, 'yazilacaklar': yazilacaklar})
 
