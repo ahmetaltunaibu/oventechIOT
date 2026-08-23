@@ -398,6 +398,27 @@ function tuvalCiz() {
             return;
         }
 
+        if (el.type === 'saattarih') {
+            // Tag'e bağlı değil — kendi kendine (setInterval ile, bkz.
+            // saatTarihTumGuncelle) saniyede bir güncellenen canlı saat/tarih.
+            // Burada sadece İLK içerik yazılıyor; sonraki tikler tuvalCiz()'i
+            // tekrar çağırmadan (gereksiz tam yeniden çizimi önlemek için)
+            // doğrudan bu düğümün textContent'ini güncelliyor.
+            div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
+            div.style.color = el.renk_yazi || '#e8eef4';
+            div.style.fontSize = (el.font_boyutu || 16) + 'px';
+            div.style.fontWeight = '500';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+            div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
+            div.style.boxSizing = 'border-box';
+            div.dataset.saattarihId = el.id;
+            div.textContent = saatTarihMetni(el);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            hedefKatmanaEkle(div, el, tuval);
+            return;
+        }
+
         if (el.type === 'textbox') {
             div.className = '';
             div.style.background = el.renk_arkaplan || '#17222e';
@@ -737,6 +758,31 @@ function koseCSS(el, on) {
     const bl = el[on + '_solalt'] || 0;
     return `${tl}px ${tr}px ${br}px ${bl}px`;
 }
+
+// Saat/Tarih elementinin metnini üretir — tasarım ekranındaki (sayfa_tasarla.html)
+// aynı fonksiyonla birebir aynı mantık.
+function saatTarihMetni(el) {
+    const simdi = new Date();
+    const tarihStr = simdi.toLocaleDateString('tr-TR');
+    const saatOpts = { hour: '2-digit', minute: '2-digit', hour12: false };
+    if (el.saniye_goster !== false) saatOpts.second = '2-digit';
+    const saatStr = simdi.toLocaleTimeString('tr-TR', saatOpts);
+    if (el.gosterim === 'tarih') return tarihStr;
+    if (el.gosterim === 'saat') return saatStr;
+    return tarihStr + '  ' + saatStr;
+}
+// Saat/Tarih elementleri her saniye tuvalCiz() ile TAM yeniden çizilmeye
+// gerek kalmadan (gereksiz maliyet + diğer elementlerde flicker riski)
+// kendi textContent'lerini güncelliyor — hem tuval hem sabit (📌) katmanlar
+// taranıyor, çünkü saat/tarih pinlenmiş bir navbar'a da konabilir.
+function saatTarihTumGuncelle() {
+    if (!aktifSayfa) return;
+    document.querySelectorAll('[data-saattarih-id]').forEach(div => {
+        const el = aktifSayfa.elementler.find(e => e.id === div.dataset.saattarihId);
+        if (el) div.textContent = saatTarihMetni(el);
+    });
+}
+setInterval(saatTarihTumGuncelle, 1000);
 
 function sekilArkaplanCSS(el) {
     if (el.sekil_gradient_aktif) {

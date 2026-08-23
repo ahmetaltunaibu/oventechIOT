@@ -751,6 +751,32 @@
         <input type="number" id="ozAlarmKoseYaricapi" value="8" min="0" max="200">
     </div>
 
+    <div id="ozAlanSaatTarih" class="ozel-alan">
+        <label>Gösterim</label>
+        <select id="ozSaatTarihGosterim">
+            <option value="tarihsaat">Tarih + Saat</option>
+            <option value="tarih">Sadece Tarih</option>
+            <option value="saat">Sadece Saat</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="ozSaatTarihSaniye" style="width:auto;margin:0;" checked> Saniyeyi Göster
+        </label>
+        <label>Font Boyutu (px)</label>
+        <input type="number" id="ozSaatTarihFontBoyutu" value="16" min="8" max="120">
+        <label>Yazı Rengi</label>
+        <input type="color" id="ozSaatTarihRenkYazi" value="#e8eef4" style="height:38px;">
+        <label>Arka Plan</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" id="ozSaatTarihRenkArkaplan" value="#1e2d3d" style="height:38px;flex:1;">
+            <label style="display:flex;align-items:center;gap:4px;margin:0;white-space:nowrap;">
+                <input type="checkbox" id="ozSaatTarihSeffaf" style="width:auto;margin:0;"> Şeffaf
+            </label>
+        </div>
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozSaatTarihKoseYaricapi" value="0" min="0" max="200">
+        <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Tag'e bağlı değildir — cihazın çalıştığı tarayıcının kendi saatini gösterir, saniyede bir otomatik güncellenir.</p>
+    </div>
+
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
     <textarea id="ozCustomCss" rows="3" placeholder="örn. box-shadow: 0 4px 12px #000; transform: rotate(2deg);" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:monospace;padding:8px;margin-bottom:10px;box-sizing:border-box;"></textarea>
 
@@ -1506,6 +1532,19 @@ function alarmEkle(x, y) {
     });
 }
 
+// Saat/Tarih: tag'e bağlı değil, kendi kendine (setInterval ile, sadece
+// çalışma zamanında) saniyede bir güncellenen canlı saat/tarih göstergesi.
+function saatTarihEkle(x, y) {
+    elementEkle({
+        id: uid(), type: 'saattarih',
+        x: Math.max(0, x - 80), y: Math.max(0, y - 16), w: 160, h: 32,
+        gosterim: 'tarihsaat', // 'tarih' | 'saat' | 'tarihsaat'
+        saniye_goster: true,
+        renk_yazi: '#e8eef4', renk_arkaplan: 'transparent',
+        font_boyutu: 16, kose_yaricapi: 0, custom_css: ''
+    });
+}
+
 const GRAFIK_RENK_PALETI = ['#2e9ed9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e84393', '#95a5a6'];
 function grafikEkle(x, y) {
     elementEkle({
@@ -1528,6 +1567,19 @@ function koseCSS(el, on) {
     const br = el[on + '_sagalt'] || 0;
     const bl = el[on + '_solalt'] || 0;
     return `${tl}px ${tr}px ${br}px ${bl}px`;
+}
+
+// Saat/Tarih elementinin metnini üretir — tasarım ekranında ve çalışma
+// zamanında (sayfa_calistir.html'de birebir aynısı) kullanılır.
+function saatTarihMetni(el) {
+    const simdi = new Date();
+    const tarihStr = simdi.toLocaleDateString('tr-TR');
+    const saatOpts = { hour: '2-digit', minute: '2-digit', hour12: false };
+    if (el.saniye_goster !== false) saatOpts.second = '2-digit';
+    const saatStr = simdi.toLocaleTimeString('tr-TR', saatOpts);
+    if (el.gosterim === 'tarih') return tarihStr;
+    if (el.gosterim === 'saat') return saatStr;
+    return tarihStr + '  ' + saatStr;
 }
 
 // Kullanıcı isteği: renk seçici (native color picker) üzerinde hex kodunu
@@ -1809,6 +1861,16 @@ function render() {
             div.style.borderRadius = (el.kose_yaricapi ?? 8) + 'px'; div.style.fontWeight = '700';
             div.style.fontSize = (el.font_boyutu || 13) + 'px';
             div.textContent = acikMi ? (el.metin_acik || '⚠️ Alarm') : (el.metin_kapali || '✅ Normal');
+        } else if (el.type === 'saattarih') {
+            // Tasarımda canlı tik atmasına gerek yok — sadece örnek/anlık görünüm.
+            div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
+            div.style.color = el.renk_yazi || '#e8eef4';
+            div.style.fontSize = (el.font_boyutu || 16) + 'px';
+            div.style.fontWeight = '500';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+            div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
+            div.style.boxSizing = 'border-box';
+            div.textContent = saatTarihMetni(el);
         } else {
             // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
             // — "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
@@ -1897,8 +1959,10 @@ function render() {
 
         tuval.appendChild(div);
     });
-    // Boyutlandırma tutamacı sadece TEK (ve kilitsiz) element seçiliyken
-    // gösterilir — çoklu seçimde grup taşıma var ama grup boyutlandırma yok.
+    // Boyutlandırma tutamacı: TEK (kilitsiz) element seçiliyken kendi
+    // üzerinde; 2+ element seçiliyken (kilitliler hariç) grubun toplam
+    // sınır kutusu üzerinde — kullanıcı isteği: grup boyutu ortak/orantılı
+    // değiştirilebilsin.
     if (seciliSet.size === 1) {
         const tekId = [...seciliSet][0];
         const tekEl = bul(tekId);
@@ -1906,6 +1970,8 @@ function render() {
         if (div && tekEl && !tekEl.kilitli) {
             resizeTutamaclariEkle(div, tekId);
         }
+    } else if (seciliSet.size > 1) {
+        grupBoyutCercevesiGoster();
     }
 }
 
@@ -1978,6 +2044,7 @@ function selectionGorunumunuTazele(eskiSet, yeniSet) {
         if (d) d.classList.add('secili');
     });
     document.querySelectorAll('.resize-tutamac').forEach(h => h.remove());
+    grupBoyutCercevesiKaldir();
     if (yeniSet.size === 1) {
         const tekId = [...yeniSet][0];
         const tekEl = bul(tekId);
@@ -1985,6 +2052,8 @@ function selectionGorunumunuTazele(eskiSet, yeniSet) {
         if (d && tekEl && !tekEl.kilitli) {
             resizeTutamaclariEkle(d, tekId);
         }
+    } else if (yeniSet.size > 1) {
+        grupBoyutCercevesiGoster();
     }
 }
 
@@ -2009,11 +2078,14 @@ function secCoklu(idler) {
     selectionGorunumunuTazele(eski, seciliSet);
 }
 function secTumu() {
+    // Kullanıcı isteği: kilitli elementler Ctrl+A (Tümünü Seç) ile de
+    // toplu seçime dahil edilmesin.
+    const secilebilirler = elementler.filter(e => !e.kilitli);
     const eski = new Set(seciliSet);
-    seciliSet = new Set(elementler.map(e => e.id));
-    seciliId = elementler.length ? elementler[elementler.length - 1].id : null;
+    seciliSet = new Set(secilebilirler.map(e => e.id));
+    seciliId = secilebilirler.length ? secilebilirler[secilebilirler.length - 1].id : null;
     selectionGorunumunuTazele(eski, seciliSet);
-    durumYaz(`${elementler.length} element seçildi`);
+    durumYaz(`${secilebilirler.length} element seçildi`);
 }
 function secTemizle() {
     const eski = new Set(seciliSet);
@@ -2106,10 +2178,60 @@ function resizeTutamaclariEkle(div, elId) {
     RESIZE_YONLERI.forEach(t => {
         const tutamac = document.createElement('div');
         tutamac.className = 'resize-tutamac';
-        tutamac.style.cssText = tutamac.style.cssText + t.stil + `cursor:${t.cursor};`;
+        tutamac.style.cssText = tutamac.style.cssText + t.stil + `cursor:${t.cursor};pointer-events:auto;`;
         tutamac.addEventListener('mousedown', (e) => baslaBoyutlandir(e, elId, t.yon));
         div.appendChild(tutamac);
     });
+}
+
+// ---------- Kullanıcı isteği: grup/çoklu seçimin boyutu ORTAK (orantılı)
+// değiştirilebilsin. Kilitli elementler grubun boyutlandırmasına katılmaz.
+function grupSecilenUyeler() {
+    return [...seciliSet].map(bul).filter(el => el && !el.kilitli);
+}
+function sinirKutusu(elList) {
+    if (!elList.length) return null;
+    const minX = Math.min(...elList.map(e => e.x));
+    const minY = Math.min(...elList.map(e => e.y));
+    const maxX = Math.max(...elList.map(e => e.x + e.w));
+    const maxY = Math.max(...elList.map(e => e.y + e.h));
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+function grupBoyutCercevesiKaldir() {
+    const mevcut = document.getElementById('grup-boyut-cercevesi');
+    if (mevcut) mevcut.remove();
+}
+function grupBoyutCercevesiGoster() {
+    grupBoyutCercevesiKaldir();
+    const uyeler = grupSecilenUyeler();
+    if (uyeler.length < 2) return;
+    const kutu = sinirKutusu(uyeler);
+    if (!kutu) return;
+    const cerceve = document.createElement('div');
+    cerceve.id = 'grup-boyut-cercevesi';
+    cerceve.style.cssText = `position:absolute;left:${kutu.x}px;top:${kutu.y}px;width:${kutu.w}px;height:${kutu.h}px;`
+        + `border:1px dashed var(--accent);pointer-events:none;box-sizing:border-box;z-index:55;`;
+    RESIZE_YONLERI.forEach(t => {
+        const tutamac = document.createElement('div');
+        tutamac.className = 'resize-tutamac';
+        tutamac.style.cssText = tutamac.style.cssText + t.stil + `cursor:${t.cursor};pointer-events:auto;`;
+        tutamac.addEventListener('mousedown', (e) => baslaGrupBoyutlandir(e, t.yon));
+        cerceve.appendChild(tutamac);
+    });
+    document.getElementById('tuval').appendChild(cerceve);
+}
+function baslaGrupBoyutlandir(e, yon) {
+    e.preventDefault();
+    e.stopPropagation();
+    gecmiseKaydet();
+    const uyeler = grupSecilenUyeler();
+    const kutu = sinirKutusu(uyeler);
+    if (!kutu) return;
+    boyutlandiriliyor = {
+        grup: true, yon, startX: e.clientX, startY: e.clientY,
+        startBoxX: kutu.x, startBoxY: kutu.y, startBoxW: kutu.w, startBoxH: kutu.h,
+        uyeler: uyeler.map(el => ({ id: el.id, x: el.x, y: el.y, w: el.w, h: el.h })),
+    };
 }
 
 // ---------- Hizalama kılavuz çizgileri (Figma tarzı "smart guide") ----------
@@ -2192,6 +2314,55 @@ document.addEventListener('mousemove', (e) => {
             const div = document.querySelector(`[data-el-id="${g.id}"]`);
             if (div && el) { div.style.left = el.x + 'px'; div.style.top = el.y + 'px'; }
         });
+    } else if (boyutlandiriliyor && boyutlandiriliyor.grup) {
+        // Grup boyutlandırma: grubun sınır kutusu tek-element mantığıyla
+        // aynı 8 yönde büyütülüp küçültülüyor, sonra bu kutunun eski/yeni
+        // boyut ORANI tüm üyelerin x/y/w/h'ına uygulanıyor — üyeler
+        // birbirine göre orantılı şekilde (göreli konum/boyut korunarak)
+        // ölçekleniyor.
+        const yon = boyutlandiriliyor.yon || 'se';
+        const dx = (e.clientX - boyutlandiriliyor.startX) / zoom;
+        const dy = (e.clientY - boyutlandiriliyor.startY) / zoom;
+        const { startBoxX, startBoxY, startBoxW, startBoxH } = boyutlandiriliyor;
+        let yeniBoxX = startBoxX, yeniBoxY = startBoxY, yeniBoxW = startBoxW, yeniBoxH = startBoxH;
+
+        if (yon.includes('e')) {
+            yeniBoxW = Math.max(24, Math.min(tuvalW - startBoxX, Math.round(startBoxW + dx)));
+        }
+        if (yon.includes('w')) {
+            const sagKenar = startBoxX + startBoxW;
+            yeniBoxX = Math.max(0, Math.min(sagKenar - 24, Math.round(startBoxX + dx)));
+            yeniBoxW = sagKenar - yeniBoxX;
+        }
+        if (yon.includes('s')) {
+            yeniBoxH = Math.max(24, Math.min(tuvalH - startBoxY, Math.round(startBoxH + dy)));
+        }
+        if (yon.includes('n')) {
+            const altKenar = startBoxY + startBoxH;
+            yeniBoxY = Math.max(0, Math.min(altKenar - 24, Math.round(startBoxY + dy)));
+            yeniBoxH = altKenar - yeniBoxY;
+        }
+
+        const olcekX = startBoxW > 0 ? yeniBoxW / startBoxW : 1;
+        const olcekY = startBoxH > 0 ? yeniBoxH / startBoxH : 1;
+        boyutlandiriliyor.uyeler.forEach(u => {
+            const uyeEl = bul(u.id);
+            if (!uyeEl) return;
+            uyeEl.x = Math.round(yeniBoxX + (u.x - startBoxX) * olcekX);
+            uyeEl.y = Math.round(yeniBoxY + (u.y - startBoxY) * olcekY);
+            uyeEl.w = Math.max(4, Math.round(u.w * olcekX));
+            uyeEl.h = Math.max(4, Math.round(u.h * olcekY));
+            const uyeDiv = document.querySelector(`[data-el-id="${u.id}"]`);
+            if (uyeDiv) {
+                uyeDiv.style.left = uyeEl.x + 'px'; uyeDiv.style.top = uyeEl.y + 'px';
+                uyeDiv.style.width = uyeEl.w + 'px'; uyeDiv.style.height = uyeEl.h + 'px';
+            }
+        });
+        const cerceve = document.getElementById('grup-boyut-cercevesi');
+        if (cerceve) {
+            cerceve.style.left = yeniBoxX + 'px'; cerceve.style.top = yeniBoxY + 'px';
+            cerceve.style.width = yeniBoxW + 'px'; cerceve.style.height = yeniBoxH + 'px';
+        }
     } else if (boyutlandiriliyor) {
         // 8 noktalı boyutlandırma: yöne göre hangi kenar(lar) hareket
         // ediyor, karşı kenar/köşe sabit anchor olarak kalıyor.
@@ -2235,13 +2406,25 @@ document.addEventListener('mousemove', (e) => {
 });
 document.addEventListener('mouseup', () => {
     surukleGrubu = null;
+    // Kullanıcı raporu: boyutlandırma sırasında sadece dıştaki div'in
+    // left/top/width/height'ı canlı güncelleniyordu — switch elementinin
+    // orta dairesi gibi, boyuta göre KENDİ İÇİNDE hesaplanan alt öğeler
+    // (daireBoyut = h-6 vb.) hiç yenilenmiyordu (özellikle dikey/h
+    // değişiminde fark ediliyordu). Boyutlandırma bittiğinde tam bir
+    // render() ile tüm iç öğeler nihai w/h'a göre yeniden hesaplanıyor.
+    const boyutlandirmaBittiMi = !!boyutlandiriliyor;
     boyutlandiriliyor = null;
+    if (boyutlandirmaBittiMi) render();
     tumHizaCizgileriGizle();
     if (marquee) {
         const x1 = Math.min(marquee.x1, marquee.x2), x2 = Math.max(marquee.x1, marquee.x2);
         const y1 = Math.min(marquee.y1, marquee.y2), y2 = Math.max(marquee.y1, marquee.y2);
         const eski = new Set(seciliSet);
         elementler.forEach(el => {
+            // Kullanıcı isteği: kilitli elementler alan (dikdörtgen çizerek)
+            // seçime dahil edilmesin — kilidi açmak için tek tek tıklamak
+            // hâlâ çalışıyor, sadece toplu/alan seçiminde pas geçiliyor.
+            if (el.kilitli) return;
             const kesisir = el.x < x2 && el.x + el.w > x1 && el.y < y2 && el.y + el.h > y1;
             if (kesisir) seciliSet.add(el.id);
         });
@@ -2263,18 +2446,35 @@ function _grupIdEslestir(nesne, harita) {
     return nesne;
 }
 
+// Bir grup/çoklu-seçimin toplam sınır kutusuna göre TEK bir kaydırma
+// miktarı hesaplar (tuval sınırlarını aşmayacak şekilde) — kullanıcı
+// raporu: önceden her element kendi x/y'sine göre AYRI AYRI kenardan
+// kırpılıyordu, grup kenara yakınsa üyeler arası göreli konum (grubun
+// şekli) bozuluyordu. Artık TÜM üyeler AYNI miktar kayar, şekil korunur.
+function _grupKaydirmaHesapla(kaynaklar, kaydirmaIstek) {
+    if (!kaydirmaIstek) return { dx: 0, dy: 0 };
+    const minX = Math.min(...kaynaklar.map(k => k.x || 0));
+    const minY = Math.min(...kaynaklar.map(k => k.y || 0));
+    const maxX = Math.max(...kaynaklar.map(k => (k.x || 0) + (k.w || 0)));
+    const maxY = Math.max(...kaynaklar.map(k => (k.y || 0) + (k.h || 0)));
+    return {
+        dx: Math.max(0, Math.min(kaydirmaIstek, tuvalW - maxX)),
+        dy: Math.max(0, Math.min(kaydirmaIstek, tuvalH - maxY)),
+    };
+}
+
 function cogalt() {
     if (!seciliSet.size) return;
     gecmiseKaydet();
+    const kaynaklar = [...seciliSet].map(bul).filter(Boolean);
+    const { dx, dy } = _grupKaydirmaHesapla(kaynaklar, 16);
     const harita = {};
     const yeniIdler = [];
-    [...seciliSet].forEach(id => {
-        const kaynak = bul(id);
-        if (!kaynak) return;
+    kaynaklar.forEach(kaynak => {
         const yeni = _grupIdEslestir(Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
             id: uid(),
-            x: Math.max(0, Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16)),
-            y: Math.max(0, Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16)),
+            x: (kaynak.x || 0) + dx,
+            y: (kaynak.y || 0) + dy,
         }), harita);
         elementler.push(yeni);
         yeniIdler.push(yeni.id);
@@ -2321,15 +2521,15 @@ function yapistir() {
     // (orijinalin tam üstüne binip görünmez/yakalanamaz olmasın diye)
     // eskisi gibi hafifçe kaydırılır.
     const ayniSayfa = panoVerisi.sayfaAd === {{ sayfa_ad | tojson }};
-    const kaydirma = ayniSayfa ? 16 : 0;
     gecmiseKaydet();
+    const { dx, dy } = _grupKaydirmaHesapla(kaynakListe, ayniSayfa ? 16 : 0);
     const harita = {};
     const yeniIdler = [];
     kaynakListe.forEach(kaynak => {
         const yeni = _grupIdEslestir(Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
             id: uid(),
-            x: Math.max(0, Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + kaydirma)),
-            y: Math.max(0, Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + kaydirma)),
+            x: (kaynak.x || 0) + dx,
+            y: (kaynak.y || 0) + dy,
         }), harita);
         elementler.push(yeni);
         yeniIdler.push(yeni.id);
@@ -2703,6 +2903,7 @@ function tuvalBaglamMenusu(e) {
         { etiket: '🖼️ Grup Kutusu / Çerçeve Ekle', aksiyon: () => groupboxEkle(tuvalX, tuvalY) },
         { etiket: '📈 Grafik Ekle', aksiyon: () => grafikEkle(tuvalX, tuvalY) },
         { etiket: '🚨 Alarm Oluştur', aksiyon: () => alarmEkle(tuvalX, tuvalY) },
+        { etiket: '🕐 Saat/Tarih Ekle', aksiyon: () => saatTarihEkle(tuvalX, tuvalY) },
         { ayrac: true },
     ];
     if (pano.length) maddeler.push({ etiket: '📋 Yapıştır (Ctrl+V)', aksiyon: yapistir });
@@ -2771,7 +2972,7 @@ const TIP_ADLARI = {
     button: 'Buton', label: 'Etiket', sekil: 'Dikdörtgen/Kare', cizgi: 'Çizgi', resim: 'Resim',
     durum: 'Durum Göstergesi', switch: 'Switch (Sürgü)', textbox: 'Metin Kutusu', inputbox: 'Giriş Kutusu',
     combobox: 'Açılır Liste', checkbox: 'Onay Kutusu', progressbar: 'İlerleme Çubuğu',
-    groupbox: 'Grup Kutusu/Çerçeve', grafik: 'Grafik', alarm: 'Alarm',
+    groupbox: 'Grup Kutusu/Çerçeve', grafik: 'Grafik', alarm: 'Alarm', saattarih: 'Saat/Tarih',
 };
 function guncellePanel() {
     const el = seciliId ? bul(seciliId) : null;
@@ -2798,6 +2999,7 @@ function guncellePanel() {
     document.getElementById('ozAlanGroupbox').classList.toggle('gorunur', el.type === 'groupbox');
     document.getElementById('ozAlanGrafik').classList.toggle('gorunur', el.type === 'grafik');
     document.getElementById('ozAlanAlarm').classList.toggle('gorunur', el.type === 'alarm');
+    document.getElementById('ozAlanSaatTarih').classList.toggle('gorunur', el.type === 'saattarih');
 
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
@@ -2963,6 +3165,15 @@ function guncellePanel() {
         document.getElementById('ozAlarmFont').value = el.font_boyutu || 13;
         document.getElementById('ozAlarmKoseYaricapi').value = el.kose_yaricapi ?? 8;
         alarmTipGuncelle();
+    } else if (el.type === 'saattarih') {
+        document.getElementById('ozSaatTarihGosterim').value = el.gosterim || 'tarihsaat';
+        document.getElementById('ozSaatTarihSaniye').checked = el.saniye_goster !== false;
+        document.getElementById('ozSaatTarihFontBoyutu').value = el.font_boyutu || 16;
+        document.getElementById('ozSaatTarihRenkYazi').value = el.renk_yazi || '#e8eef4';
+        const seffaf = !el.renk_arkaplan || el.renk_arkaplan === 'transparent';
+        document.getElementById('ozSaatTarihSeffaf').checked = seffaf;
+        document.getElementById('ozSaatTarihRenkArkaplan').value = seffaf ? '#1e2d3d' : el.renk_arkaplan;
+        document.getElementById('ozSaatTarihKoseYaricapi').value = el.kose_yaricapi ?? 0;
     }
 
     document.getElementById('ozCustomCss').value = el.custom_css || '';
@@ -3308,6 +3519,13 @@ function uygula() {
         el.renk_yazi_kapali = document.getElementById('ozAlarmRenkYaziKapali').value;
         el.font_boyutu = parseInt(document.getElementById('ozAlarmFont').value) || 13;
         el.kose_yaricapi = parseInt(document.getElementById('ozAlarmKoseYaricapi').value) || 0;
+    } else if (el.type === 'saattarih') {
+        el.gosterim = document.getElementById('ozSaatTarihGosterim').value;
+        el.saniye_goster = document.getElementById('ozSaatTarihSaniye').checked;
+        el.font_boyutu = parseInt(document.getElementById('ozSaatTarihFontBoyutu').value) || 16;
+        el.renk_yazi = document.getElementById('ozSaatTarihRenkYazi').value;
+        el.renk_arkaplan = document.getElementById('ozSaatTarihSeffaf').checked ? 'transparent' : document.getElementById('ozSaatTarihRenkArkaplan').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozSaatTarihKoseYaricapi').value) || 0;
     } else if (el.type === 'sekil') {
         el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;
         el.sekil_kenarlik = document.getElementById('ozSekilKenarlik').value;
