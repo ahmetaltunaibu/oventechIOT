@@ -41,6 +41,8 @@ Ayarları sıfırlamak (yeni WiFi/sunucu girmek) istersen: açılışta **BOOT**
 
 Cihaz zaten çalışırken (kurulumdan sonra) WiFi kesilirse **kurulum portalına hiç girmez** — kayıtlı bilgilerle arka planda sürekli `WiFi.reconnect()` dener. Ama bu tek başına saatlerce süren kesintilerde bazen yetersiz kalabiliyor (ESP32'nin WiFi yığını uzun süre bağlantısız kalınca "takılıp kalabiliyor", router geri gelse bile bir daha bağlanamıyor) — bu yüzden **WiFi 5 dakikadan uzun süre kesik kalırsa cihaz kendini otomatik olarak yeniden başlatır**; açılışta kayıtlı WiFi bilgileriyle sıfırdan dener. Yani en kötü ihtimalle WiFi geri geldikten sonraki birkaç dakika içinde kendiliğinden toparlanır, elle müdahaleye gerek yok.
 
+**Açılışta (reboot anında) WiFi zaten ulaşılamıyorsa ne olur?** Daha önce kurulmuş bir cihazda (yani cihaz kimliği zaten kayıtlıysa) kurulum portalı **açılmaz** — açılsaydı cihaz "elle ayar bekliyormuş" gibi askıda kalırdı. Bunun yerine kayıtlı WiFi ağı arka planda sürekli denenir (5 dakikayı aşarsa kendini yeniden başlatarak); ağ geri geldiği an otomatik bağlanır. Kurulum portalı SADECE şu iki durumda açılır: (1) cihaz hiç kurulmamışsa (kimlik boş), (2) açılışta BOOT butonuna ~5sn basılı tutulup elle sıfırlama istenmişse.
+
 ## Nasıl çalışır
 
 - Açılışta ve her dakika bir: sunucudan bu cihazın tag listesini çeker (`GET /esp32/<kimlik>/tagler`) — hangi Modbus adresi, hangi veri tipi (bool/int/float/...), okuma mı yazma mı.

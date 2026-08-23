@@ -54,7 +54,7 @@
  * ---------------------------------------------------------------
  */
 
-#define FIRMWARE_VERSION "1.1.0"
+#define FIRMWARE_VERSION "1.2.0"
 
 #include <WiFi.h>
 #include <WiFiManager.h>          // tzapu/WiFiManager
@@ -233,6 +233,38 @@ const char OVENTECH_PORTAL_CSS[] PROGMEM = R"rawliteral(
   div.wifi-cover-image{display:none !important;}
 </style>
 )rawliteral";
+
+// Kullanıcı isteği: daha önce KURULMUŞ bir cihaz için (cihazKimlik zaten
+// kayıtlı), açılışta WiFi'ye o an ulaşılamıyorsa (router yeniden başlıyor,
+// geçici kesinti vb.) KURULUM PORTALI HİÇ AÇILMASIN — açılırsa cihaz "elle
+// ayar bekliyormuş" gibi askıda kalıyordu, oysa asıl istenen WiFi geri
+// gelince kendiliğinden bağlanması. Bu fonksiyon portalı hiç açmadan,
+// kayıtlı ağı (ESP32'nin kendi NVS'inde saklı SSID/şifre) sürekli dener;
+// WIFI_KOPUK_RESTART_MS'i aşarsa (aynı loop()'taki güvenlik ağı gibi)
+// cihazı yeniden başlatır — ama bu da yine portal açmaz, aynı bekleme
+// döngüsüne geri döner.
+void wifiyeBaglanBekle() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin();   // argümansız: ESP32'nin NVS'inde saklı son SSID/şifreyi kullanır
+  Serial.println("Kayitli cihaz - WiFi'ye baglaniliyor (kurulum portali ACILMAYACAK)...");
+  unsigned long baslangic = millis();
+  unsigned long sonDeneme = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    ledWifi.blink(150);
+    if (millis() - sonDeneme > 15000) {
+      Serial.println("Hala baglanamadi, tekrar deneniyor...");
+      WiFi.reconnect();
+      sonDeneme = millis();
+    }
+    if (millis() - baslangic > WIFI_KOPUK_RESTART_MS) {
+      Serial.println("WiFi cok uzun suredir kurulamadi, cihaz yeniden baslatiliyor...");
+      delay(500);
+      ESP.restart();
+    }
+    delay(20);
+  }
+  Serial.println("WiFi baglandi: " + WiFi.localIP().toString());
+}
 
 void kurulumPortaliBaslat(bool zorlaSifirla) {
   WiFiManager wm;
@@ -662,10 +694,21 @@ void setup() {
     if (millis() - basStart >= 5000) sifirlaIstendi = true;
   }
 
-  kurulumPortaliBaslat(sifirlaIstendi);
+  // Kullanıcı isteği: cihaz daha önce kurulmuşsa (cihazKimlik kayıtlı) ve
+  // elle sıfırlama istenmediyse, WiFi o an ulaşılamasa bile KURULUM
+  // PORTALINI AÇMA — sadece kayıtlı ağı dener, WiFi geldiğinde otomatik
+  // bağlanır. Portal sadece gerçek ilk kurulumda (cihazKimlik hiç
+  // ayarlanmamış) ya da BOOT'a 5sn basılı tutulup elle sıfırlama
+  // istendiğinde açılır.
+  bool oncedenKuruluMu = (cihazKimlik.length() > 0) && !sifirlaIstendi;
+  if (oncedenKuruluMu) {
+    wifiyeBaglanBekle();
+  } else {
+    kurulumPortaliBaslat(sifirlaIstendi);
+  }
   tagListesiniGetir();
   sonTagYenileme = millis();
-  sonWifiBagliZaman = millis();   // kurulumPortaliBaslat() burada zaten bağlı döner (aksi halde restart etmişti)
+  sonWifiBagliZaman = millis();   // buraya ancak WiFi bağlıyken gelinir (her iki yol da bağlanana kadar bloklar/restart eder)
 }
 
 void loop() {
