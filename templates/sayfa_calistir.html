@@ -254,6 +254,7 @@ function tuvalCiz() {
             div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
+            div.style.justifyContent = metinHizalaCSS(el, 'orta');
             // Etiket bir tag'e bağlıysa canlı değeri gösterir (statik metnini değil).
             if (el.tag_id && degerler[el.tag_id]) {
                 const deger = degerler[el.tag_id].deger;
@@ -319,7 +320,7 @@ function tuvalCiz() {
                     div.style.background = durum.renk_arkaplan || '#333';
                     div.style.color = durum.renk_yazi || '#fff';
                     div.style.fontSize = (durum.font_boyutu || 14) + 'px';
-                    div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+                    div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
                     div.style.fontWeight = '600';
                     div.textContent = durum.metin || '';
                 }
@@ -360,7 +361,7 @@ function tuvalCiz() {
         if (el.type === 'checkbox') {
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
             const acikMi = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'sol'); div.style.gap = '8px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 14) + 'px';
             div.style.cursor = 'pointer';
@@ -388,7 +389,7 @@ function tuvalCiz() {
             const acikMi = alarmTetiklendiMi(el, guncelDeger);
             div.style.background = acikMi ? (el.renk_acik || '#3a1f22') : (el.renk_kapali || '#1c3326');
             div.style.color = acikMi ? (el.renk_yazi_acik || '#e74c3c') : (el.renk_yazi_kapali || '#2ecc71');
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
             div.style.borderRadius = (el.kose_yaricapi ?? 8) + 'px'; div.style.fontWeight = '700';
             div.style.fontSize = (el.font_boyutu || 13) + 'px';
             div.textContent = acikMi ? (el.metin_acik || '⚠️ Alarm') : (el.metin_kapali || '✅ Normal');
@@ -408,7 +409,7 @@ function tuvalCiz() {
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.fontWeight = '500';
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
             div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
             div.style.boxSizing = 'border-box';
             div.dataset.saattarihId = el.id;
@@ -426,7 +427,7 @@ function tuvalCiz() {
             div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.padding = '0 10px';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'sol'); div.style.padding = '0 10px';
             div.style.boxSizing = 'border-box';
             let deger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
             if (deger !== null && el.ondalik >= 0 && !isNaN(parseFloat(deger))) {
@@ -453,7 +454,8 @@ function tuvalCiz() {
             input.placeholder = el.placeholder || '';
             // Birim varsa sağda yer kaplayan bir rozet gösteriliyor (aşağıda) —
             // yazı onun altına girmesin diye input'un sağ boşluğu büyütülüyor.
-            input.style.cssText = `width:100%;height:100%;box-sizing:border-box;padding:0 ${el.birim ? '38px' : '10px'} 0 10px;border-radius:${el.kose_yaricapi ?? 6}px;`
+            const metinHizalaText = { sol: 'left', orta: 'center', sag: 'right' }[el.metin_hizala] || 'left';
+            input.style.cssText = `width:100%;height:100%;box-sizing:border-box;padding:0 ${el.birim ? '38px' : '10px'} 0 10px;border-radius:${el.kose_yaricapi ?? 6}px;text-align:${metinHizalaText};`
                 + `background:${el.renk_arkaplan || '#17222e'};color:${el.renk_yazi || '#e8eef4'};`
                 + `border:1px solid ${el.renk_kenarlik || '#2e9ed9'};font-size:${el.font_boyutu || 16}px;`;
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
@@ -641,6 +643,9 @@ function tuvalCiz() {
         div.className = 'el-buton';
         div.textContent = '';
         div.style.flexDirection = 'column'; div.style.gap = '2px';
+        // Buton flex-direction:column olduğu için yatay hizalama
+        // justify-content DEĞİL align-items ile kontrol ediliyor.
+        div.style.alignItems = metinHizalaCSS(el, 'orta');
         div.style.fontSize = (el.font_boyutu || 13) + 'px';
         div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
         renkGuncelle(div, el);
@@ -742,6 +747,11 @@ function popupKapat() {
     document.getElementById('popup-iframe').src = 'about:blank';
 }
 
+// Metin hizalama: el.metin_hizala ('sol'|'orta'|'sag') -> flex justify-content.
+const METIN_HIZALA_CSS = { sol: 'flex-start', orta: 'center', sag: 'flex-end' };
+function metinHizalaCSS(el, varsayilan) {
+    return METIN_HIZALA_CSS[el.metin_hizala] || METIN_HIZALA_CSS[varsayilan] || 'center';
+}
 function koseCSS(el, on) {
     const tl = el[on + '_solust'] || 0;
     const tr = el[on + '_sagust'] || 0;

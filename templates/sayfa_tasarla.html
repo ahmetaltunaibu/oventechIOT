@@ -781,6 +781,19 @@
     <select id="ozGizleTag"><option value="">— gizleme yok —</option></select>
     <input type="text" id="ozGizleDeger" placeholder="Gizleme Değeri — örn. 1" style="margin-bottom:10px;">
 
+    <!-- Kullanıcı isteği: metin gösteren elementlere yatay hizalama —
+         gizleme/köşe yuvarlatma gibi ortak (Custom CSS'in yanında) tek
+         bir alan. Switch (ON/OFF metni hep kenara sabit), Açılır Liste
+         (tarayıcının kendi kutusu) ve İlerleme Çubuğu (yüzde her zaman
+         çubuğun ortasında) hariç, metin gösteren tüm element tiplerinde
+         çalışır. -->
+    <label>Metin Hizalama (yatay)</label>
+    <select id="ozMetinHizala" style="margin-bottom:10px;">
+        <option value="sol">Sol</option>
+        <option value="orta">Orta</option>
+        <option value="sag">Sağ</option>
+    </select>
+
     <div id="ozAlanYaziRengi" class="ozel-alan gorunur">
         <label>Yazı Rengi</label>
         <input type="color" id="ozRenkYazi" value="#ffffff" style="height:38px;">
@@ -1566,6 +1579,11 @@ function grupUyeleri(grupId) { return elementler.filter(e => e.grup_id === grupI
 
 // Köşe yarıçapı: her köşe ayrı ayarlanabilir — CSS border-radius sırası
 // top-left top-right bottom-right bottom-left.
+// Metin hizalama: el.metin_hizala ('sol'|'orta'|'sag') -> flex justify-content.
+const METIN_HIZALA_CSS = { sol: 'flex-start', orta: 'center', sag: 'flex-end' };
+function metinHizalaCSS(el, varsayilan) {
+    return METIN_HIZALA_CSS[el.metin_hizala] || METIN_HIZALA_CSS[varsayilan] || 'center';
+}
 function koseCSS(el, on) {
     const tl = el[on + '_solust'] || 0;
     const tr = el[on + '_sagust'] || 0;
@@ -1652,6 +1670,7 @@ function render() {
             div.style.fontWeight = '500';
             div.style.color = el.renk_yazi;
             div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
+            div.style.justifyContent = metinHizalaCSS(el, 'orta');
             div.textContent = el.tag_id ? (el.label ? el.label + ': ' : '') + '(canlı değer)' + (el.son_ek || '') : el.label;
         } else if (el.type === 'cizgi') {
             div.style.background = el.cizgi_renk || '#e8eef4';
@@ -1708,7 +1727,7 @@ function render() {
                     div.style.background = durum.renk_arkaplan || '#333';
                     div.style.color = durum.renk_yazi || '#fff';
                     div.style.fontSize = (durum.font_boyutu || 14) + 'px';
-                    div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+                    div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
                     div.style.fontWeight = '600';
                     div.textContent = durum.metin || '';
                 }
@@ -1738,7 +1757,7 @@ function render() {
             div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.padding = '0 10px';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'sol'); div.style.padding = '0 10px';
             div.style.boxSizing = 'border-box';
             div.textContent = (el.on_ek || '') + (el.tag_id ? '(canlı değer)' : '0') + (el.son_ek || '');
         } else if (el.type === 'inputbox') {
@@ -1747,7 +1766,7 @@ function render() {
             div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.padding = '0 10px';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'sol'); div.style.padding = '0 10px';
             div.style.boxSizing = 'border-box';
             div.textContent = (el.placeholder || 'Değer gir') + (el.birim ? '  ' + el.birim : '');
             div.style.opacity = '0.6';
@@ -1762,7 +1781,7 @@ function render() {
             const ilkSecenek = (el.secenekler || [])[0];
             div.textContent = (ilkSecenek ? ilkSecenek.etiket : 'Seçenek yok') + ' ▾';
         } else if (el.type === 'checkbox') {
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'sol'); div.style.gap = '8px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 14) + 'px';
             div.textContent = '';
@@ -1862,7 +1881,7 @@ function render() {
             const acikMi = el._onizleme === 'acik';
             div.style.background = acikMi ? (el.renk_acik || '#3a1f22') : (el.renk_kapali || '#1c3326');
             div.style.color = acikMi ? (el.renk_yazi_acik || '#e74c3c') : (el.renk_yazi_kapali || '#2ecc71');
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
             div.style.borderRadius = (el.kose_yaricapi ?? 8) + 'px'; div.style.fontWeight = '700';
             div.style.fontSize = (el.font_boyutu || 13) + 'px';
             div.textContent = acikMi ? (el.metin_acik || '⚠️ Alarm') : (el.metin_kapali || '✅ Normal');
@@ -1872,7 +1891,7 @@ function render() {
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.fontWeight = '500';
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
             div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
             div.style.boxSizing = 'border-box';
             div.textContent = saatTarihMetni(el);
@@ -1885,6 +1904,9 @@ function render() {
             div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.textContent = '';
             div.style.flexDirection = 'column';
+            // Buton flex-direction:column olduğu için yatay hizalama
+            // justify-content DEĞİL align-items ile kontrol ediliyor.
+            div.style.alignItems = metinHizalaCSS(el, 'orta');
             div.style.gap = '2px';
             const butonResimUrl = (el._onizleme === 'acik') ? el.resim_url_acik : el.resim_url_kapali;
             if (butonResimUrl) {
@@ -2979,6 +3001,12 @@ const TIP_ADLARI = {
     combobox: 'Açılır Liste', checkbox: 'Onay Kutusu', progressbar: 'İlerleme Çubuğu',
     groupbox: 'Grup Kutusu/Çerçeve', grafik: 'Grafik', alarm: 'Alarm', saattarih: 'Saat/Tarih',
 };
+// Metin hizalamanın tipe göre varsayılanı — mevcut (bu özellik eklenmeden
+// önceki) görünümü bozmasın diye her tipin ESKİ sabit davranışıyla aynı.
+const METIN_HIZALA_VARSAYILAN = {
+    button: 'orta', label: 'orta', durum: 'orta', alarm: 'orta', saattarih: 'orta',
+    textbox: 'sol', inputbox: 'sol', checkbox: 'sol',
+};
 function guncellePanel() {
     const el = seciliId ? bul(seciliId) : null;
     if (!el) return;
@@ -3183,6 +3211,8 @@ function guncellePanel() {
     // Gizleme artık tüm element tiplerinde ortak (bkz. yukarıdaki not).
     document.getElementById('ozGizleTag').value = el.gizle_tag_id || '';
     document.getElementById('ozGizleDeger').value = el.gizle_deger || '';
+    // Metin hizalama da ortak — tip'e göre varsayılan farklı (bkz. METIN_HIZALA_VARSAYILAN).
+    document.getElementById('ozMetinHizala').value = el.metin_hizala || METIN_HIZALA_VARSAYILAN[el.type] || 'sol';
 }
 
 // ---------- Durum Göstergesi: dinamik durum satırları ----------
@@ -3566,6 +3596,7 @@ function uygula() {
     // Gizleme artık tüm element tiplerinde ortak (bkz. yukarıdaki not).
     el.gizle_tag_id = document.getElementById('ozGizleTag').value ? parseInt(document.getElementById('ozGizleTag').value) : null;
     el.gizle_deger = document.getElementById('ozGizleDeger').value;
+    el.metin_hizala = document.getElementById('ozMetinHizala').value;
     render();
 }
 
