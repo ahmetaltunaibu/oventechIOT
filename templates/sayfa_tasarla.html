@@ -535,7 +535,10 @@
         <label>Ön Ek</label>
         <input type="text" id="ozTextboxOnEk" placeholder="örn. Sıcaklık: ">
         <label>Son Ek / Birim</label>
-        <input type="text" id="ozTextboxSonEk" placeholder="örn.  °C">
+        <div style="display:flex;gap:6px;">
+            <input type="text" id="ozTextboxSonEk" placeholder="örn.  °C" style="flex:1;">
+            <select id="ozTextboxSonEkSimge" onchange="birimSec(this,'ozTextboxSonEk')" style="width:88px;flex-shrink:0;"></select>
+        </div>
         <label>Ondalık Basamak (sayısal değerler için, -1 = olduğu gibi)</label>
         <input type="number" id="ozTextboxOndalik" value="-1" min="-1" max="6">
         <label>Font Boyutu</label>
@@ -613,7 +616,10 @@
         <label>Arka Plan Rengi</label>
         <input type="color" id="ozProgressbarRenkArkaplan" value="#17222e" style="height:38px;">
         <label>Birim (değer yanında gösterilir)</label>
-        <input type="text" id="ozProgressbarBirim" placeholder="örn. °C">
+        <div style="display:flex;gap:6px;">
+            <input type="text" id="ozProgressbarBirim" placeholder="örn. °C" style="flex:1;">
+            <select id="ozProgressbarBirimSimge" onchange="birimSec(this,'ozProgressbarBirim')" style="width:88px;flex-shrink:0;"></select>
+        </div>
         <label style="display:flex;align-items:center;gap:6px;">
             <input type="checkbox" id="ozProgressbarDegerGoster" style="width:auto;margin:0;" checked> Değeri Göster
         </label>
@@ -645,7 +651,10 @@
         <label>Başlık (opsiyonel)</label>
         <input type="text" id="ozGrafikBaslik" placeholder="örn. Fırın Verileri">
         <label>Birim (değerlerin yanında gösterilir)</label>
-        <input type="text" id="ozGrafikBirim" placeholder="örn. °C">
+        <div style="display:flex;gap:6px;">
+            <input type="text" id="ozGrafikBirim" placeholder="örn. °C" style="flex:1;">
+            <select id="ozGrafikBirimSimge" onchange="birimSec(this,'ozGrafikBirim')" style="width:88px;flex-shrink:0;"></select>
+        </div>
         <label>Gösterilecek Nokta Sayısı (son N ölçüm)</label>
         <input type="number" id="ozGrafikNoktaSayisi" value="30" min="2" max="200">
         <label>Arka Plan Rengi</label>
@@ -726,6 +735,12 @@
     <div style="display:flex;gap:8px;">
         <input type="number" id="ozW" value="120">
         <input type="number" id="ozH" value="44">
+    </div>
+
+    <label>Konum X / Y (px)</label>
+    <div style="display:flex;gap:8px;">
+        <input type="number" id="ozX" value="0">
+        <input type="number" id="ozY" value="0">
     </div>
 
     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -1030,6 +1045,29 @@ function tagSecenekleriDoldur(selectEl, ilkSecenekMetni) {
         selectEl.appendChild(opt);
     });
 }
+// Kullanıcı isteği: Birim alanlarına (°, ³ gibi klavyede yazması zor
+// karakterler içerdiği için) hazır sembol listesinden seçme kolaylığı.
+const BIRIM_SEMBOLLERI = [
+    '°C', '°F', '%', 'bar', 'mbar', 'Pa', 'kPa', 'RPM', 'Hz',
+    'V', 'A', 'W', 'kW', 'kWh', 'Ω',
+    'L', 'mL', 'L/dk', 'm³', 'm³/h', 'm³/s',
+    'kg', 'g', 'ton', 'm', 'cm', 'mm', 'm/s',
+    'pH', 'ppm', 'dB', 's', 'dk', 'sa',
+];
+function birimSelectDoldur(selectEl) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '<option value="">simge seç…</option>'
+        + BIRIM_SEMBOLLERI.map(b => `<option value="${b}">${b}</option>`).join('');
+}
+function birimSec(selectEl, inputId) {
+    if (!selectEl.value) return;
+    document.getElementById(inputId).value = selectEl.value;
+    selectEl.selectedIndex = 0;
+}
+birimSelectDoldur(document.getElementById('ozTextboxSonEkSimge'));
+birimSelectDoldur(document.getElementById('ozProgressbarBirimSimge'));
+birimSelectDoldur(document.getElementById('ozGrafikBirimSimge'));
+
 tagSecenekleriDoldur(document.getElementById('ozTag'), '— seçilmedi —');
 tagSecenekleriDoldur(document.getElementById('ozButonGizleTag'), '— gizleme yok —');
 tagSecenekleriDoldur(document.getElementById('ozEtiketTag'), '— bağlama, sabit metin göster —');
@@ -2211,27 +2249,44 @@ const PANO_ANAHTARI = 'oventech_pano_elementler';
 function kopyala() {
     if (!seciliSet.size) return;
     pano = [...seciliSet].map(id => JSON.parse(JSON.stringify(bul(id)))).filter(Boolean);
-    try { localStorage.setItem(PANO_ANAHTARI, JSON.stringify(pano)); } catch (e) { /* yer yoksa sessiz geç */ }
+    // Kaynak sayfanın adı da saklanıyor — yapıştırırken AYNI sayfaya mı
+    // BAŞKA bir sayfaya mı yapıştırıldığını ayırt edebilmek için (kullanıcı
+    // isteği: başka sayfaya yapıştırınca konum birebir korunsun).
+    const panoVerisi = { sayfaAd: {{ sayfa_ad | tojson }}, elementler: pano };
+    try { localStorage.setItem(PANO_ANAHTARI, JSON.stringify(panoVerisi)); } catch (e) { /* yer yoksa sessiz geç */ }
     durumYaz(`📋 ${pano.length} element kopyalandı — başka bir sayfaya geçip Ctrl+V ile yapıştırabilirsin`);
 }
 function _panoOku() {
     try {
         const ham = localStorage.getItem(PANO_ANAHTARI);
-        if (ham) return JSON.parse(ham);
+        if (ham) {
+            const veri = JSON.parse(ham);
+            // Geriye dönük uyumluluk: eski format düz dizi kaydediyordu
+            // (kaynak sayfa bilgisi yoktu).
+            if (Array.isArray(veri)) return { sayfaAd: null, elementler: veri };
+            return veri;
+        }
     } catch (e) { /* bozuksa bellektekine düş */ }
-    return pano;
+    return { sayfaAd: null, elementler: pano };
 }
 function yapistir() {
-    const kaynakListe = _panoOku();
+    const panoVerisi = _panoOku();
+    const kaynakListe = panoVerisi.elementler || [];
     if (!kaynakListe.length) return;
+    // Kullanıcı isteği: BAŞKA bir sayfaya yapıştırılıyorsa konum BİREBİR
+    // korunsun (kaydırma yapılmasın). AYNI sayfaya yapıştırılıyorsa
+    // (orijinalin tam üstüne binip görünmez/yakalanamaz olmasın diye)
+    // eskisi gibi hafifçe kaydırılır.
+    const ayniSayfa = panoVerisi.sayfaAd === {{ sayfa_ad | tojson }};
+    const kaydirma = ayniSayfa ? 16 : 0;
     gecmiseKaydet();
     const harita = {};
     const yeniIdler = [];
     kaynakListe.forEach(kaynak => {
         const yeni = _grupIdEslestir(Object.assign({}, JSON.parse(JSON.stringify(kaynak)), {
             id: uid(),
-            x: Math.max(0, Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + 16)),
-            y: Math.max(0, Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + 16)),
+            x: Math.max(0, Math.min(tuvalW - (kaynak.w || 100), (kaynak.x || 0) + kaydirma)),
+            y: Math.max(0, Math.min(tuvalH - (kaynak.h || 40), (kaynak.y || 0) + kaydirma)),
         }), harita);
         elementler.push(yeni);
         yeniIdler.push(yeni.id);
@@ -2240,7 +2295,7 @@ function yapistir() {
     seciliId = yeniIdler[yeniIdler.length - 1] || null;
     render();
     yanPanelGuncelle();
-    durumYaz('📋 Yapıştırıldı');
+    durumYaz(ayniSayfa ? '📋 Yapıştırıldı' : '📋 Yapıştırıldı (orijinal konumla)');
 }
 
 // ---------- Sayfalar arası hızlı geçiş + tam sayfa kopyalama ----------
@@ -2673,6 +2728,8 @@ function guncellePanel() {
 
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
+    document.getElementById('ozX').value = el.x;
+    document.getElementById('ozY').value = el.y;
 
     if (el.type === 'button' || el.type === 'label') {
         document.getElementById('ozLabel').value = el.label;
@@ -3045,6 +3102,8 @@ function uygula() {
     gecmiseKaydet();
     el.w = parseInt(document.getElementById('ozW').value) || 120;
     el.h = parseInt(document.getElementById('ozH').value) || 44;
+    el.x = parseInt(document.getElementById('ozX').value) || 0;
+    el.y = parseInt(document.getElementById('ozY').value) || 0;
 
     if (el.type === 'button' || el.type === 'label') {
         el.label = document.getElementById('ozLabel').value || (el.type === 'label' ? 'Metin' : 'Buton');
