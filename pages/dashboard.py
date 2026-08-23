@@ -161,6 +161,66 @@ def tag_ekle(cihaz_id):
 
 
 # ============================================================
+# TAG'LER — Excel-tarzı tablo (kullanıcı isteği: tag eklemek/düzenlemek
+# eskiden her tag için ayrı bir kart+form+sayfa yenilemesi gerektiriyordu,
+# çok yavaştı). Bu üç JSON uç, sayfayı hiç yenilemeden (fetch ile) hücre
+# hücre kaydeden bir tablo için — yukarıdaki form-tabanlı uçlar (tag_ekle,
+# tag_duzenle, tag_sil) JS kapalıyken devreye giren <noscript> yedek
+# formu için hâlâ duruyor, silinmedi.
+# ============================================================
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/tag/<int:tag_id>/alan-guncelle', methods=['POST'])
+@tasarimci_required
+def tag_alan_guncelle(cihaz_id, tag_id):
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    mevcut = database.tag_getir(tag_id)
+    if not mevcut or mevcut['cihaz_id'] != cihaz_id:
+        return jsonify({'error': 'Tag bulunamadı'}), 404
+    veri = request.get_json(silent=True) or {}
+    ad = str(veri.get('ad', mevcut['ad'])).strip()
+    modbus_adres = str(veri.get('modbus_adres', mevcut['modbus_adres'])).strip()
+    veri_tipi = veri.get('veri_tipi', mevcut['veri_tipi'])
+    erisim = veri.get('erisim', mevcut['erisim'])
+    if not ad or not modbus_adres:
+        return jsonify({'error': 'Tag adı ve Modbus adresi boş olamaz'}), 400
+    ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim)
+    if not ok:
+        return jsonify({'error': hata}), 400
+    return jsonify({'success': True})
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/tag-ekle-json', methods=['POST'])
+@tasarimci_required
+def tag_ekle_json(cihaz_id):
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    veri = request.get_json(silent=True) or {}
+    ad = str(veri.get('ad', '')).strip()
+    modbus_adres = str(veri.get('modbus_adres', '')).strip()
+    veri_tipi = veri.get('veri_tipi') or 'bool'
+    erisim = veri.get('erisim') or 'read'
+    if not ad or not modbus_adres:
+        return jsonify({'error': 'Tag adı ve Modbus adresi zorunlu'}), 400
+    ok, sonuc = database.tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim)
+    if not ok:
+        return jsonify({'error': sonuc}), 400
+    return jsonify({'success': True, 'id': sonuc})
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/tag/<int:tag_id>/sil-json', methods=['POST'])
+@tasarimci_required
+def tag_sil_json(cihaz_id, tag_id):
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    mevcut = database.tag_getir(tag_id)
+    if not mevcut or mevcut['cihaz_id'] != cihaz_id:
+        return jsonify({'error': 'Tag bulunamadı'}), 404
+    database.tag_sil(tag_id)
+    return jsonify({'success': True})
+
+
+# ============================================================
 # FIRMWARE (ESP32 uzaktan güncelleme)
 # ============================================================
 
