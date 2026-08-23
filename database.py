@@ -483,9 +483,13 @@ def giris_dogrula(kullanici_adi: str, sifre: str):
 # CIHAZ
 # ============================================================
 
-def cihaz_ekle(proje_id: int, ad: str):
-    """cihaz_kimlik otomatik üretilir (ESP32 firmware'ine bu değer girilecek)."""
-    cihaz_kimlik = secrets.token_hex(12)
+def cihaz_ekle(proje_id: int, ad: str, cihaz_kimlik: str = None):
+    """cihaz_kimlik verilmezse otomatik üretilir (ESP32 firmware'ine bu değer
+    girilecek). Verilirse (örn. daha önce kurulmuş, flash'ında hâlâ eski
+    kimliği taşıyan bir ESP32'yi veri kaybı sonrası yeniden eşlemek için)
+    AYNEN o değer kullanılır — cihazın fiziksel olarak tekrar kurulum
+    portalından geçirilmesine gerek kalmaz."""
+    cihaz_kimlik = (cihaz_kimlik or '').strip() or secrets.token_hex(12)
     conn = get_db()
     try:
         cur = conn.execute('''
@@ -494,8 +498,8 @@ def cihaz_ekle(proje_id: int, ad: str):
         conn.commit()
         return True, {'id': cur.lastrowid, 'cihaz_kimlik': cihaz_kimlik}
     except sqlite3.IntegrityError:
-        return False, ('Bu proje artık bulunamıyor (oturumunuz güncel olmayan bir '
-                        'projeye işaret ediyor olabilir). Çıkış yapıp tekrar giriş deneyin.')
+        return False, ('Bu cihaz kimliği zaten kullanılıyor (başka bir cihazda kayıtlı) '
+                        'ya da proje artık bulunamıyor. Kimliği kontrol edip tekrar deneyin.')
     finally:
         conn.close()
 

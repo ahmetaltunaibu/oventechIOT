@@ -81,6 +81,12 @@
         <form method="POST" action="{{ url_for('dashboard.cihaz_ekle') }}">
             <label>Cihaz Adı</label>
             <input type="text" name="ad" placeholder="örn. Kurutma Fırını 1" required>
+            <label>Cihaz Kimliği (opsiyonel)</label>
+            <input type="text" name="cihaz_kimlik" placeholder="Boş bırakılırsa otomatik üretilir">
+            <p style="font-size:12px;color:var(--text-secondary);margin:2px 0 8px;">
+                Daha önce kurulmuş, Seri Port'ta kimliği görünen bir ESP32'yi yeniden kuruluma
+                sokmadan eşlemek için — cihazın flash'ındaki kimliği buraya aynen yapıştır.
+            </p>
             <button type="submit">Ekle</button>
         </form>
     </div>
@@ -117,6 +123,12 @@
     <form method="POST" action="{{ url_for('dashboard.cihaz_ekle') }}">
         <label>Cihaz Adı</label>
         <input type="text" name="ad" placeholder="örn. Kurutma Fırını 1" required>
+        <label>Cihaz Kimliği (opsiyonel)</label>
+        <input type="text" name="cihaz_kimlik" placeholder="Boş bırakılırsa otomatik üretilir">
+        <p style="font-size:12px;color:var(--text-secondary);margin:2px 0 8px;">
+            Daha önce kurulmuş, Seri Port'ta kimliği görünen bir ESP32'yi yeniden kuruluma
+            sokmadan eşlemek için — cihazın flash'ındaki kimliği buraya aynen yapıştır.
+        </p>
         <button type="submit">Ekle</button>
     </form>
 </div>

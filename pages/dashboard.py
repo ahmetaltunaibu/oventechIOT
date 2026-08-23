@@ -28,7 +28,11 @@ def cihaz_ekle():
     if not ad:
         flash('Cihaz adı zorunlu.', 'danger')
         return redirect(url_for('dashboard.dashboard_page'))
-    ok, sonuc = database.cihaz_ekle(session['proje_id'], ad)
+    # Opsiyonel: daha önce kurulmuş bir ESP32'nin flash'ında hâlâ duran
+    # kimliğini elle girip eşleştirmek için (yeniden kurulum gerekmez).
+    # Boş bırakılırsa database.cihaz_ekle otomatik/rastgele üretir.
+    mevcut_kimlik = request.form.get('cihaz_kimlik', '').strip()
+    ok, sonuc = database.cihaz_ekle(session['proje_id'], ad, mevcut_kimlik)
     if ok:
         flash(f"Cihaz eklendi. Cihaz Kimliği (ESP32 firmware'ine girilecek): {sonuc['cihaz_kimlik']}", 'success')
     else:
