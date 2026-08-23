@@ -42,6 +42,39 @@ def esp32_tagler(cihaz_kimlik):
     })
 
 
+@esp32_bp.route('/esp32/<cihaz_kimlik>/yazilacaklar')
+def esp32_yazilacaklar(cihaz_kimlik):
+    """KRİTİK (kullanıcı raporu — buton/switch'e basınca önce doğru olup
+    kısa süreliğine eski değere dönüp tekrar düzeliyordu): ESP32'nin her
+    döngüsü ÖNCE PLC'den okuyup o (henüz yazma uygulanmamış) değerleri
+    sunucuya bildiriyor, SONRA sunucudan gelen yazma isteğini PLC'ye
+    yazıyordu — hepsi AYNI döngüde. Yani bir yazma isteği en erken BİR
+    SONRAKİ döngüde PLC'ye uygulanıyor, o yazmanın PLC'ye gerçekten
+    yansıdığı okuma ise ONDAN SONRAKİ döngüde bildiriliyordu — en kötü
+    ihtimalle ~2 tam döngü (10sn) gecikme.
+
+    Bu uç, firmware'in döngü sırasını tersine çevirmesini sağlıyor: ESP32
+    artık PLC'den okumadan ÖNCE burayı çağırıp yazılacakları hemen
+    uyguluyor, sonra okuyup gönderiyor — böylece o döngüde okunan/bildirilen
+    değer ZATEN yeni (yazılmış) değeri yansıtıyor, gecikme tek döngüye
+    (~5sn) iniyor. /xchange'in yanıtındaki 'yazilacaklar' de duruyor
+    (geriye dönük uyumluluk + burayla POST arasında araya giren bir yazma
+    için ek güvenlik ağı) — aynı tag burada zaten temizlendiği için
+    /xchange normalde onu bir daha döndürmez, çift yazma riski yok."""
+    cihaz = database.cihaz_getir_kimlik(cihaz_kimlik)
+    if not cihaz:
+        return jsonify({'error': 'Geçersiz cihaz kimliği'}), 404
+    yazilacaklar = {}
+    yazilan_tag_idleri = []
+    for t in database.cihaz_tagleri(cihaz['id']):
+        if t['erisim'] in ('write', 'readwrite') and t.get('yazilacak_deger') not in (None, ''):
+            yazilacaklar[str(t['id'])] = t['yazilacak_deger']
+            yazilan_tag_idleri.append(t['id'])
+    if yazilan_tag_idleri:
+        database.tagler_yazilacak_temizle(yazilan_tag_idleri)
+    return jsonify({'yazilacaklar': yazilacaklar})
+
+
 @esp32_bp.route('/esp32/<cihaz_kimlik>/xchange', methods=['POST'])
 def esp32_xchange(cihaz_kimlik):
     cihaz = database.cihaz_getir_kimlik(cihaz_kimlik)

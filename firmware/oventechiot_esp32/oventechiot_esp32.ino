@@ -54,7 +54,7 @@
  * ---------------------------------------------------------------
  */
 
-#define FIRMWARE_VERSION "1.2.0"
+#define FIRMWARE_VERSION "1.3.0"
 
 #include <WiFi.h>
 #include <WiFiManager.h>          // tzapu/WiFiManager
@@ -468,12 +468,50 @@ bool tagYaz(const TagTanimi &tag, const String &degerStr) {
   return sonuc == modbus.ku8MBSuccess;
 }
 
+// KRİTİK (kullanıcı raporu): buton/switch'e basınca önce doğru olup kısa
+// süreliğine eski değere dönüp tekrar düzeliyordu. Sebep: döngü sırası
+// eskiden ÖNCE PLC'den OKU-GÖNDER, SONRA sunucudan gelen yazmayı UYGULA
+// idi — hepsi AYNI döngüde. Yani bir yazma en erken BİR SONRAKİ döngüde
+// PLC'ye uygulanıyor, o yazmanın PLC'ye gerçekten yansıdığı okuma ise
+// ONDAN SONRAKİ döngüde bildiriliyordu (en kötü ~2 tam döngü/10sn
+// gecikme). Bu fonksiyon ayrı, hafif bir uçtan (bkz. sunucuda
+// /esp32/<kimlik>/yazilacaklar) yazılacakları OKUMADAN ÖNCE çekip PLC'ye
+// uyguluyor — böylece sunucuIleSenkronOl() içindeki okuma o döngüde
+// ZATEN yeni (yazılmış) değeri okuyor, gecikme tek döngüye (~5sn) iniyor.
+void yazilacaklariOnceUygula() {
+  HTTPClient http;
+  String url = sunucuAdresi + "/esp32/" + cihazKimlik + "/yazilacaklar";
+  http.begin(url);
+  int kod = http.GET();
+  if (kod != 200) { http.end(); return; }
+  String govde = http.getString();
+  http.end();
+
+  JsonDocument cevap;
+  if (deserializeJson(cevap, govde)) return;
+
+  JsonObject yazilacaklar = cevap["yazilacaklar"].as<JsonObject>();
+  for (JsonPair kv : yazilacaklar) {
+    int tagId = String(kv.key().c_str()).toInt();
+    String deger = kv.value().as<String>();
+    for (int i = 0; i < tagSayisi; i++) {
+      if (tagListesi[i].id == tagId) {
+        tagYaz(tagListesi[i], deger);
+        break;
+      }
+    }
+  }
+}
+
 // ================== SUNUCUYLA SENKRON (xchange) ==================
 void sunucuIleSenkronOl() {
   if (cihazKimlik.length() == 0 || tagSayisi == 0) {
     sonSenkronBasariliMi = false;  // tag listesi yoksa gerçek bir senkron da yok — LED bunu "iyi" saymasın
     return;
   }
+
+  // Yazmaları OKUMADAN ÖNCE uygula — bkz. yazilacaklariOnceUygula() yorumu.
+  yazilacaklariOnceUygula();
 
   // 1) PLC'den oku
   JsonDocument gonderilecek;

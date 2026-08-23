@@ -43,6 +43,10 @@ Cihaz zaten çalışırken (kurulumdan sonra) WiFi kesilirse **kurulum portalın
 
 **Açılışta (reboot anında) WiFi zaten ulaşılamıyorsa ne olur?** Daha önce kurulmuş bir cihazda (yani cihaz kimliği zaten kayıtlıysa) kurulum portalı **açılmaz** — açılsaydı cihaz "elle ayar bekliyormuş" gibi askıda kalırdı. Bunun yerine kayıtlı WiFi ağı arka planda sürekli denenir (5 dakikayı aşarsa kendini yeniden başlatarak); ağ geri geldiği an otomatik bağlanır. Kurulum portalı SADECE şu iki durumda açılır: (1) cihaz hiç kurulmamışsa (kimlik boş), (2) açılışta BOOT butonuna ~5sn basılı tutulup elle sıfırlama istenmişse.
 
+## Buton/switch'e basınca kısa süreliğine eski değere dönme sorunu (çözüldü, v1.3.0)
+
+Kullanıcı raporu: panelden bir butona/switch'e basınca PLC'de ve panelde önce doğru değer görünüyor, sonra kısa süreliğine eski değere dönüp bekliyor, sonra tekrar doğrusuna geçiyordu. Kök neden: ESP32'nin döngüsü ÖNCE PLC'den okuyup o (henüz yazma uygulanmamış) değerleri sunucuya bildiriyor, SONRA sunucudan gelen yazmayı PLC'ye uyguluyordu — hepsi aynı döngüde. Artık `yazilacaklariOnceUygula()` ile döngü başında ayrı bir uçtan (`/esp32/<kimlik>/yazilacaklar`) yazılacaklar önce çekilip PLC'ye uygulanıyor, SONRA okuma yapılıyor — o döngüde okunan/bildirilen değer artık zaten yeni (yazılmış) değeri yansıtıyor.
+
 ## Nasıl çalışır
 
 - Açılışta ve her dakika bir: sunucudan bu cihazın tag listesini çeker (`GET /esp32/<kimlik>/tagler`) — hangi Modbus adresi, hangi veri tipi (bool/int/float/...), okuma mı yazma mı.
