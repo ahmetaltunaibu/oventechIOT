@@ -99,6 +99,17 @@
     .el-durum { position: absolute; box-sizing: border-box; pointer-events: none; overflow: hidden; }
     .el-durum img { width: 100%; height: 100%; object-fit: contain; }
 
+    /* Yazma isteği sunucu tarafında reddedilirse gösterilen kısa süreli
+       hata bildirimi (bkz. hataGoster() / yaz()). */
+    #hata-toast {
+        position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+        background: #3a1f22; border: 1px solid var(--red, #e74c3c); color: #ff8a8a;
+        padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.5); z-index: 900; opacity: 0; pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease; max-width: 90vw; text-align: center;
+    }
+    #hata-toast.gorunur { opacity: 1; transform: translateX(-50%) translateY(0); }
+
     /* Sayfa giriş animasyonları — sadece ilk yüklemede bir kez oynar. */
     @keyframes girisFade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes girisSoldanSaga { from { transform: translateX(-40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -146,6 +157,15 @@
 {% endif %}
 
 <div id="cerceve"><div id="tuval-sarici"><div id="tuval"></div></div></div>
+
+<!-- Kullanıcı raporu: bir tag'e yazma isteği sunucu tarafında reddedilse
+     (örn. tag aslında sadece-okumaya açık) bile arayüz sunucunun cevabına
+     hiç bakmadan "başarılı"ymış gibi anında değeri değiştiriyordu — birkaç
+     saniye sonra gerçek (değişmemiş) değer gelene kadar YANLIŞ durum
+     gösteriyordu. Artık yaz() başarısız cevapta optimistik değeri hiç
+     uygulamıyor, bunun yerine burada kısa süreli bir hata bildirimi (toast)
+     gösteriyor — bkz. hataGoster(). -->
+<div id="hata-toast"></div>
 
 <!-- Popup ekranı (sayfa_turu='popup' hedefine "Sayfaya Git" ile gidilince) -->
 <div id="popup-arkaplan" onclick="if (event.target === this) popupKapat()">
@@ -952,19 +972,43 @@ function resimNodeAl(anahtar, url) {
     return img;
 }
 
+// Birkaç saniyeliğine görünüp kendiliğinden kaybolan kısa hata bildirimi.
+let _hataToastZamanlayici = null;
+function hataGoster(mesaj) {
+    const toast = document.getElementById('hata-toast');
+    if (!toast) return;
+    toast.textContent = mesaj;
+    toast.classList.add('gorunur');
+    clearTimeout(_hataToastZamanlayici);
+    _hataToastZamanlayici = setTimeout(() => toast.classList.remove('gorunur'), 3500);
+}
+
 async function yaz(el, deger) {
     if (!el.tag_id) return;
     try {
-        await fetch(`/api/cihaz/${cihazId}/tag/${el.tag_id}/yaz`, {
+        const res = await fetch(`/api/cihaz/${cihazId}/tag/${el.tag_id}/yaz`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ deger: deger })
         });
+        // KRİTİK (kullanıcı raporu): sunucu yazmayı reddedebilir (örn. tag
+        // aslında sadece-okumaya açık, erisim='read') — 403 döner. Önceden
+        // bu cevap hiç kontrol edilmiyordu, arayüz her durumda "başarılı"
+        // gibi davranıp değeri anında değiştiriyordu; birkaç saniye sonra
+        // gerçek (değişmemiş) değer gelene kadar YANLIŞ durum gösteriyordu.
+        // Artık başarısız cevapta optimistik değer HİÇ uygulanmıyor, PLC'ye
+        // gerçekten hiç gitmediği için zaten gösterilecek bir şey yok.
+        if (!res.ok) {
+            let mesaj = 'Yazma başarısız';
+            try { const data = await res.json(); if (data.error) mesaj = data.error; } catch (e) { /* yanıt JSON değilse yoksay */ }
+            hataGoster('❌ ' + mesaj);
+            return;
+        }
         if (!degerler[el.tag_id]) degerler[el.tag_id] = {};
         degerler[el.tag_id].deger = deger;
         sonYazma[el.tag_id] = { deger: String(deger), zaman: Date.now() };
         tuvalCiz();
-    } catch (e) { /* sessiz geç, bir sonraki poll düzeltir */ }
+    } catch (e) { /* ağ hatası — sessiz geç, bir sonraki poll düzeltir */ }
 }
 
 async function degerleriYenile() {
