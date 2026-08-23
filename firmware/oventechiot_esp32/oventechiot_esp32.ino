@@ -54,7 +54,7 @@
  * ---------------------------------------------------------------
  */
 
-#define FIRMWARE_VERSION "1.3.0"
+#define FIRMWARE_VERSION "1.4.0"
 
 #include <WiFi.h>
 #include <WiFiManager.h>          // tzapu/WiFiManager
@@ -392,7 +392,18 @@ String tagOku(const TagTanimi &tag) {
   String tip = String(tag.veriTipi); tip.toLowerCase();
 
   if (tip == "bool") {
-    uint8_t sonuc = modbus.readCoils(tag.modbusAdres, 1);
+    // KRİTİK (kullanıcı raporu — Delta PLC fiziksel giriş, örn. X21,
+    // "Modbus hatası" ile okunamıyordu): coil (fonksiyon 01) SADECE
+    // yazılabilir bitler (Y çıkışı, M dahili röle) için geçerli — fiziksel
+    // GİRİŞLER (X) Modbus'ta ayrı bir bölge (discrete input, fonksiyon 02)
+    // ve PLC, coil isteğini o bölge için reddediyordu. erisim='read' olan
+    // bool tag'ler artık fiziksel giriş sayılıp discrete input (fonksiyon
+    // 02) ile okunuyor; write/readwrite olanlar (Y/M gibi yazılabilir
+    // bitler) eskisi gibi coil (fonksiyon 01) ile okunuyor.
+    String erisim = String(tag.erisim); erisim.toLowerCase();
+    uint8_t sonuc = (erisim == "read")
+      ? modbus.readDiscreteInputs(tag.modbusAdres, 1)
+      : modbus.readCoils(tag.modbusAdres, 1);
     if (sonuc != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc)); return ""; }
     return (modbus.getResponseBuffer(0) & 0x01) ? "1" : "0";
   }

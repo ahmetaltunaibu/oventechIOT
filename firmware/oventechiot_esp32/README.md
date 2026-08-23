@@ -77,7 +77,8 @@ oventechIOT'ta cihazın yönetim sayfasında (cihaz_detay) bir "📡 Firmware" k
 
 | veri_tipi | Modbus | Register sayısı |
 |---|---|---|
-| bool | Coil (fonksiyon 01/05) | 1 bit |
+| bool, erişim=okuma+yazma/sadece-yazma | Coil (fonksiyon 01/05) | 1 bit |
+| bool, erişim=sadece-okuma | Discrete Input (fonksiyon 02) | 1 bit |
 | int, sint, uint, usint, byte, word | Holding Register (03/06) | 1×16bit |
 | dint, udint, dword | Holding Register (03/16) | 2×16bit (big-endian) |
 | float | Holding Register (03/16), IEEE754 | 2×16bit (big-endian) |
@@ -86,5 +87,9 @@ oventechIOT'ta cihazın yönetim sayfasında (cihaz_detay) bir "📡 Firmware" k
 `tagler.modbus_adres` alanındaki sayı doğrudan register/coil adresi olarak kullanılır. Float/dint/udint/dword için firmware **DÜŞÜK word'ü `modbus_adres`'te, YÜKSEK word'ü `modbus_adres+1`'de** okur/yazar.
 
 ⚠️ **Delta PLC'lerde gerçek deneyimle görüldü:** WPLSoft/ISPSoft'ta bir float değişkeni izlerken görünen "tek" register numarası bazen çiftin **yüksek** (ikinci) yarısı oluyor — bu durumda `modbus_adres`'e o görünen numaradan **1 eksiğini** gir (örn. izlemede D4097 görünüyorsa tag'e 4096 yaz). Emin değilsen: yanlış adresle deneyip seri monitördeki `[ham] reg0=... reg1=...` çıktısına bak — biri sürekli `0x0000` geliyorsa muhtemelen bir eksiğini denemen gerekiyor.
+
+⚠️ **Fiziksel PLC girişleri (X) — bool + sadece-okuma zorunlu (v1.4.0):** Delta'nın X (giriş rölesi) noktaları Modbus'ta coil değil, **discrete input** bölgesindedir (fonksiyon 02) — coil (fonksiyon 01, Y çıkışı/M dahili röle için doğru) ile okumaya çalışırsan PLC isteği reddedip "Modbus hatası" verir. Firmware bunu **tag'in erişim türüne göre otomatik** ayırt eder: `erişim=sadece-okuma` olan bool tag'ler discrete input (02) ile, `yazma`/`okuma+yazma` olanlar (Y/M gibi yazılabilir bitler) coil (01) ile okunur — bu yüzden bir X girişini tag'e eklerken **erişimi mutlaka "Sadece okuma" seç**.
+
+Adres için: X numaraları OKTAL'dir (000-007, sonra 010'a atlar, 008/009 yok). Delta'nın kendi "MODBUS ADRESLERİ" tablosundaki sayının (örn. X21 için 11042) `modbus_adres`'e **doğrudan mı** yoksa Modicon geleneğindeki gibi **10001 çıkarılarak mı** girilmesi gerektiği modele/dokümana göre değişebilir, burada kesin bir formül veremiyoruz — deneyerek bul: önce tablodaki sayıyı olduğu gibi dene, olmazsa 10001 (ya da 1) eksiğini dene; seri monitördeki `[oku] ... -> (OKUNAMADI / Modbus hatasi)` satırı düzelip gerçek 0/1 değeri görünmeye başladığında doğru adresi bulmuşsundur.
 
 <!-- yedekleme boru hattı testi 2026-08-22T18:13:29Z -->
