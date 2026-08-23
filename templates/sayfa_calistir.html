@@ -910,7 +910,17 @@ function tikla(el) {
 // yazdığımızı yansıtana ya da süre dolana kadar) o tag'in yerel değeri
 // poll'larda EZİLMİYOR.
 let sonYazma = {}; // tag_id -> { deger, zaman }
-const YAZMA_KORUMA_MS = 4000;
+// KRİTİK (kullanıcı raporu, devam eden flicker): koruma süresi 4000ms
+// iken ESP32 sunucuyla SADECE 5000ms'de bir (SENKRON_ARALIK_MS, firmware)
+// senkron oluyor — yani koruma süresi ESP32'nin gerçek yazmayı bildirmesinden
+// ÖNCE doluyordu. Süre dolunca istemci ham (henüz güncellenmemiş, eski)
+// sunucu değerine geri dönüyor, ESP32 bir sonraki döngüsünde gerçek değeri
+// bildirince tekrar doğrusuna geçiyordu — "önce ON oluyor, sonra OFF'a
+// dönüp bekliyor, sonra tekrar ON oluyor" hissi buradan geliyordu. Koruma
+// süresi artık ESP32'nin senkron aralığını (+ağ gecikmesi payı) rahatça
+// aşıyor, süre dolmadan sunucu neredeyse her zaman gerçek değeri bildirmiş
+// oluyor.
+const YAZMA_KORUMA_MS = 8000;
 
 // Kullanıcı raporu: resim elementi 3sn'lik poll döngüsünde "göz kırpar
 // gibi" görünür/görünmez oluyordu. Sebep: tuvalCiz() her pollde TÜM tuvali
