@@ -1376,9 +1376,13 @@ const EMOJI_LISTESI = [
     ['☀️','gunduz mode gunes'], ['🖨️','yazici printer'], ['📤','gonder cikis export'],
     ['📥','gelen kutu import'], ['🧭','pusula compass yon'], ['🗺️','harita map'],
 ];
-let emojiHedefInputId = 'ozLabel';
-function emojiSeciciAc(hedefInputId) {
-    emojiHedefInputId = hedefInputId;
+let emojiHedefEl = null;
+// Kullanıcı isteği: durum göstergesi (satırları dinamik oluşturulan, sabit
+// id'si olmayan) elementlerine de emoji/simge ekleyebilmeli — bu yüzden
+// artık bir id STRING'i (eski kullanım, örn. 'ozLabel') ya da doğrudan bir
+// DOM elementi (dinamik satırlar için) kabul ediyor.
+function emojiSeciciAc(hedef) {
+    emojiHedefEl = (typeof hedef === 'string') ? document.getElementById(hedef) : hedef;
     document.getElementById('emojiArama').value = '';
     emojiListesiCiz();
     document.getElementById('emoji-perde').style.display = 'block';
@@ -1401,7 +1405,7 @@ function emojiListesiCiz() {
     });
 }
 function emojiSec(emoji) {
-    const input = document.getElementById(emojiHedefInputId);
+    const input = emojiHedefEl;
     if (input) {
         const basi = input.value.slice(0, input.selectionStart ?? input.value.length);
         const sonu = input.value.slice(input.selectionEnd ?? input.value.length);
@@ -3211,7 +3215,10 @@ function durumSatirlariCiz() {
                 <input type="file" class="durum-resim-dosya" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
             ` : `
                 <label>Metin</label>
-                <input type="text" class="durum-metin" value="${(d.metin || '').replace(/"/g, '&quot;')}">
+                <div style="display:flex;gap:6px;">
+                    <input type="text" class="durum-metin" value="${(d.metin || '').replace(/"/g, '&quot;')}" style="flex:1;">
+                    <button type="button" class="durum-emoji-btn" title="Emoji/Simge Ekle" style="background:var(--panel2);flex:0 0 38px;padding:0;">😀</button>
+                </div>
                 <label>Arka Plan Rengi</label>
                 <input type="color" class="durum-renk-arkaplan" value="${d.renk_arkaplan || '#333333'}" style="height:34px;">
                 <label>Yazı Rengi</label>
@@ -3242,6 +3249,14 @@ function durumSatirlariCiz() {
                     else alert(data.error || 'Yükleme hatası');
                 } catch (err) { alert('İstek başarısız'); }
             });
+        } else {
+            // Kullanıcı isteği: durum göstergesinin metin alanına da
+            // emoji/simge eklenebilsin.
+            const metinInput = satir.querySelector('.durum-metin');
+            const emojiBtn = satir.querySelector('.durum-emoji-btn');
+            if (emojiBtn && metinInput) {
+                emojiBtn.addEventListener('click', () => emojiSeciciAc(metinInput));
+            }
         }
     });
     onizlemeSecim.value = Math.min(el.durum_onizleme_index || 0, durumlar.length - 1);
