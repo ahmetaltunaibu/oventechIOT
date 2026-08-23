@@ -662,15 +662,6 @@ function tuvalCiz() {
         elemDonusUygula(div, el);
         if (el.custom_css) div.style.cssText += ';' + el.custom_css;
 
-        // Kullanıcı isteği: belirli bir tag belirli bir değere eşit olunca
-        // butonu tamamen gizle (örn. cihaz offline'ken kumanda butonunu göster me).
-        if (el.gizle_tag_id) {
-            const gizleDeger = degerler[el.gizle_tag_id] ? degerler[el.gizle_tag_id].deger : null;
-            if (gizleDeger !== null && String(gizleDeger) === String(el.gizle_deger)) {
-                div.style.display = 'none';
-            }
-        }
-
         // Basma efekti — dokunmatikte :active her zaman güvenilir tetiklenmediği
         // için .basili sınıfını elle ekleyip çıkarıyoruz.
         const basiliEkle = () => div.classList.add('basili');
@@ -821,6 +812,16 @@ function olcekle() {
 // engellemesin diye) ama içine konan gerçek element div'leri tıklanabilir
 // kalmalı.
 function hedefKatmanaEkle(div, el, tuval) {
+    // Kullanıcı isteği: "gizleme" (tag X belirli bir değere eşitse
+    // elementi gizle) artık TÜM element tiplerinde çalışıyor — her tip
+    // kendi render dalında bunu tekrarlamak yerine, her element DOM'a
+    // eklenmeden hemen önce burada TEK YERDEN kontrol ediliyor.
+    if (el.gizle_tag_id) {
+        const gizleDeger = degerler[el.gizle_tag_id] ? degerler[el.gizle_tag_id].deger : null;
+        if (gizleDeger !== null && String(gizleDeger) === String(el.gizle_deger)) {
+            div.style.display = 'none';
+        }
+    }
     if (el.sabit_konum === 'ust' || el.sabit_konum === 'alt') {
         div.style.pointerEvents = 'auto';
         document.getElementById(el.sabit_konum === 'ust' ? 'tuval-sabit-ust' : 'tuval-sabit-alt').appendChild(div);

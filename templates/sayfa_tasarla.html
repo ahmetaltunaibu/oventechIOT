@@ -395,12 +395,6 @@
             <option value="kapali">Kapalı</option>
             <option value="acik">Açık</option>
         </select>
-
-        <hr style="border-color:var(--border);margin:10px 0;">
-        <label>Bu Buton Ne Zaman Gizlensin? (opsiyonel)</label>
-        <select id="ozButonGizleTag"><option value="">— gizleme yok —</option></select>
-        <label>Gizleme Değeri (tag değeri buna eşit olunca buton gizlenir)</label>
-        <input type="text" id="ozButonGizleDeger" placeholder="örn. 1">
     </div>
 
     <div id="ozAlanEtiket" class="ozel-alan">
@@ -780,6 +774,13 @@
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
     <textarea id="ozCustomCss" rows="3" placeholder="örn. box-shadow: 0 4px 12px #000; transform: rotate(2deg);" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:monospace;padding:8px;margin-bottom:10px;box-sizing:border-box;"></textarea>
 
+    <!-- Kullanıcı isteği: "tag X şu değere eşitse gizle" ARTIK TÜM element
+         tiplerinde çalışıyor (önceden sadece butonda vardı) — bu yüzden
+         tipe özel değil, herkese ortak (Custom CSS gibi) tek bir alan. -->
+    <label>Bu Elementi Ne Zaman Gizle? (opsiyonel, çalışma zamanında)</label>
+    <select id="ozGizleTag"><option value="">— gizleme yok —</option></select>
+    <input type="text" id="ozGizleDeger" placeholder="Gizleme Değeri — örn. 1" style="margin-bottom:10px;">
+
     <div id="ozAlanYaziRengi" class="ozel-alan gorunur">
         <label>Yazı Rengi</label>
         <input type="color" id="ozRenkYazi" value="#ffffff" style="height:38px;">
@@ -1133,7 +1134,7 @@ birimSelectDoldur(document.getElementById('ozEtiketSonEkSimge'));
 birimSelectDoldur(document.getElementById('ozInputboxBirimSimge'));
 
 tagSecenekleriDoldur(document.getElementById('ozTag'), '— seçilmedi —');
-tagSecenekleriDoldur(document.getElementById('ozButonGizleTag'), '— gizleme yok —');
+tagSecenekleriDoldur(document.getElementById('ozGizleTag'), '— gizleme yok —');
 tagSecenekleriDoldur(document.getElementById('ozEtiketTag'), '— bağlama, sabit metin göster —');
 // BUG FIX: yeni element tiplerinin (durum, switch, textbox, inputbox,
 // combobox, checkbox, progressbar) "Bağlı Tag" seçim kutuları hiç
@@ -3032,8 +3033,6 @@ function guncellePanel() {
         document.getElementById('ozButonResimKapali').value = el.resim_url_kapali || '';
         document.getElementById('ozButonFontBoyutu').value = el.font_boyutu || 13;
         document.getElementById('ozButonSeffaf').checked = !!el.seffaf_arkaplan;
-        document.getElementById('ozButonGizleTag').value = el.gizle_tag_id || '';
-        document.getElementById('ozButonGizleDeger').value = el.gizle_deger || '';
         document.getElementById('ozButonKoseYaricapi').value = el.kose_yaricapi ?? 6;
         document.getElementById('ozOnizlemeDurum').value = el._onizleme || 'kapali';
         const hedefSecim = document.getElementById('ozHedefSayfa');
@@ -3177,6 +3176,9 @@ function guncellePanel() {
     }
 
     document.getElementById('ozCustomCss').value = el.custom_css || '';
+    // Gizleme artık tüm element tiplerinde ortak (bkz. yukarıdaki not).
+    document.getElementById('ozGizleTag').value = el.gizle_tag_id || '';
+    document.getElementById('ozGizleDeger').value = el.gizle_deger || '';
 }
 
 // ---------- Durum Göstergesi: dinamik durum satırları ----------
@@ -3428,8 +3430,6 @@ function uygula() {
         el.resim_url_kapali = document.getElementById('ozButonResimKapali').value.trim();
         el.font_boyutu = parseInt(document.getElementById('ozButonFontBoyutu').value) || 13;
         el.seffaf_arkaplan = document.getElementById('ozButonSeffaf').checked;
-        el.gizle_tag_id = document.getElementById('ozButonGizleTag').value ? parseInt(document.getElementById('ozButonGizleTag').value) : null;
-        el.gizle_deger = document.getElementById('ozButonGizleDeger').value;
         el.kose_yaricapi = parseInt(document.getElementById('ozButonKoseYaricapi').value) || 0;
     } else if (el.type === 'durum') {
         el.tag_id = document.getElementById('ozDurumTag').value ? parseInt(document.getElementById('ozDurumTag').value) : null;
@@ -3548,6 +3548,9 @@ function uygula() {
     }
 
     el.custom_css = document.getElementById('ozCustomCss').value.trim();
+    // Gizleme artık tüm element tiplerinde ortak (bkz. yukarıdaki not).
+    el.gizle_tag_id = document.getElementById('ozGizleTag').value ? parseInt(document.getElementById('ozGizleTag').value) : null;
+    el.gizle_deger = document.getElementById('ozGizleDeger').value;
     render();
 }
 
