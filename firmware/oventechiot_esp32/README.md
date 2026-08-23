@@ -37,6 +37,10 @@ Farklı pin kullanacaksan `.ino` dosyasının başındaki `PIN_RS485_*` sabitler
 
 Ayarları sıfırlamak (yeni WiFi/sunucu girmek) istersen: açılışta **BOOT** butonuna ~5 saniye basılı tut.
 
+## WiFi koparsa ne olur (kendi kendini toparlama)
+
+Cihaz zaten çalışırken (kurulumdan sonra) WiFi kesilirse **kurulum portalına hiç girmez** — kayıtlı bilgilerle arka planda sürekli `WiFi.reconnect()` dener. Ama bu tek başına saatlerce süren kesintilerde bazen yetersiz kalabiliyor (ESP32'nin WiFi yığını uzun süre bağlantısız kalınca "takılıp kalabiliyor", router geri gelse bile bir daha bağlanamıyor) — bu yüzden **WiFi 5 dakikadan uzun süre kesik kalırsa cihaz kendini otomatik olarak yeniden başlatır**; açılışta kayıtlı WiFi bilgileriyle sıfırdan dener. Yani en kötü ihtimalle WiFi geri geldikten sonraki birkaç dakika içinde kendiliğinden toparlanır, elle müdahaleye gerek yok.
+
 ## Nasıl çalışır
 
 - Açılışta ve her dakika bir: sunucudan bu cihazın tag listesini çeker (`GET /esp32/<kimlik>/tagler`) — hangi Modbus adresi, hangi veri tipi (bool/int/float/...), okuma mı yazma mı.
@@ -54,6 +58,8 @@ gemba-iot-gateway ile aynı kart düzeni/pin numaraları kullanılıyor — kır
 | 🟡 Sarı | 19 | Sunucuyla son senkron başarılı | Sunucuya ulaşılamıyor / cevap hatalı |
 | 🟢 Yeşil | 21 | Genel sistem sağlıklı (WiFi + sunucu ikisi de OK) | Söner (WiFi ya da sunucu sorunlu) |
 | 🔴 Kırmızı | 27 | — bu firmware'de yönetilmiyor, dokunulmuyor | — |
+
+⚠️ **Açılışta ("Connecting to SAVED AP..." satırı Seri Port'ta görünürken) LED'ler NEFES ALMAZ/YANIP SÖNMEZ — SABİT yanar.** Sebep: nefes/blink efekti `loop()` içinde çalışıyor, ama WiFi'ye bağlanma denemesi (`wm.autoConnect()`) `setup()` içinde ve BLOKLAYICI — bağlantı kurulana (ya da zaman aşımına uğrayana) kadar `loop()` hiç başlamaz. Bu yüzden bu bekleme süresinde: 🔵 Mavi LED sabit yanarak "bağlanmaya çalışıyorum" der; kayıtlı ağ bulunamayıp kurulum portalı (`OventechIOT-Kurulum` ağı) açılırsa 🟡 Sarı LED de sabit yanıp "ayar portalı açık, kurulum bekleniyor" durumunu ekler. Cihaz WiFi'ye bağlanıp `loop()` başladığında LED'ler normal nefes/yanıp-sönme davranışına döner.
 
 ## Uzaktan güncelleme (OTA)
 

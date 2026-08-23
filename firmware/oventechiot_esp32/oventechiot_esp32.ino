@@ -54,7 +54,7 @@
  * ---------------------------------------------------------------
  */
 
-#define FIRMWARE_VERSION "1.0.0"
+#define FIRMWARE_VERSION "1.1.0"
 
 #include <WiFi.h>
 #include <WiFiManager.h>          // tzapu/WiFiManager
@@ -85,6 +85,16 @@
 #define TAG_LISTESI_YENILE_MS  60000UL   // Tag listesi ne sıklıkla tazelensin (tasarımda tag eklenmiş/silinmiş olabilir)
 #define MAKS_TAG_SAYISI     40
 
+// Kullanıcı raporu: WiFi saatlerce kesik kalırsa (örn. router/ISP arızası)
+// cihaz bir daha hiç bağlanmıyordu. Sebep: loop()'ta WiFi koptuğunda sadece
+// WiFi.reconnect() deneniyordu — ama ESP32'nin WiFi yığını çok uzun süre
+// bağlantısız kalınca bilinen bir davranışla "takılıp kalabiliyor", router
+// geri gelse bile reconnect() bir daha asla başarılı olmuyor. Güvenlik ağı:
+// bu süre WIFI_KOPUK_RESTART_MS'i geçerse cihazı TAMAMEN yeniden başlatıyoruz
+// — açılışta kurulumPortaliBaslat() kayıtlı WiFi bilgileriyle sıfırdan dener,
+// böylece en kötü ihtimalle bu süre içinde kendi kendini toparlar.
+#define WIFI_KOPUK_RESTART_MS  (5UL * 60UL * 1000UL)   // 5 dakika
+
 // WiFiManager captive portal'daki ekstra alanlar için varsayılan/ilk değerler
 #define VARSAYILAN_SUNUCU  "https://oventechiot.onrender.com"
 
@@ -107,6 +117,7 @@ TagTanimi tagListesi[MAKS_TAG_SAYISI];
 int tagSayisi = 0;
 unsigned long sonSenkron = 0;
 unsigned long sonTagYenileme = 0;
+unsigned long sonWifiBagliZaman = 0;   // en son WiFi bağlı olduğu an (millis) — uzun süreli kopukluk tespiti için
 
 // ================== DURUM LED'LERİ ==================
 // gemba-iot-gateway/led.cpp ile birebir aynı mantık (nefes alma + yanıp
@@ -238,6 +249,20 @@ void kurulumPortaliBaslat(bool zorlaSifirla) {
   paramKimlik = new WiFiManagerParameter("kimlik", "Cihaz Kimligi (oventechIOT'tan)", cihazKimlik.c_str(), 64);
   wm.addParameter(paramSunucu);
   wm.addParameter(paramKimlik);
+
+  // Kullanıcı raporu: "Connecting to SAVED AP" sürerken LED'ler tamamen
+  // sönük kalıyordu — sebebi wm.autoConnect() bloklayan (blocking) bir
+  // çağrı ve setup() içinde, yani loop()'taki breathe()/blink() mantığı
+  // henüz hiç çalışmamış oluyor. Bu bekleme süresince en azından SABİT
+  // (statik, tik gerektirmeyen) bir ışıkla "cihaz bir şeyler deniyor"
+  // sinyali veriyoruz: WiFi LED'i "bağlanmaya çalışıyorum" için sabit
+  // yanar; kayıtlı ağ bulunamayıp kurulum portalı (AP modu) açılırsa
+  // Sunucu LED'i de sabit yanarak ikinci, ayırt edilebilir bir durum
+  // gösterir ("ayar portalı açık, kurulum bekleniyor").
+  ledWifi.on();
+  wm.setAPCallback([](WiFiManager* wmPtr) {
+    ledSunucu.on();
+  });
 
   wm.setConfigPortalTimeout(300); // 5 dakika içinde ayar girilmezse tekrar dener
   bool baglandi = wm.autoConnect("OventechIOT-Kurulum");
@@ -640,6 +665,7 @@ void setup() {
   kurulumPortaliBaslat(sifirlaIstendi);
   tagListesiniGetir();
   sonTagYenileme = millis();
+  sonWifiBagliZaman = millis();   // kurulumPortaliBaslat() burada zaten bağlı döner (aksi halde restart etmişti)
 }
 
 void loop() {
@@ -654,9 +680,15 @@ void loop() {
   if (!wifiBagliMi) {
     Serial.println("WiFi baglantisi koptu, yeniden baglaniliyor...");
     WiFi.reconnect();
+    if (millis() - sonWifiBagliZaman > WIFI_KOPUK_RESTART_MS) {
+      Serial.println("WiFi cok uzun suredir kopuk (5dk+), cihaz yeniden baslatiliyor...");
+      delay(500);
+      ESP.restart();
+    }
     delay(2000);
     return;
   }
+  sonWifiBagliZaman = millis();
 
   unsigned long simdi = millis();
 
