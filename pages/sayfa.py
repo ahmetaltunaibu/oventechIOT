@@ -168,6 +168,21 @@ def sayfa_yeni_ada_kopyala(cihaz_id, sayfa_ad):
     return jsonify({'success': True, 'yeni_ad': yeni_ad})
 
 
+@sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/adini-degistir', methods=['POST'])
+@tasarimci_required
+def sayfa_adini_degistir(cihaz_id, sayfa_ad):
+    """Kullanıcı isteği: bir sayfanın adını değiştirebilmeli. Masaüstü +
+    mobil düzeni birlikte yeniden adlandırılır, diğer sayfalardaki
+    'Sayfaya Git' butonlarının hedefleri de otomatik güncellenir."""
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    yeni_ad = (request.get_json(silent=True) or {}).get('yeni_ad', '').strip()
+    ok, hata = database.sayfa_adini_degistir(cihaz_id, sayfa_ad, yeni_ad)
+    if not ok:
+        return jsonify({'error': hata}), 400
+    return jsonify({'success': True, 'yeni_ad': yeni_ad})
+
+
 @sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/<hedef>/diger-duzenden-kopyala', methods=['POST'])
 @tasarimci_required
 def sayfa_kopyala(cihaz_id, sayfa_ad, hedef):

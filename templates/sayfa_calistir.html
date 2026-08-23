@@ -61,6 +61,14 @@
         background: var(--panel2);
         transform-origin: top left;
         flex-shrink: 0;
+        /* Kullanıcı raporu: sayfa/sekme değişince butonlar/durumlar önce
+           varsayılan (0/kapalı) durumda görünüp az sonra doğru değere
+           "sıçrıyordu" — sebebi ilk tuvalCiz() sunucudan gerçek değerler
+           gelmeden (degerler={} iken) çiziliyor olmasıydı. İlk gerçek veri
+           gelene kadar tuval şeffaf tutulup (bkz. degerleriYenile()) veri
+           gelince yumuşak geçişle gösteriliyor — yanlış durum hiç görünmüyor. */
+        opacity: 0;
+        transition: opacity 0.2s ease;
     }
     .el-buton {
         position: absolute;
@@ -155,7 +163,6 @@ const buSayfaAdi = {{ sayfa_ad | tojson }};
 const sayfaBilgileri = {{ sayfa_bilgileri_json | safe }}; // {sayfaAdi: {tur, animasyon}}
 let degerler = {}; // tag_id -> {ad, deger, yazilacak_deger}
 let aktifSayfa = null; // {elementler, tuval_w, tuval_h}
-let ilkCizimYapildiMi = false;
 // Grafik elementi — gerçek geçmiş sunucudan (tag_deger_gecmis tablosu)
 // çekilir; sayfa açılışında dolduruluyor, sonra her poll'da (3sn) gelen
 // canlı değerlerle uçtan uzatılıyor. Sayfa kapanıp açılsa bile geçmiş kalır.
@@ -246,9 +253,11 @@ function tuvalCiz() {
             div.className = 'el-etiket';
             div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
             // Etiket bir tag'e bağlıysa canlı değeri gösterir (statik metnini değil).
             if (el.tag_id && degerler[el.tag_id]) {
-                div.textContent = degerler[el.tag_id].deger ?? '—';
+                const deger = degerler[el.tag_id].deger;
+                div.textContent = (deger ?? '—') + (deger != null && el.son_ek ? el.son_ek : '');
             }
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             hedefKatmanaEkle(div, el, tuval);
@@ -280,10 +289,9 @@ function tuvalCiz() {
             div.style.borderRadius = koseCSS(el, 'resim_kose');
             div.textContent = '';
             if (el.resim_url) {
-                const img = document.createElement('img');
-                img.src = el.resim_url;
+                const img = resimNodeAl(el.id, el.resim_url);
                 img.style.objectFit = el.resim_sigdirma || 'cover';
-                if (el.resim_konum && el.resim_konum !== 'center') img.style.objectPosition = resimKonumCSS(el.resim_konum);
+                img.style.objectPosition = (el.resim_konum && el.resim_konum !== 'center') ? resimKonumCSS(el.resim_konum) : '';
                 div.appendChild(img);
             } else if (el.resim_arkaplan_gorunur === false) {
                 div.style.background = 'transparent';
@@ -305,9 +313,7 @@ function tuvalCiz() {
             if (durum) {
                 if (el.durum_modu === 'resim') {
                     if (durum.resim_url) {
-                        const img = document.createElement('img');
-                        img.src = durum.resim_url;
-                        div.appendChild(img);
+                        div.appendChild(resimNodeAl(el.id, durum.resim_url));
                     }
                 } else {
                     div.style.background = durum.renk_arkaplan || '#333';
@@ -383,7 +389,7 @@ function tuvalCiz() {
             div.style.background = acikMi ? (el.renk_acik || '#3a1f22') : (el.renk_kapali || '#1c3326');
             div.style.color = acikMi ? (el.renk_yazi_acik || '#e74c3c') : (el.renk_yazi_kapali || '#2ecc71');
             div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
-            div.style.borderRadius = '8px'; div.style.fontWeight = '700';
+            div.style.borderRadius = (el.kose_yaricapi ?? 8) + 'px'; div.style.fontWeight = '700';
             div.style.fontSize = (el.font_boyutu || 13) + 'px';
             div.textContent = acikMi ? (el.metin_acik || '⚠️ Alarm') : (el.metin_kapali || '✅ Normal');
             elemDonusUygula(div, el);
@@ -396,7 +402,7 @@ function tuvalCiz() {
             div.className = '';
             div.style.background = el.renk_arkaplan || '#17222e';
             div.style.border = `1px solid ${el.renk_kenarlik || '#2a3b4c'}`;
-            div.style.borderRadius = '6px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.padding = '0 10px';
@@ -424,7 +430,9 @@ function tuvalCiz() {
             // başına bazı tarayıcılarda "e" gibi harflere de izin veriyordu.
             if (el.giris_turu === 'sayi') input.inputMode = 'decimal';
             input.placeholder = el.placeholder || '';
-            input.style.cssText = `width:100%;height:100%;box-sizing:border-box;padding:0 10px;border-radius:6px;`
+            // Birim varsa sağda yer kaplayan bir rozet gösteriliyor (aşağıda) —
+            // yazı onun altına girmesin diye input'un sağ boşluğu büyütülüyor.
+            input.style.cssText = `width:100%;height:100%;box-sizing:border-box;padding:0 ${el.birim ? '38px' : '10px'} 0 10px;border-radius:${el.kose_yaricapi ?? 6}px;`
                 + `background:${el.renk_arkaplan || '#17222e'};color:${el.renk_yazi || '#e8eef4'};`
                 + `border:1px solid ${el.renk_kenarlik || '#2e9ed9'};font-size:${el.font_boyutu || 16}px;`;
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
@@ -433,6 +441,13 @@ function tuvalCiz() {
             input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { gonder(); input.blur(); } });
             input.addEventListener('blur', gonder);
             div.appendChild(input);
+            if (el.birim) {
+                const birimEl = document.createElement('span');
+                birimEl.textContent = el.birim;
+                birimEl.style.cssText = `position:absolute;right:10px;top:50%;transform:translateY(-50%);`
+                    + `color:${el.renk_yazi || '#e8eef4'};font-size:${el.font_boyutu || 16}px;opacity:0.7;pointer-events:none;`;
+                div.appendChild(birimEl);
+            }
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             hedefKatmanaEkle(div, el, tuval);
@@ -444,7 +459,7 @@ function tuvalCiz() {
             div.style.padding = '0';
             div.style.background = 'transparent';
             const select = document.createElement('select');
-            select.style.cssText = `width:100%;height:100%;box-sizing:border-box;padding:0 8px;border-radius:6px;`
+            select.style.cssText = `width:100%;height:100%;box-sizing:border-box;padding:0 8px;border-radius:${el.kose_yaricapi ?? 6}px;`
                 + `background:var(--panel2);color:var(--text);border:1px solid var(--border);font-size:${el.font_boyutu || 14}px;`;
             (el.secenekler || []).forEach(s => {
                 const opt = document.createElement('option');
@@ -464,7 +479,7 @@ function tuvalCiz() {
         if (el.type === 'progressbar') {
             const dikeyMi = el.yon === 'dikey';
             div.style.background = el.renk_arkaplan || '#17222e';
-            div.style.borderRadius = '6px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.overflow = 'hidden';
             // position:absolute zaten döngü başında ayarlandı — bu, içindeki
             // "dolu" (fill) çubuğun position:absolute'u için de geçerli bir
@@ -495,7 +510,7 @@ function tuvalCiz() {
 
         if (el.type === 'grafik') {
             div.style.background = el.arkaplan_rengi || '#17222e';
-            div.style.borderRadius = '6px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.boxSizing = 'border-box';
             div.style.padding = '6px';
             div.style.overflow = 'hidden';
@@ -606,14 +621,14 @@ function tuvalCiz() {
         div.textContent = '';
         div.style.flexDirection = 'column'; div.style.gap = '2px';
         div.style.fontSize = (el.font_boyutu || 13) + 'px';
+        div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
         renkGuncelle(div, el);
         const guncelDegerBtn = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
         const acikMi = guncelDegerBtn !== null && String(guncelDegerBtn) === String(el.acik_deger);
         const butonResimUrl = acikMi ? el.resim_url_acik : el.resim_url_kapali;
         const ikonOlcek = (el.font_boyutu || 13) / 13;
         if (butonResimUrl) {
-            const img = document.createElement('img');
-            img.src = butonResimUrl;
+            const img = resimNodeAl(el.id, butonResimUrl);
             img.style.cssText = `max-width:${70 * ikonOlcek}%;max-height:${60 * ikonOlcek}%;object-fit:contain;pointer-events:none;`;
             div.appendChild(img);
         }
@@ -659,10 +674,10 @@ function tuvalCiz() {
         hedefKatmanaEkle(div, el, tuval);
     });
     olcekle();
-    if (!ilkCizimYapildiMi) {
-        ilkCizimYapildiMi = true;
-        girisAnimasyonuOynat();
-    }
+    // NOT: giriş animasyonu burada DEĞİL, tuvalGoster() içinde tetikleniyor
+    // — bu fonksiyon ilk (veri gelmeden önceki, boş degerler'li) çizimde de
+    // çalışıyordu, bu da animasyonun gerçek veriler gelmeden bitmesine ve
+    // yanlış buton/durum durumunun görünmesine yol açıyordu (bkz. tuvalGoster).
 }
 
 // Döndürme/aynalama — tasarım ekranıyla aynı mantık (universal, tüm tipler).
@@ -782,7 +797,7 @@ function sabitKatmanGetirYaOlustur(id, kenar) {
         // piksel kayıyordu. Artık left:50% YOK — konum, sabitKatmanlariKonumlandir()
         // içinde her seferinde GERÇEK tuval konumu ÖLÇÜLEREK piksel
         // cinsinden ayarlanıyor, ikisi HER ZAMAN bire bir aynı hizada.
-        el.style.cssText = 'position:fixed;pointer-events:none;'
+        el.style.cssText = 'position:fixed;pointer-events:none;opacity:0;transition:opacity 0.2s ease;'
             + (kenar === 'ust' ? 'top:0;transform-origin:left top;' : 'bottom:0;transform-origin:left bottom;');
         document.body.appendChild(el);
     }
@@ -850,6 +865,26 @@ function tikla(el) {
 let sonYazma = {}; // tag_id -> { deger, zaman }
 const YAZMA_KORUMA_MS = 4000;
 
+// Kullanıcı raporu: resim elementi 3sn'lik poll döngüsünde "göz kırpar
+// gibi" görünür/görünmez oluyordu. Sebep: tuvalCiz() her pollde TÜM tuvali
+// sıfırdan yeniden çiziyor (tuval.innerHTML=''), bu da resim gösteren HER
+// element için (resim elementi, buton ikonu, resimli durum göstergesi)
+// her seferinde YENİ bir <img> düğümü oluşturup src'yi yeniden atıyordu —
+// tarayıcı aynı URL olsa bile TAZE bir düğümde görüntüyü tekrar
+// decode/paint ediyor, bu kısa "boş kare" olarak göze çarpıyordu. Şimdi:
+// aynı elementin <img> düğümü, URL değişmediği sürece onbellekte tutulup
+// TEKRAR KULLANILIYOR (src bir daha hiç atanmıyor) — tarayıcı zaten
+// decode edilmiş görüntüyü anında gösteriyor, flicker olmuyor.
+let resimOnbellek = {}; // element id -> { img, url }
+function resimNodeAl(anahtar, url) {
+    const onbellek = resimOnbellek[anahtar];
+    if (onbellek && onbellek.url === url) return onbellek.img;
+    const img = document.createElement('img');
+    img.src = url;
+    resimOnbellek[anahtar] = { img, url };
+    return img;
+}
+
 async function yaz(el, deger) {
     if (!el.tag_id) return;
     try {
@@ -894,8 +929,30 @@ async function degerleriYenile() {
             return;
         }
         tuvalCiz();
+        tuvalGoster();
     } catch (e) { /* bağlantı sorunu — sessiz geç */ }
 }
+
+// İlk gerçek veri gelene (ya da makul bir süre geçip vazgeçilene) kadar
+// tuval opacity:0 tutuluyordu (bkz. CSS) — burada görünür kılınıyor.
+// ilkVeriGeldiMi ile sadece BİR KEZ (ilk yüklemede) tetiklenir, 3sn'lik
+// normal poll döngüsünde tekrar tekrar fade yapılmaz.
+let ilkVeriGeldiMi = false;
+function tuvalGoster() {
+    if (ilkVeriGeldiMi) return;
+    ilkVeriGeldiMi = true;
+    document.getElementById('tuval').style.opacity = '1';
+    const ust = document.getElementById('tuval-sabit-ust'); if (ust) ust.style.opacity = '1';
+    const alt = document.getElementById('tuval-sabit-alt'); if (alt) alt.style.opacity = '1';
+    // Sayfa özelliklerinde bir "giriş animasyonu" seçiliyse (fade/kaydırma),
+    // artık burada — ilk gerçek veri geldikten SONRA — tetikleniyor; eskiden
+    // tuvalCiz()'in içindeydi ve veri gelmeden (boş degerler'le) çalışıp
+    // animasyon bitene kadar yanlış buton/durum durumunu görünür kılıyordu.
+    if (aktifSayfa) girisAnimasyonuOynat();
+}
+// Güvenlik ağı: fetch hiç başarılı olmazsa (ağ sorunu) tuval sonsuza kadar
+// görünmez kalmasın — 2sn sonra veri gelmemiş olsa bile göster.
+setTimeout(tuvalGoster, 2000);
 
 function grafikGecmisineEkle() {
     Object.keys(degerler).forEach(tagId => {

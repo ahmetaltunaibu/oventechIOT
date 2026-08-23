@@ -150,6 +150,7 @@
     </form>
     {% endif %}
     <button type="button" class="mini-ikon" title="Bu Sayfayı Yeni Bir İsimle Kopyala (bağımsız kopya)" onclick="sayfayiYeniAdaKopyala()">📑</button>
+    <button type="button" class="mini-ikon" title="Sayfanın Adını Değiştir" onclick="sayfaAdiniDegistir()">✏️</button>
     <span class="mini-ayrac"></span>
     <span class="mini-bilgi" title="Tuval boyutu">📐 <span id="tuvalBoyutYazi">{{ tuval_w }}×{{ tuval_h }}</span></span>
     <span class="mini-bilgi" title="Sağ tık: ekle/menü. Çift tık: özellikler. Shift/Ctrl+tık ya da boş alanda sürükle: çoklu seçim. Seçiliyken: ok tuşları taşır (Shift+ok = 10px), Del sil, Ctrl+D çoğalt, Ctrl+C/V kopyala-yapıştır (BAŞKA SAYFAYA GEÇİP DE YAPIŞTIRABİLİRSİN), Ctrl+Z/Y geri al-yinele, Ctrl+A tümünü seç.">❓</span>
@@ -328,7 +329,7 @@
 <div id="element-ozellik-perde" class="modal-perde" onclick="ozellikKapat()"></div>
 <div id="element-ozellik-modal" class="modal-kutu">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <h2 style="color:var(--accent);font-size:15px;">Element Özellikleri</h2>
+        <h2 id="ozellikBaslik" style="color:var(--accent);font-size:15px;">Element Özellikleri</h2>
         <button type="button" onclick="ozellikKapat()" title="Kapat" style="background:transparent;color:var(--text-secondary);padding:2px 8px;font-size:16px;">✕</button>
     </div>
     <div id="ozAlanGenelMetin" class="ozel-alan gorunur">
@@ -382,6 +383,9 @@
         <label>Yazı/İkon Boyutu (px)</label>
         <input type="number" id="ozButonFontBoyutu" value="13" min="8" max="60">
 
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozButonKoseYaricapi" value="6" min="0" max="200">
+
         <label style="display:flex;align-items:center;gap:6px;">
             <input type="checkbox" id="ozButonSeffaf" style="width:auto;margin:0;" onchange="uygula()"> Arka Planı Gizle (Şeffaf)
         </label>
@@ -411,6 +415,13 @@
         </div>
         <label>Bağlı Tag (opsiyonel — seçilirse çalışırken canlı değeri gösterir, yazdığın metin yerine)</label>
         <select id="ozEtiketTag"><option value="">— bağlama, sabit metin göster —</option></select>
+        <label>Son Ek / Birim (canlı değerin yanına eklenir)</label>
+        <div style="display:flex;gap:6px;">
+            <input type="text" id="ozEtiketSonEk" placeholder="örn.  °C" style="flex:1;">
+            <select id="ozEtiketSonEkSimge" onchange="birimSec(this,'ozEtiketSonEk')" style="width:88px;flex-shrink:0;"></select>
+        </div>
+        <label>Köşe Yuvarlatma (px) — arka plan görünürken anlamlı</label>
+        <input type="number" id="ozEtiketKoseYaricapi" value="0" min="0" max="200">
     </div>
 
     <div id="ozAlanCizgi" class="ozel-alan">
@@ -547,6 +558,8 @@
         <input type="color" id="ozTextboxRenkArkaplan" value="#17222e" style="height:38px;">
         <label>Kenarlık Rengi</label>
         <input type="color" id="ozTextboxRenkKenarlik" value="#2a3b4c" style="height:38px;">
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozTextboxKoseYaricapi" value="6" min="0" max="200">
     </div>
 
     <div id="ozAlanInputbox" class="ozel-alan">
@@ -559,12 +572,19 @@
         </select>
         <label>Placeholder</label>
         <input type="text" id="ozInputboxPlaceholder" placeholder="örn. Sıcaklık gir">
+        <label>Birim (kutunun sağında gösterilir)</label>
+        <div style="display:flex;gap:6px;">
+            <input type="text" id="ozInputboxBirim" placeholder="örn. °C" style="flex:1;">
+            <select id="ozInputboxBirimSimge" onchange="birimSec(this,'ozInputboxBirim')" style="width:88px;flex-shrink:0;"></select>
+        </div>
         <label>Font Boyutu</label>
         <input type="number" id="ozInputboxFontBoyutu" value="16" min="8">
         <label>Arka Plan</label>
         <input type="color" id="ozInputboxRenkArkaplan" value="#17222e" style="height:38px;">
         <label>Kenarlık Rengi</label>
         <input type="color" id="ozInputboxRenkKenarlik" value="#2e9ed9" style="height:38px;">
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozInputboxKoseYaricapi" value="6" min="0" max="200">
         <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Kullanıcı Enter'a basınca ya da kutudan çıkınca (blur) yazdığı değer tag'e gönderilir.</p>
     </div>
 
@@ -579,6 +599,8 @@
         <div id="ozComboboxSatirlari" style="margin-top:8px;"></div>
         <label>Font Boyutu</label>
         <input type="number" id="ozComboboxFontBoyutu" value="14" min="8">
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozComboboxKoseYaricapi" value="6" min="0" max="200">
     </div>
 
     <div id="ozAlanCheckbox" class="ozel-alan">
@@ -623,6 +645,8 @@
         <label style="display:flex;align-items:center;gap:6px;">
             <input type="checkbox" id="ozProgressbarDegerGoster" style="width:auto;margin:0;" checked> Değeri Göster
         </label>
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozProgressbarKoseYaricapi" value="6" min="0" max="200">
     </div>
 
     <div id="ozAlanGroupbox" class="ozel-alan">
@@ -659,6 +683,8 @@
         <input type="number" id="ozGrafikNoktaSayisi" value="30" min="2" max="200">
         <label>Arka Plan Rengi</label>
         <input type="color" id="ozGrafikArkaplanRengi" value="#17222e" style="height:38px;">
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozGrafikKoseYaricapi" value="6" min="0" max="200">
         <label>Seri Sayısı (aynı grafikte birden fazla tag'in çizgisi)</label>
         <div style="display:flex;gap:8px;align-items:center;">
             <input type="number" id="ozGrafikSeriSayisi" value="1" min="1" max="8" style="margin-bottom:0;">
@@ -721,6 +747,8 @@
         </div>
         <label>Font Boyutu</label>
         <input type="number" id="ozAlarmFont" value="13" min="8">
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozAlarmKoseYaricapi" value="8" min="0" max="200">
     </div>
 
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
@@ -1029,6 +1057,14 @@ let marquee = null;        // dikdörtgen-seçim: {x1,y1,x2,y2}
 let marqueeDiv = null;
 let marqueeHareketEtti = false;
 let pano = [];             // uygulama-içi kopyala/yapıştır panosu
+// Kullanıcı raporu: sayfalar arası geçişte (Kaydet'e basmadan) bazen
+// kazara geçilebiliyor ve o ana kadarki değişiklikler kayboluyordu.
+// gecmiseKaydet() HER anlamlı değişiklikten önce çağrıldığı için (30+
+// yerde) burada true yapmak neredeyse tüm mutasyonları yakalıyor;
+// kaydet() başarılı olunca false'a dönüyor. beforeunload da buna bakarak
+// sayfadan ayrılmadan (link, geçiş, sekme kapatma, F5 dahil) tarayıcının
+// kendi "kaydedilmemiş değişiklikler var" uyarısını gösteriyor.
+let kaydedilmemisDegisiklikVar = false;
 
 function durumYaz(msg) { document.getElementById('durum').textContent = msg; }
 
@@ -1067,6 +1103,8 @@ function birimSec(selectEl, inputId) {
 birimSelectDoldur(document.getElementById('ozTextboxSonEkSimge'));
 birimSelectDoldur(document.getElementById('ozProgressbarBirimSimge'));
 birimSelectDoldur(document.getElementById('ozGrafikBirimSimge'));
+birimSelectDoldur(document.getElementById('ozEtiketSonEkSimge'));
+birimSelectDoldur(document.getElementById('ozInputboxBirimSimge'));
 
 tagSecenekleriDoldur(document.getElementById('ozTag'), '— seçilmedi —');
 tagSecenekleriDoldur(document.getElementById('ozButonGizleTag'), '— gizleme yok —');
@@ -1120,6 +1158,7 @@ function gecmiseKaydet() {
     gecmis.push(anlikGoruntu());
     if (gecmis.length > GECMIS_MAKS) gecmis.shift();
     gelecek = [];
+    kaydedilmemisDegisiklikVar = true;
 }
 function durumGeriYukle(veri) {
     elementler = veri.elementler;
@@ -1136,12 +1175,14 @@ function geriAl() {
     if (!gecmis.length) return;
     gelecek.push(anlikGoruntu());
     durumGeriYukle(JSON.parse(gecmis.pop()));
+    kaydedilmemisDegisiklikVar = true;
     durumYaz('↩ Geri alındı');
 }
 function ileriAl() {
     if (!gelecek.length) return;
     gecmis.push(anlikGoruntu());
     durumGeriYukle(JSON.parse(gelecek.pop()));
+    kaydedilmemisDegisiklikVar = true;
     durumYaz('↪ Yinelendi');
 }
 
@@ -1163,7 +1204,7 @@ function butonEkle(x, y) {
         renk_acik: '#2ecc71', renk_kapali: '#e74c3c', renk_yazi: '#ffffff',
         resim_url_acik: '', resim_url_kapali: '',
         font_boyutu: 13, seffaf_arkaplan: false,
-        gizle_tag_id: null, gizle_deger: '',
+        gizle_tag_id: null, gizle_deger: '', kose_yaricapi: 6,
         _onizleme: 'kapali', custom_css: ''
     });
 }
@@ -1173,7 +1214,7 @@ function etiketEkle(x, y) {
         id: uid(), type: 'label',
         x: Math.max(0, x - 50), y: Math.max(0, y - 12), w: 140, h: 28,
         label: 'Metin', tag_id: null, renk_yazi: '#e8eef4', renk_arkaplan: 'transparent',
-        font_boyutu: 16, custom_css: ''
+        font_boyutu: 16, son_ek: '', kose_yaricapi: 0, custom_css: ''
     });
 }
 
@@ -1392,7 +1433,7 @@ function textboxEkle(x, y) {
         x: Math.max(0, x - 70), y: Math.max(0, y - 18), w: 140, h: 36,
         tag_id: null, on_ek: '', son_ek: '', ondalik: -1, font_boyutu: 16,
         renk_arkaplan: '#17222e', renk_yazi: '#e8eef4', renk_kenarlik: '#2a3b4c',
-        custom_css: ''
+        kose_yaricapi: 6, custom_css: ''
     });
 }
 
@@ -1402,7 +1443,7 @@ function inputboxEkle(x, y) {
         x: Math.max(0, x - 70), y: Math.max(0, y - 18), w: 140, h: 36,
         tag_id: null, giris_turu: 'sayi', placeholder: 'Değer gir', font_boyutu: 16,
         renk_arkaplan: '#17222e', renk_yazi: '#e8eef4', renk_kenarlik: '#2e9ed9',
-        custom_css: ''
+        birim: '', kose_yaricapi: 6, custom_css: ''
     });
 }
 
@@ -1410,7 +1451,7 @@ function comboboxEkle(x, y) {
     elementEkle({
         id: uid(), type: 'combobox',
         x: Math.max(0, x - 70), y: Math.max(0, y - 18), w: 140, h: 36,
-        tag_id: null, font_boyutu: 14,
+        tag_id: null, font_boyutu: 14, kose_yaricapi: 6,
         secenekler: [
             { deger: '0', etiket: 'Kapalı' },
             { deger: '1', etiket: 'Otomatik' },
@@ -1436,7 +1477,7 @@ function progressbarEkle(x, y) {
         x: Math.max(0, x - 90), y: Math.max(0, y - 12), w: 180, h: 24,
         tag_id: null, min_deger: 0, max_deger: 100, yon: 'yatay',
         renk_dolgu: '#2e9ed9', renk_arkaplan: '#17222e', birim: '',
-        deger_goster: true, custom_css: ''
+        deger_goster: true, kose_yaricapi: 6, custom_css: ''
     });
 }
 
@@ -1461,7 +1502,7 @@ function alarmEkle(x, y) {
         metin_acik: '⚠️ Alarm', metin_kapali: '✅ Normal',
         renk_acik: '#3a1f22', renk_kapali: '#1c3326',
         renk_yazi_acik: '#e74c3c', renk_yazi_kapali: '#2ecc71',
-        font_boyutu: 13, _onizleme: 'kapali', custom_css: ''
+        font_boyutu: 13, kose_yaricapi: 8, _onizleme: 'kapali', custom_css: ''
     });
 }
 
@@ -1470,7 +1511,7 @@ function grafikEkle(x, y) {
     elementEkle({
         id: uid(), type: 'grafik',
         x: Math.max(0, x - 110), y: Math.max(0, y - 70), w: 240, h: 160,
-        baslik: '', birim: '', nokta_sayisi: 30, arkaplan_rengi: '#17222e',
+        baslik: '', birim: '', nokta_sayisi: 30, arkaplan_rengi: '#17222e', kose_yaricapi: 6,
         seriler: [{ tag_id: null, etiket: '', renk: GRAFIK_RENK_PALETI[0] }],
         custom_css: ''
     });
@@ -1553,7 +1594,8 @@ function render() {
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.fontWeight = '500';
             div.style.color = el.renk_yazi;
-            div.textContent = el.tag_id ? (el.label ? el.label + ': ' : '') + '(canlı değer)' : el.label;
+            div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
+            div.textContent = el.tag_id ? (el.label ? el.label + ': ' : '') + '(canlı değer)' + (el.son_ek || '') : el.label;
         } else if (el.type === 'cizgi') {
             div.style.background = el.cizgi_renk || '#e8eef4';
         } else if (el.type === 'sekil') {
@@ -1636,7 +1678,7 @@ function render() {
         } else if (el.type === 'textbox') {
             div.style.background = el.renk_arkaplan || '#17222e';
             div.style.border = `1px solid ${el.renk_kenarlik || '#2a3b4c'}`;
-            div.style.borderRadius = '6px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.padding = '0 10px';
@@ -1645,17 +1687,17 @@ function render() {
         } else if (el.type === 'inputbox') {
             div.style.background = el.renk_arkaplan || '#17222e';
             div.style.border = `1px solid ${el.renk_kenarlik || '#2e9ed9'}`;
-            div.style.borderRadius = '6px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 16) + 'px';
             div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.padding = '0 10px';
             div.style.boxSizing = 'border-box';
-            div.textContent = el.placeholder || 'Değer gir';
+            div.textContent = (el.placeholder || 'Değer gir') + (el.birim ? '  ' + el.birim : '');
             div.style.opacity = '0.6';
         } else if (el.type === 'combobox') {
             div.style.background = 'var(--panel2)';
             div.style.border = '1px solid var(--border)';
-            div.style.borderRadius = '6px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.color = 'var(--text)';
             div.style.fontSize = (el.font_boyutu || 14) + 'px';
             div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.padding = '0 10px';
@@ -1679,7 +1721,7 @@ function render() {
         } else if (el.type === 'progressbar') {
             const dikeyMi = el.yon === 'dikey';
             div.style.background = el.renk_arkaplan || '#17222e';
-            div.style.borderRadius = '6px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.overflow = 'hidden';
             div.style.position = 'relative';
             div.textContent = '';
@@ -1710,7 +1752,7 @@ function render() {
             }
         } else if (el.type === 'grafik') {
             div.style.background = el.arkaplan_rengi || '#17222e';
-            div.style.borderRadius = '6px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.boxSizing = 'border-box';
             div.style.padding = '6px';
             div.style.overflow = 'hidden';
@@ -1764,7 +1806,7 @@ function render() {
             div.style.background = acikMi ? (el.renk_acik || '#3a1f22') : (el.renk_kapali || '#1c3326');
             div.style.color = acikMi ? (el.renk_yazi_acik || '#e74c3c') : (el.renk_yazi_kapali || '#2ecc71');
             div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
-            div.style.borderRadius = '8px'; div.style.fontWeight = '700';
+            div.style.borderRadius = (el.kose_yaricapi ?? 8) + 'px'; div.style.fontWeight = '700';
             div.style.fontSize = (el.font_boyutu || 13) + 'px';
             div.textContent = acikMi ? (el.metin_acik || '⚠️ Alarm') : (el.metin_kapali || '✅ Normal');
         } else {
@@ -1773,6 +1815,7 @@ function render() {
             div.style.background = el.seffaf_arkaplan ? 'transparent' : ((el._onizleme === 'acik') ? el.renk_acik : el.renk_kapali);
             div.style.color = el.renk_yazi;
             div.style.fontSize = (el.font_boyutu || 13) + 'px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.textContent = '';
             div.style.flexDirection = 'column';
             div.style.gap = '2px';
@@ -2319,6 +2362,22 @@ async function sayfayiYeniAdaKopyala() {
     } catch (e) { alert('İstek başarısız'); }
 }
 
+// Kullanıcı isteği: sayfanın adını değiştirebilme — bu özellik hiç yoktu.
+async function sayfaAdiniDegistir() {
+    const yeniAd = prompt('Sayfanın yeni adı ne olsun?', {{ sayfa_ad | tojson }});
+    if (!yeniAd || !yeniAd.trim() || yeniAd.trim() === {{ sayfa_ad | tojson }}) return;
+    try {
+        const res = await fetch("{{ url_for('sayfa.sayfa_adini_degistir', cihaz_id=cihaz.id, sayfa_ad=sayfa_ad) }}", {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ yeni_ad: yeniAd.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Adı değiştirilemedi'); return; }
+        kaydedilmemisDegisiklikVar = false;   // yönlendirmeden önce - beforeunload uyarısı gereksiz çıkmasın
+        window.location.href = window.location.pathname.replace(/\/sayfa\/[^/]+\/tasarla$/, '/sayfa/' + encodeURIComponent(data.yeni_ad) + '/tasarla') + window.location.search;
+    } catch (e) { alert('İstek başarısız'); }
+}
+
 // ---------- Hizalama (2+ element seçiliyken, kilitli elementler hariç) ----------
 function hizala(mod) {
     // Kullanıcı isteği: "Yatayda/Dikeyde Ortala" düğmeleri ortalamak değil,
@@ -2704,9 +2763,23 @@ function ozellikKapat() {
     document.getElementById('element-ozellik-modal').style.display = 'none';
 }
 
+// Kullanıcı isteği: özellikler panelinde her zaman sabit "Element
+// Özellikleri" yazıyordu — hangi elementi düzenlediğini panele bakınca
+// anlamak zordu, özellikle benzer birden fazla element varken. Artık
+// başlıkta seçili elementin TİPİ + (varsa) kendi adı/etiketi gösteriliyor.
+const TIP_ADLARI = {
+    button: 'Buton', label: 'Etiket', sekil: 'Dikdörtgen/Kare', cizgi: 'Çizgi', resim: 'Resim',
+    durum: 'Durum Göstergesi', switch: 'Switch (Sürgü)', textbox: 'Metin Kutusu', inputbox: 'Giriş Kutusu',
+    combobox: 'Açılır Liste', checkbox: 'Onay Kutusu', progressbar: 'İlerleme Çubuğu',
+    groupbox: 'Grup Kutusu/Çerçeve', grafik: 'Grafik', alarm: 'Alarm',
+};
 function guncellePanel() {
     const el = seciliId ? bul(seciliId) : null;
     if (!el) return;
+
+    const tipAdi = TIP_ADLARI[el.type] || el.type;
+    const elIsim = el.label || el.baslik || el.mesaj || el.metin || '';
+    document.getElementById('ozellikBaslik').textContent = tipAdi + (elIsim ? ' — ' + elIsim : '');
 
     document.getElementById('ozAlanGenelMetin').classList.toggle('gorunur', el.type === 'button' || el.type === 'label');
     document.getElementById('ozAlanYaziRengi').classList.toggle('gorunur', el.type === 'button' || el.type === 'label');
@@ -2742,6 +2815,8 @@ function guncellePanel() {
         document.getElementById('ozSeffaf').checked = seffaf;
         document.getElementById('ozRenkArkaplan').value = seffaf ? '#1e2d3d' : el.renk_arkaplan;
         document.getElementById('ozEtiketTag').value = el.tag_id || '';
+        document.getElementById('ozEtiketSonEk').value = el.son_ek || '';
+        document.getElementById('ozEtiketKoseYaricapi').value = el.kose_yaricapi ?? 0;
     } else if (el.type === 'cizgi') {
         document.getElementById('ozCizgiRenk').value = el.cizgi_renk || '#e8eef4';
     } else if (el.type === 'button') {
@@ -2757,6 +2832,7 @@ function guncellePanel() {
         document.getElementById('ozButonSeffaf').checked = !!el.seffaf_arkaplan;
         document.getElementById('ozButonGizleTag').value = el.gizle_tag_id || '';
         document.getElementById('ozButonGizleDeger').value = el.gizle_deger || '';
+        document.getElementById('ozButonKoseYaricapi').value = el.kose_yaricapi ?? 6;
         document.getElementById('ozOnizlemeDurum').value = el._onizleme || 'kapali';
         const hedefSecim = document.getElementById('ozHedefSayfa');
         hedefSecim.innerHTML = '';
@@ -2814,17 +2890,21 @@ function guncellePanel() {
         document.getElementById('ozTextboxFontBoyutu').value = el.font_boyutu || 16;
         document.getElementById('ozTextboxRenkArkaplan').value = el.renk_arkaplan || '#17222e';
         document.getElementById('ozTextboxRenkKenarlik').value = el.renk_kenarlik || '#2a3b4c';
+        document.getElementById('ozTextboxKoseYaricapi').value = el.kose_yaricapi ?? 6;
     } else if (el.type === 'inputbox') {
         document.getElementById('ozInputboxTag').value = el.tag_id || '';
         document.getElementById('ozInputboxTur').value = el.giris_turu || 'sayi';
         document.getElementById('ozInputboxPlaceholder').value = el.placeholder || '';
+        document.getElementById('ozInputboxBirim').value = el.birim || '';
         document.getElementById('ozInputboxFontBoyutu').value = el.font_boyutu || 16;
         document.getElementById('ozInputboxRenkArkaplan').value = el.renk_arkaplan || '#17222e';
         document.getElementById('ozInputboxRenkKenarlik').value = el.renk_kenarlik || '#2e9ed9';
+        document.getElementById('ozInputboxKoseYaricapi').value = el.kose_yaricapi ?? 6;
     } else if (el.type === 'combobox') {
         document.getElementById('ozComboboxTag').value = el.tag_id || '';
         document.getElementById('ozComboboxSayisi').value = (el.secenekler || []).length || 3;
         document.getElementById('ozComboboxFontBoyutu').value = el.font_boyutu || 14;
+        document.getElementById('ozComboboxKoseYaricapi').value = el.kose_yaricapi ?? 6;
         comboboxSatirlariCiz();
     } else if (el.type === 'checkbox') {
         document.getElementById('ozCheckboxTag').value = el.tag_id || '';
@@ -2842,6 +2922,7 @@ function guncellePanel() {
         document.getElementById('ozProgressbarRenkArkaplan').value = el.renk_arkaplan || '#17222e';
         document.getElementById('ozProgressbarBirim').value = el.birim || '';
         document.getElementById('ozProgressbarDegerGoster').checked = el.deger_goster !== false;
+        document.getElementById('ozProgressbarKoseYaricapi').value = el.kose_yaricapi ?? 6;
     } else if (el.type === 'groupbox') {
         document.getElementById('ozGroupboxBaslik').value = el.baslik || '';
         document.getElementById('ozGroupboxRenkYazi').value = el.renk_yazi || '#e8eef4';
@@ -2863,6 +2944,7 @@ function guncellePanel() {
         document.getElementById('ozGrafikBirim').value = el.birim || '';
         document.getElementById('ozGrafikNoktaSayisi').value = el.nokta_sayisi || 30;
         document.getElementById('ozGrafikArkaplanRengi').value = el.arkaplan_rengi || '#17222e';
+        document.getElementById('ozGrafikKoseYaricapi').value = el.kose_yaricapi ?? 6;
         document.getElementById('ozGrafikSeriSayisi').value = el.seriler.length;
         grafikSeriSatirlariCiz();
     } else if (el.type === 'alarm') {
@@ -2879,6 +2961,7 @@ function guncellePanel() {
         document.getElementById('ozAlarmRenkYaziAcik').value = el.renk_yazi_acik || '#e74c3c';
         document.getElementById('ozAlarmRenkYaziKapali').value = el.renk_yazi_kapali || '#2ecc71';
         document.getElementById('ozAlarmFont').value = el.font_boyutu || 13;
+        document.getElementById('ozAlarmKoseYaricapi').value = el.kose_yaricapi ?? 8;
         alarmTipGuncelle();
     }
 
@@ -3114,6 +3197,8 @@ function uygula() {
         el.font_boyutu = parseInt(document.getElementById('ozFontBoyutu').value) || 16;
         el.renk_arkaplan = document.getElementById('ozSeffaf').checked ? 'transparent' : document.getElementById('ozRenkArkaplan').value;
         el.tag_id = document.getElementById('ozEtiketTag').value ? parseInt(document.getElementById('ozEtiketTag').value) : null;
+        el.son_ek = document.getElementById('ozEtiketSonEk').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozEtiketKoseYaricapi').value) || 0;
     } else if (el.type === 'cizgi') {
         el.cizgi_renk = document.getElementById('ozCizgiRenk').value;
     } else if (el.type === 'button') {
@@ -3134,6 +3219,7 @@ function uygula() {
         el.seffaf_arkaplan = document.getElementById('ozButonSeffaf').checked;
         el.gizle_tag_id = document.getElementById('ozButonGizleTag').value ? parseInt(document.getElementById('ozButonGizleTag').value) : null;
         el.gizle_deger = document.getElementById('ozButonGizleDeger').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozButonKoseYaricapi').value) || 0;
     } else if (el.type === 'durum') {
         el.tag_id = document.getElementById('ozDurumTag').value ? parseInt(document.getElementById('ozDurumTag').value) : null;
         el.durum_modu = document.getElementById('ozDurumModu').value;
@@ -3160,16 +3246,20 @@ function uygula() {
         el.font_boyutu = parseInt(document.getElementById('ozTextboxFontBoyutu').value) || 16;
         el.renk_arkaplan = document.getElementById('ozTextboxRenkArkaplan').value;
         el.renk_kenarlik = document.getElementById('ozTextboxRenkKenarlik').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozTextboxKoseYaricapi').value) || 0;
     } else if (el.type === 'inputbox') {
         el.tag_id = document.getElementById('ozInputboxTag').value ? parseInt(document.getElementById('ozInputboxTag').value) : null;
         el.giris_turu = document.getElementById('ozInputboxTur').value;
         el.placeholder = document.getElementById('ozInputboxPlaceholder').value;
+        el.birim = document.getElementById('ozInputboxBirim').value;
         el.font_boyutu = parseInt(document.getElementById('ozInputboxFontBoyutu').value) || 16;
         el.renk_arkaplan = document.getElementById('ozInputboxRenkArkaplan').value;
         el.renk_kenarlik = document.getElementById('ozInputboxRenkKenarlik').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozInputboxKoseYaricapi').value) || 0;
     } else if (el.type === 'combobox') {
         el.tag_id = document.getElementById('ozComboboxTag').value ? parseInt(document.getElementById('ozComboboxTag').value) : null;
         el.font_boyutu = parseInt(document.getElementById('ozComboboxFontBoyutu').value) || 14;
+        el.kose_yaricapi = parseInt(document.getElementById('ozComboboxKoseYaricapi').value) || 0;
         _comboboxSatirlariniOku(el);
     } else if (el.type === 'checkbox') {
         el.tag_id = document.getElementById('ozCheckboxTag').value ? parseInt(document.getElementById('ozCheckboxTag').value) : null;
@@ -3187,6 +3277,7 @@ function uygula() {
         el.renk_arkaplan = document.getElementById('ozProgressbarRenkArkaplan').value;
         el.birim = document.getElementById('ozProgressbarBirim').value;
         el.deger_goster = document.getElementById('ozProgressbarDegerGoster').checked;
+        el.kose_yaricapi = parseInt(document.getElementById('ozProgressbarKoseYaricapi').value) || 0;
     } else if (el.type === 'groupbox') {
         el.baslik = document.getElementById('ozGroupboxBaslik').value;
         el.renk_yazi = document.getElementById('ozGroupboxRenkYazi').value;
@@ -3201,6 +3292,7 @@ function uygula() {
         el.birim = document.getElementById('ozGrafikBirim').value;
         el.nokta_sayisi = parseInt(document.getElementById('ozGrafikNoktaSayisi').value) || 30;
         el.arkaplan_rengi = document.getElementById('ozGrafikArkaplanRengi').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozGrafikKoseYaricapi').value) || 0;
     } else if (el.type === 'alarm') {
         el.tag_id = document.getElementById('ozAlarmTag').value ? parseInt(document.getElementById('ozAlarmTag').value) : null;
         el.tip = document.getElementById('ozAlarmTip').value;
@@ -3215,6 +3307,7 @@ function uygula() {
         el.renk_yazi_acik = document.getElementById('ozAlarmRenkYaziAcik').value;
         el.renk_yazi_kapali = document.getElementById('ozAlarmRenkYaziKapali').value;
         el.font_boyutu = parseInt(document.getElementById('ozAlarmFont').value) || 13;
+        el.kose_yaricapi = parseInt(document.getElementById('ozAlarmKoseYaricapi').value) || 0;
     } else if (el.type === 'sekil') {
         el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;
         el.sekil_kenarlik = document.getElementById('ozSekilKenarlik').value;
@@ -3298,10 +3391,22 @@ async function kaydet() {
         });
         const data = await res.json();
         durum.textContent = res.ok ? '✅ Kaydedildi' : ('❌ ' + (data.error || 'Hata'));
+        if (res.ok) kaydedilmemisDegisiklikVar = false;
     } catch (e) {
         durum.textContent = '❌ İstek başarısız';
     }
 }
+
+// Kullanıcı raporu: sayfalar arası geçişte kaydetmeyi unutup değişiklikleri
+// kaybediyordu — tarayıcının kendi "ayrılmak istediğine emin misin"
+// uyarısını (mesaj metni tarayıcı tarafından belirlenir, özelleştirilemez)
+// kaydedilmemiş değişiklik varken tetikliyoruz. Sayfa geçişi (sayfaGecisYap),
+// üst menüye dönüş, sekme kapatma, F5 dahil HER gerçek navigasyonu kapsar.
+window.addEventListener('beforeunload', (e) => {
+    if (!kaydedilmemisDegisiklikVar) return;
+    e.preventDefault();
+    e.returnValue = '';
+});
 
 renkAlanlariniZenginlestir();
 render();

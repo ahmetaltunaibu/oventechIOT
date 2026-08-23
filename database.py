@@ -1115,6 +1115,56 @@ def sayfa_varyant_sil(cihaz_id: int, ad: str, hedef: str):
         conn.close()
 
 
+def sayfa_adini_degistir(cihaz_id: int, eski_ad: str, yeni_ad: str):
+    """Sayfanın adını değiştirir — HEM masaüstü HEM mobil düzenini birlikte
+    (ikisi aynı mantıksal sayfayı temsil ediyor, bkz. sayfa_sil). Ayrıca
+    aynı cihazın DİĞER sayfalarındaki 'Sayfaya Git' butonlarının
+    hedef_sayfa referanslarını da günceller — yoksa isim değişince o
+    butonlar kırık/hedefsiz kalırdı."""
+    eski_ad = eski_ad.strip()
+    yeni_ad = yeni_ad.strip()
+    if not yeni_ad:
+        return False, 'Yeni sayfa adı boş olamaz.'
+    if yeni_ad == eski_ad:
+        return False, 'Yeni ad, mevcut adla aynı.'
+    conn = get_db()
+    try:
+        var_mi = conn.execute(
+            'SELECT 1 FROM sayfalar WHERE cihaz_id = ? AND ad = ?', (cihaz_id, yeni_ad)
+        ).fetchone()
+        if var_mi:
+            return False, f'"{yeni_ad}" adında bir sayfa zaten var.'
+        etkilenen = conn.execute(
+            'UPDATE sayfalar SET ad = ? WHERE cihaz_id = ? AND ad = ?', (yeni_ad, cihaz_id, eski_ad)
+        ).rowcount
+        if not etkilenen:
+            conn.rollback()
+            return False, 'Sayfa bulunamadı.'
+        # Diğer sayfalardaki "Sayfaya Git" butonlarının hedefini güncelle.
+        satirlar = conn.execute(
+            'SELECT id, elementler FROM sayfalar WHERE cihaz_id = ?', (cihaz_id,)
+        ).fetchall()
+        for satir in satirlar:
+            try:
+                elementler = json.loads(satir['elementler'] or '[]')
+            except (TypeError, ValueError):
+                continue
+            degisti = False
+            for el in elementler:
+                if el.get('type') == 'button' and el.get('hedef_sayfa') == eski_ad:
+                    el['hedef_sayfa'] = yeni_ad
+                    degisti = True
+            if degisti:
+                conn.execute(
+                    'UPDATE sayfalar SET elementler = ? WHERE id = ?',
+                    (json.dumps(elementler, ensure_ascii=False), satir['id'])
+                )
+        conn.commit()
+        return True, None
+    finally:
+        conn.close()
+
+
 def cihaz_sayfalari(cihaz_id: int):
     """Sayfa adlarını, hangi düzenlerin (masaustu/mobil) mevcut olduğunu ve
     en son güncelleme zamanını gruplanmış şekilde döner."""
