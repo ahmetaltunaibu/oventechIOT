@@ -99,8 +99,9 @@
     .el-durum { position: absolute; box-sizing: border-box; pointer-events: none; overflow: hidden; }
     .el-durum img { width: 100%; height: 100%; object-fit: contain; }
 
-    /* Yazma isteği sunucu tarafında reddedilirse gösterilen kısa süreli
-       hata bildirimi (bkz. hataGoster() / yaz()). */
+    /* Yazma isteği reddedilirse/zaman aşımına uğrarsa (hata) ya da PLC'den
+       onay beklenirken (bekleme) gösterilen kısa süreli bildirim — bkz.
+       hataGoster()/beklemeGoster() / yaz(). */
     #hata-toast {
         position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
         background: #3a1f22; border: 1px solid var(--red, #e74c3c); color: #ff8a8a;
@@ -109,6 +110,14 @@
         transition: opacity 0.2s ease, transform 0.2s ease; max-width: 90vw; text-align: center;
     }
     #hata-toast.gorunur { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #hata-toast.bekleme { background: #2d2410; border-color: #f39c12; color: #ffd27a; }
+
+    /* Kullanıcı isteği: buton/switch/onay kutusuna basınca PLC'den onay
+       gelene kadar (poll ile doğrulanana ya da zaman aşımına uğrayana
+       kadar) ASLA anında yeni duruma geçmesin — nötr, "bekliyor" görünümü
+       (hafif nabız animasyonu) gösterilsin. Bkz. beklemedeYazmalar / yaz(). */
+    @keyframes beklemeNabiz { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+    .el-beklemede { animation: beklemeNabiz 1s ease-in-out infinite; filter: grayscale(60%); cursor: wait !important; }
 
     /* Sayfa giriş animasyonları — sadece ilk yüklemede bir kez oynar. */
     @keyframes girisFade { from { opacity: 0; } to { opacity: 1; } }
@@ -354,22 +363,26 @@ function tuvalCiz() {
         }
 
         if (el.type === 'switch') {
+            const switchBeklemede = el.tag_id && beklemedeYazmalar[el.tag_id];
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
-            const acikMi = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
-            div.style.background = acikMi ? el.renk_acik : el.renk_kapali;
+            const acikMi = !switchBeklemede && guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+            div.style.background = switchBeklemede ? '#5a6270' : (acikMi ? el.renk_acik : el.renk_kapali);
+            if (switchBeklemede) div.classList.add('el-beklemede');
             div.style.borderRadius = (el.h / 2) + 'px';
             div.style.position = 'relative'; div.style.cursor = 'pointer';
             div.textContent = '';
             const metin = document.createElement('span');
-            metin.textContent = acikMi ? (el.metin_acik || 'ON') : (el.metin_kapali || 'OFF');
+            // Beklemedeyken hangi tarafa yaslanacağını (ON mu OFF mu) henüz
+            // bilmiyoruz — nötr, ortalanmış "..." gösteriliyor.
+            metin.textContent = switchBeklemede ? '···' : (acikMi ? (el.metin_acik || 'ON') : (el.metin_kapali || 'OFF'));
             metin.style.cssText = `position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:${el.font_boyutu || 11}px;font-weight:700;color:#fff;pointer-events:none;`
-                + (acikMi ? 'left:8px;' : 'right:8px;');
+                + (switchBeklemede ? 'left:0;right:0;justify-content:center;' : (acikMi ? 'left:8px;' : 'right:8px;'));
             div.appendChild(metin);
             const daireBoyut = el.h - 6;
             const daire = document.createElement('div');
             daire.style.cssText = `position:absolute;top:3px;width:${daireBoyut}px;height:${daireBoyut}px;border-radius:50%;`
                 + `background:${el.daire_rengi || '#fff'};box-shadow:0 1px 3px rgba(0,0,0,0.4);transition:left 0.2s;pointer-events:none;`
-                + (acikMi ? `left:${el.w - daireBoyut - 3}px;` : 'left:3px;');
+                + (switchBeklemede ? `left:${(el.w - daireBoyut) / 2}px;` : (acikMi ? `left:${el.w - daireBoyut - 3}px;` : 'left:3px;'));
             div.appendChild(daire);
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
@@ -379,16 +392,20 @@ function tuvalCiz() {
         }
 
         if (el.type === 'checkbox') {
+            const checkboxBeklemede = el.tag_id && beklemedeYazmalar[el.tag_id];
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
-            const acikMi = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+            const acikMi = !checkboxBeklemede && guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
             div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'sol'); div.style.gap = '8px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 14) + 'px';
             div.style.cursor = 'pointer';
             div.textContent = '';
+            if (checkboxBeklemede) div.classList.add('el-beklemede');
             const kutu = document.createElement('div');
             kutu.style.cssText = `width:18px;height:18px;flex-shrink:0;border-radius:4px;display:flex;align-items:center;justify-content:center;`
-                + `border:2px solid ${acikMi ? (el.renk_acik || '#2ecc71') : '#8aa0b3'};background:${acikMi ? (el.renk_acik || '#2ecc71') : 'transparent'};`;
+                + (checkboxBeklemede
+                    ? `border:2px solid #8aa0b3;background:#5a6270;`
+                    : `border:2px solid ${acikMi ? (el.renk_acik || '#2ecc71') : '#8aa0b3'};background:${acikMi ? (el.renk_acik || '#2ecc71') : 'transparent'};`);
             if (acikMi) kutu.innerHTML = '<span style="color:#fff;font-size:12px;line-height:1;">✓</span>';
             div.appendChild(kutu);
             const yazi = document.createElement('span');
@@ -668,7 +685,13 @@ function tuvalCiz() {
         div.style.alignItems = metinHizalaCSS(el, 'orta');
         div.style.fontSize = (el.font_boyutu || 13) + 'px';
         div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
-        renkGuncelle(div, el);
+        const butonBeklemede = el.tag_id && beklemedeYazmalar[el.tag_id];
+        if (butonBeklemede) {
+            div.classList.add('el-beklemede');
+            div.style.background = '#5a6270'; // nötr gri — ne açık ne kapalı renk
+        } else {
+            renkGuncelle(div, el);
+        }
         const guncelDegerBtn = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
         const acikMi = guncelDegerBtn !== null && String(guncelDegerBtn) === String(el.acik_deger);
         const butonResimUrl = acikMi ? el.resim_url_acik : el.resim_url_kapali;
@@ -921,6 +944,9 @@ function renkGuncelle(div, el) {
 
 function tikla(el) {
     if (!el.tag_id) return;
+    // Zaten beklemede olan bir yazmanın üstüne yeni bir tıklama binmesin —
+    // ard arda tıklayınca farklı komutlar birbirine karışabilirdi.
+    if (beklemedeYazmalar[el.tag_id]) return;
     if (el.mod === 'set_on') { yaz(el, el.acik_deger); return; }
     if (el.mod === 'set_off') { yaz(el, el.kapali_deger); return; }
     const guncelDeger = degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
@@ -928,29 +954,17 @@ function tikla(el) {
     yaz(el, acik ? el.kapali_deger : el.acik_deger);
 }
 
-// Kullanıcı raporu: butona/switch'e basınca önce yeşilleniyor, hemen
-// sonra sönüyor, birkaç saniye sonra tekrar doğru haline dönüyordu —
-// "sanki birden fazla komut gönderiyormuşuz gibi". Gerçek sebep: yaz()
-// yerel degerler'i İYİMSER (optimistic) güncelliyordu, ama 3sn'de bir
-// çalışan degerleriYenile() sunucudan gelen (henüz cihaz tarafından
-// UYGULANMAMIŞ, eski) değerle bunun üzerine tamamen YAZIYORDU — bizim az
-// önceki tıklamamızı "geri alıyormuş" gibi görünüyordu, cihaz gerçekten
-// uygulayınca da bir SONRAKİ pollde tekrar doğru hale dönüyordu. Şimdi:
-// bir tag'e yazdıktan sonra kısa bir "koruma süresi" boyunca (sunucu bizim
-// yazdığımızı yansıtana ya da süre dolana kadar) o tag'in yerel değeri
-// poll'larda EZİLMİYOR.
-let sonYazma = {}; // tag_id -> { deger, zaman }
-// KRİTİK (kullanıcı raporu, devam eden flicker): koruma süresi 4000ms
-// iken ESP32 sunucuyla SADECE 5000ms'de bir (SENKRON_ARALIK_MS, firmware)
-// senkron oluyor — yani koruma süresi ESP32'nin gerçek yazmayı bildirmesinden
-// ÖNCE doluyordu. Süre dolunca istemci ham (henüz güncellenmemiş, eski)
-// sunucu değerine geri dönüyor, ESP32 bir sonraki döngüsünde gerçek değeri
-// bildirince tekrar doğrusuna geçiyordu — "önce ON oluyor, sonra OFF'a
-// dönüp bekliyor, sonra tekrar ON oluyor" hissi buradan geliyordu. Koruma
-// süresi artık ESP32'nin senkron aralığını (+ağ gecikmesi payı) rahatça
-// aşıyor, süre dolmadan sunucu neredeyse her zaman gerçek değeri bildirmiş
-// oluyor.
-const YAZMA_KORUMA_MS = 8000;
+// KRİTİK (kullanıcı isteği — kesin karar): butona/switch'e/onay kutusuna
+// basınca ARTIK ASLA anında iyimser (optimistic) durum değişikliği
+// gösterilmiyor. PLC'ye gerçekten yazılıp yazılmadığını, gerçekten o
+// değeri alıp almadığını SADECE ESP32'nin PLC'den GERİ OKUYUP sunucuya
+// bildirmesi kanıtlar — bu yüzden görünen değer HER ZAMAN sunucudan
+// (degerleriYenile poll'u) gelen, PLC'den gerçekten okunmuş değerdir,
+// başka hiçbir şey değil. Basılan element bu onay gelene kadar (ya da
+// zaman aşımına uğrayana kadar) "beklemede" (nötr, nabız animasyonlu)
+// görünür — ne eski ne yeni değeri gösterir, sadece "işleniyor" der.
+let beklemedeYazmalar = {}; // tag_id -> { hedefDeger, zaman }
+const YAZMA_ZAMAN_ASIMI_MS = 12000; // ESP32'nin senkron araligi (~5sn) + bolca pay
 
 // Kullanıcı raporu: resim elementi 3sn'lik poll döngüsünde "göz kırpar
 // gibi" görünür/görünmez oluyordu. Sebep: tuvalCiz() her pollde TÜM tuvali
@@ -972,43 +986,66 @@ function resimNodeAl(anahtar, url) {
     return img;
 }
 
-// Birkaç saniyeliğine görünüp kendiliğinden kaybolan kısa hata bildirimi.
+// Birkaç saniyeliğine görünüp kendiliğinden kaybolan bildirim.
+// tur: 'hata' (kırmızı, kendi kendine kapanır) | 'bekleme' (sarı, onay/hata
+// gelene kadar EL İLE kapatılana kadar açık kalır — kaldirBeklemeToast() ile).
 let _hataToastZamanlayici = null;
 function hataGoster(mesaj) {
     const toast = document.getElementById('hata-toast');
     if (!toast) return;
+    toast.classList.remove('bekleme');
     toast.textContent = mesaj;
     toast.classList.add('gorunur');
     clearTimeout(_hataToastZamanlayici);
     _hataToastZamanlayici = setTimeout(() => toast.classList.remove('gorunur'), 3500);
 }
+function beklemeGoster(mesaj) {
+    const toast = document.getElementById('hata-toast');
+    if (!toast) return;
+    clearTimeout(_hataToastZamanlayici); // bekleme mesajı kendi kendine kapanmasın
+    toast.textContent = mesaj;
+    toast.classList.add('gorunur', 'bekleme');
+}
+function kaldirBeklemeToast() {
+    const toast = document.getElementById('hata-toast');
+    if (toast && toast.classList.contains('bekleme')) toast.classList.remove('gorunur', 'bekleme');
+}
 
 async function yaz(el, deger) {
     if (!el.tag_id) return;
+    // ASLA anında (iyimser) değer değiştirme — sadece "beklemede" işaretle
+    // ve öyle görün. Gerçek değer SADECE degerleriYenile() poll'unun PLC'den
+    // okunmuş bir onay getirmesiyle değişir (aşağıda).
+    beklemedeYazmalar[el.tag_id] = { hedefDeger: String(deger), zaman: Date.now() };
+    beklemeGoster('⏳ Lütfen bekleyiniz, PLC\'den yanıt bekleniyor...');
+    tuvalCiz();
     try {
         const res = await fetch(`/api/cihaz/${cihazId}/tag/${el.tag_id}/yaz`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ deger: deger })
         });
-        // KRİTİK (kullanıcı raporu): sunucu yazmayı reddedebilir (örn. tag
-        // aslında sadece-okumaya açık, erisim='read') — 403 döner. Önceden
-        // bu cevap hiç kontrol edilmiyordu, arayüz her durumda "başarılı"
-        // gibi davranıp değeri anında değiştiriyordu; birkaç saniye sonra
-        // gerçek (değişmemiş) değer gelene kadar YANLIŞ durum gösteriyordu.
-        // Artık başarısız cevapta optimistik değer HİÇ uygulanmıyor, PLC'ye
-        // gerçekten hiç gitmediği için zaten gösterilecek bir şey yok.
+        // Sunucu yazmayı reddedebilir (örn. tag aslında sadece-okumaya
+        // açık, erisim='read') — 403 döner. Bu durumda PLC'ye hiç
+        // gitmeyecek, "beklemede" durumunu hemen bırakıp hata gösteriyoruz.
         if (!res.ok) {
+            delete beklemedeYazmalar[el.tag_id];
             let mesaj = 'Yazma başarısız';
             try { const data = await res.json(); if (data.error) mesaj = data.error; } catch (e) { /* yanıt JSON değilse yoksay */ }
             hataGoster('❌ ' + mesaj);
+            tuvalCiz();
             return;
         }
-        if (!degerler[el.tag_id]) degerler[el.tag_id] = {};
-        degerler[el.tag_id].deger = deger;
-        sonYazma[el.tag_id] = { deger: String(deger), zaman: Date.now() };
-        tuvalCiz();
-    } catch (e) { /* ağ hatası — sessiz geç, bir sonraki poll düzeltir */ }
+        // İstek sunucuya ulaştı (yazilacak_deger kaydedildi) — ama PLC'ye
+        // GERÇEKTEN yazılıp yazılmadığı henüz bilinmiyor. "Beklemede"
+        // durumu, degerleriYenile() poll'u PLC'den okunmuş onayı (ya da
+        // zaman aşımını) getirene kadar DEVAM EDİYOR, burada bitmiyor.
+    } catch (e) {
+        // Ağ hatası — isteğin sunucuya ulaşıp ulaşmadığı belirsiz, bu
+        // yüzden "beklemede" durumunu hemen bırakmıyoruz; zaman aşımı
+        // mekanizması (degerleriYenile) er ya da geç temizleyip hata
+        // gösterecek, gerçekten gitmişse zaten normal onay gelir.
+    }
 }
 
 async function degerleriYenile() {
@@ -1017,17 +1054,23 @@ async function degerleriYenile() {
         if (!res.ok) return;
         const yeniDegerler = await res.json();
         const simdi = Date.now();
-        Object.keys(sonYazma).forEach(tagId => {
-            const kayit = sonYazma[tagId];
-            if (simdi - kayit.zaman > YAZMA_KORUMA_MS) { delete sonYazma[tagId]; return; }
-            if (yeniDegerler[tagId] && String(yeniDegerler[tagId].deger) === kayit.deger) {
-                delete sonYazma[tagId]; // sunucu artık bizim yazdığımızı yansıtıyor, koruma bitti
-                return;
+        // "Beklemede" olan her yazma isteği için: sunucu (ESP32'nin PLC'den
+        // gerçekten okuyup bildirdiği) değer artık hedeflenen değere
+        // eşitse ONAYLANDI — beklemeyi bitir, normal (gerçek) görünüme
+        // dön. Süre dolduysa (PLC'den hiç yanıt gelmedi) ZAMAN AŞIMI —
+        // beklemeyi bitir, hata göster; gösterilen değer değişmeden kalır
+        // (zaten hiç değiştirilmemişti).
+        Object.keys(beklemedeYazmalar).forEach(tagId => {
+            const bekleme = beklemedeYazmalar[tagId];
+            const geldi = yeniDegerler[tagId] && String(yeniDegerler[tagId].deger) === bekleme.hedefDeger;
+            if (geldi) {
+                delete beklemedeYazmalar[tagId];
+            } else if (simdi - bekleme.zaman > YAZMA_ZAMAN_ASIMI_MS) {
+                delete beklemedeYazmalar[tagId];
+                hataGoster('❌ Zaman aşımı — PLC\'den yanıt alınamadı');
             }
-            // sunucu henüz yansıtmadı — bizim yazdığımız (optimistic) değeri koru
-            if (yeniDegerler[tagId]) yeniDegerler[tagId].deger = kayit.deger;
-            else yeniDegerler[tagId] = { deger: kayit.deger };
         });
+        if (!Object.keys(beklemedeYazmalar).length) kaldirBeklemeToast();
         degerler = yeniDegerler;
         grafikGecmisineEkle();
         // Kullanıcı bir giriş kutusuna (inputbox/combobox) yazıyor/seçim
