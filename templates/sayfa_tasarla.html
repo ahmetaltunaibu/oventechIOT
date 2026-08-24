@@ -771,6 +771,34 @@
         <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Tag'e bağlı değildir — cihazın çalıştığı tarayıcının kendi saatini gösterir, saniyede bir otomatik güncellenir.</p>
     </div>
 
+    <!-- Kullanıcı isteği: "cihazdan en son ne zaman veri alındı" gösterilsin
+         — bu bir PLC/tag verisi değil, platform bağlantı bilgisi (zaten
+         var: cihazlar.son_gorulme, ESP32 her istekte günceller), bu yüzden
+         tag değil, saat/tarih gibi kendi kendine güncellenen bir element. -->
+    <div id="ozAlanSonVeri" class="ozel-alan">
+        <label>Ön Ek (opsiyonel)</label>
+        <input type="text" id="ozSonVeriOnEk" placeholder="örn. Son Veri: ">
+        <label>Bağlantı Sağlıklı Sayılma Süresi (sn)</label>
+        <input type="number" id="ozSonVeriEsik" value="15" min="1">
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="ozSonVeriSaglikRenk" style="width:auto;margin:0;" checked> Bağlantı Durumuna Göre Renklendir (yeşil/kırmızı)
+        </label>
+        <label>Font Boyutu (px)</label>
+        <input type="number" id="ozSonVeriFontBoyutu" value="14" min="8" max="120">
+        <label>Yazı Rengi</label>
+        <input type="color" id="ozSonVeriRenkYazi" value="#e8eef4" style="height:38px;">
+        <label>Arka Plan</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" id="ozSonVeriRenkArkaplan" value="#1e2d3d" style="height:38px;flex:1;">
+            <label style="display:flex;align-items:center;gap:4px;margin:0;white-space:nowrap;">
+                <input type="checkbox" id="ozSonVeriSeffaf" style="width:auto;margin:0;"> Şeffaf
+            </label>
+        </div>
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozSonVeriKoseYaricapi" value="6" min="0" max="200">
+        <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Cihazın ESP32'sinden sunucuya en son ne zaman veri geldiğini gösterir ("X saniye önce" gibi) — bağlantı sağlıklı renk aktifse, eşik süresi aşılınca kırmızıya döner (cihaz muhtemelen offline).</p>
+    </div>
+
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
     <textarea id="ozCustomCss" rows="3" placeholder="örn. box-shadow: 0 4px 12px #000; transform: rotate(2deg);" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:monospace;padding:8px;margin-bottom:10px;box-sizing:border-box;"></textarea>
 
@@ -1563,6 +1591,18 @@ function saatTarihEkle(x, y) {
     });
 }
 
+// Son Veri: PLC/tag verisi değil, cihazın ESP32'sinden sunucuya en son ne
+// zaman veri geldiğini ("X saniye önce") gösteren bağlantı-durumu elementi.
+function sonVeriEkle(x, y) {
+    elementEkle({
+        id: uid(), type: 'sonveri',
+        x: Math.max(0, x - 90), y: Math.max(0, y - 16), w: 180, h: 32,
+        on_ek: '', saglik_esik_sn: 15, saglik_renk_goster: true,
+        renk_yazi: '#e8eef4', renk_arkaplan: '#1e2d3d',
+        font_boyutu: 14, kose_yaricapi: 6, custom_css: ''
+    });
+}
+
 const GRAFIK_RENK_PALETI = ['#2e9ed9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e84393', '#95a5a6'];
 function grafikEkle(x, y) {
     elementEkle({
@@ -1895,6 +1935,21 @@ function render() {
             div.style.borderRadius = (el.kose_yaricapi ?? 0) + 'px';
             div.style.boxSizing = 'border-box';
             div.textContent = saatTarihMetni(el);
+        } else if (el.type === 'sonveri') {
+            // Tasarımda gerçek cihaz bağlantısı yok — örnek bir değerle
+            // (12 saniye önce) önizleme gösteriliyor.
+            const ornekSaniye = 12;
+            const saglikli = ornekSaniye <= (el.saglik_esik_sn ?? 15);
+            div.style.background = el.saglik_renk_goster !== false
+                ? (saglikli ? '#1c3326' : '#3a1f22')
+                : ((!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan);
+            div.style.color = el.saglik_renk_goster !== false ? (saglikli ? '#2ecc71' : '#e74c3c') : (el.renk_yazi || '#e8eef4');
+            div.style.fontSize = (el.font_boyutu || 14) + 'px';
+            div.style.fontWeight = '600';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
+            div.style.boxSizing = 'border-box';
+            div.textContent = (el.on_ek || '') + ornekSaniye + ' saniye önce';
         } else {
             // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
             // — "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
@@ -2931,6 +2986,7 @@ function tuvalBaglamMenusu(e) {
         { etiket: '📈 Grafik Ekle', aksiyon: () => grafikEkle(tuvalX, tuvalY) },
         { etiket: '🚨 Alarm Oluştur', aksiyon: () => alarmEkle(tuvalX, tuvalY) },
         { etiket: '🕐 Saat/Tarih Ekle', aksiyon: () => saatTarihEkle(tuvalX, tuvalY) },
+        { etiket: '📡 Son Veri (Bağlantı) Ekle', aksiyon: () => sonVeriEkle(tuvalX, tuvalY) },
         { ayrac: true },
     ];
     if (pano.length) maddeler.push({ etiket: '📋 Yapıştır (Ctrl+V)', aksiyon: yapistir });
@@ -3000,6 +3056,7 @@ const TIP_ADLARI = {
     durum: 'Durum Göstergesi', switch: 'Switch (Sürgü)', textbox: 'Metin Kutusu', inputbox: 'Giriş Kutusu',
     combobox: 'Açılır Liste', checkbox: 'Onay Kutusu', progressbar: 'İlerleme Çubuğu',
     groupbox: 'Grup Kutusu/Çerçeve', grafik: 'Grafik', alarm: 'Alarm', saattarih: 'Saat/Tarih',
+    sonveri: 'Son Veri (Bağlantı)',
 };
 // Metin hizalamanın tipe göre varsayılanı — mevcut (bu özellik eklenmeden
 // önceki) görünümü bozmasın diye her tipin ESKİ sabit davranışıyla aynı.
@@ -3033,6 +3090,7 @@ function guncellePanel() {
     document.getElementById('ozAlanGrafik').classList.toggle('gorunur', el.type === 'grafik');
     document.getElementById('ozAlanAlarm').classList.toggle('gorunur', el.type === 'alarm');
     document.getElementById('ozAlanSaatTarih').classList.toggle('gorunur', el.type === 'saattarih');
+    document.getElementById('ozAlanSonVeri').classList.toggle('gorunur', el.type === 'sonveri');
 
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
@@ -3205,6 +3263,16 @@ function guncellePanel() {
         document.getElementById('ozSaatTarihSeffaf').checked = seffaf;
         document.getElementById('ozSaatTarihRenkArkaplan').value = seffaf ? '#1e2d3d' : el.renk_arkaplan;
         document.getElementById('ozSaatTarihKoseYaricapi').value = el.kose_yaricapi ?? 0;
+    } else if (el.type === 'sonveri') {
+        document.getElementById('ozSonVeriOnEk').value = el.on_ek || '';
+        document.getElementById('ozSonVeriEsik').value = el.saglik_esik_sn ?? 15;
+        document.getElementById('ozSonVeriSaglikRenk').checked = el.saglik_renk_goster !== false;
+        document.getElementById('ozSonVeriFontBoyutu').value = el.font_boyutu || 14;
+        document.getElementById('ozSonVeriRenkYazi').value = el.renk_yazi || '#e8eef4';
+        const sonVeriSeffaf = !el.renk_arkaplan || el.renk_arkaplan === 'transparent';
+        document.getElementById('ozSonVeriSeffaf').checked = sonVeriSeffaf;
+        document.getElementById('ozSonVeriRenkArkaplan').value = sonVeriSeffaf ? '#1e2d3d' : el.renk_arkaplan;
+        document.getElementById('ozSonVeriKoseYaricapi').value = el.kose_yaricapi ?? 6;
     }
 
     document.getElementById('ozCustomCss').value = el.custom_css || '';
@@ -3571,6 +3639,14 @@ function uygula() {
         el.renk_yazi = document.getElementById('ozSaatTarihRenkYazi').value;
         el.renk_arkaplan = document.getElementById('ozSaatTarihSeffaf').checked ? 'transparent' : document.getElementById('ozSaatTarihRenkArkaplan').value;
         el.kose_yaricapi = parseInt(document.getElementById('ozSaatTarihKoseYaricapi').value) || 0;
+    } else if (el.type === 'sonveri') {
+        el.on_ek = document.getElementById('ozSonVeriOnEk').value;
+        el.saglik_esik_sn = parseInt(document.getElementById('ozSonVeriEsik').value) || 15;
+        el.saglik_renk_goster = document.getElementById('ozSonVeriSaglikRenk').checked;
+        el.font_boyutu = parseInt(document.getElementById('ozSonVeriFontBoyutu').value) || 14;
+        el.renk_yazi = document.getElementById('ozSonVeriRenkYazi').value;
+        el.renk_arkaplan = document.getElementById('ozSonVeriSeffaf').checked ? 'transparent' : document.getElementById('ozSonVeriRenkArkaplan').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozSonVeriKoseYaricapi').value) || 0;
     } else if (el.type === 'sekil') {
         el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;
         el.sekil_kenarlik = document.getElementById('ozSekilKenarlik').value;

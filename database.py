@@ -120,6 +120,10 @@ def init_db():
         cursor.execute('ALTER TABLE tagler ADD COLUMN yazilacak_deger TEXT')
     if 'deger_zamani' not in mevcut_kolonlar:
         cursor.execute('ALTER TABLE tagler ADD COLUMN deger_zamani TIMESTAMP')
+    # Migration: grafik geçmişi için tag başına özel kayıt aralığı (saniye).
+    # NULL ise global varsayılan (GECMIS_MIN_ARALIK_SN) kullanılır.
+    if 'gecmis_araligi_sn' not in mevcut_kolonlar:
+        cursor.execute('ALTER TABLE tagler ADD COLUMN gecmis_araligi_sn INTEGER')
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sayfalar (
@@ -264,6 +268,26 @@ def init_db():
         )
     ''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_gecmis_tag_zaman ON tag_deger_gecmis(tag_id, zaman)')
+
+    # Kullanıcı isteği: grafikte 1 hafta/1 ay/3 ay gibi uzun aralıklar da
+    # gösterilebilsin — ama ham (saniyelik) veriyi aylarca tutmak veritabanını
+    # şişirir. Bu yüzden ham veri sadece son ~30 saat tutulur (bkz.
+    # GECMIS_HAM_SAKLAMA_SAAT), her saat kapandığında o saatin özeti
+    # (ortalama/min/maks) burada kalıcı olarak saklanır — 1 hafta = 168 satır,
+    # 3 ay = ~2160 satır/tag gibi makul boyutlarda kalır.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tag_deger_gecmis_saatlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tag_id INTEGER NOT NULL REFERENCES tagler(id) ON DELETE CASCADE,
+            saat TIMESTAMP NOT NULL,
+            ort_deger REAL,
+            min_deger REAL,
+            maks_deger REAL,
+            adet INTEGER,
+            UNIQUE(tag_id, saat)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_gecmis_saatlik_tag_saat ON tag_deger_gecmis_saatlik(tag_id, saat)')
 
     # ALARM — "Alarm Oluşturma" elementiyle tanımlanan kurallar (bir tag'in
     # hangi değerde/eşikte alarm sayılacağı) ve gerçekleşen alarm kayıtları.
@@ -570,17 +594,35 @@ def cihaz_son_gorulme_guncelle(cihaz_kimlik: str):
         conn.close()
 
 
+def cihaz_son_gorulme_saniye_once(cihaz_id: int):
+    """Kullanıcı isteği: ekranda 'cihazdan en son ne zaman veri alındı'
+    gösterilebilsin — bu veri zaten var (ESP32 her istekte son_gorulme'yi
+    günceller), yeni bir tag/Modbus adresi gerekmiyor. 'now' ile aynı
+    +3 saat kaydırması uygulanıyor ki fark doğru çıksın (ikisi de aynı
+    ofsetle hesaplanınca ofset iptal oluyor)."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT CAST((strftime('%s', 'now', '+3 hours') - strftime('%s', son_gorulme)) AS INTEGER) AS saniye_once "
+            "FROM cihazlar WHERE id = ? AND son_gorulme IS NOT NULL",
+            (cihaz_id,)
+        ).fetchone()
+        return row['saniye_once'] if row else None
+    finally:
+        conn.close()
+
+
 # ============================================================
 # TAG
 # ============================================================
 
-def tag_ekle(cihaz_id: int, ad: str, modbus_adres: str, veri_tipi: str = 'bool', erisim: str = 'read'):
+def tag_ekle(cihaz_id: int, ad: str, modbus_adres: str, veri_tipi: str = 'bool', erisim: str = 'read', gecmis_araligi_sn=None):
     conn = get_db()
     try:
         cur = conn.execute('''
-            INSERT INTO tagler (cihaz_id, ad, modbus_adres, veri_tipi, erisim)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (cihaz_id, ad.strip(), modbus_adres.strip(), veri_tipi, erisim))
+            INSERT INTO tagler (cihaz_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (cihaz_id, ad.strip(), modbus_adres.strip(), veri_tipi, erisim, gecmis_araligi_sn))
         conn.commit()
         return True, cur.lastrowid
     except sqlite3.IntegrityError:
@@ -589,13 +631,13 @@ def tag_ekle(cihaz_id: int, ad: str, modbus_adres: str, veri_tipi: str = 'bool',
         conn.close()
 
 
-def tag_guncelle(tag_id: int, ad: str, modbus_adres: str, veri_tipi: str, erisim: str):
+def tag_guncelle(tag_id: int, ad: str, modbus_adres: str, veri_tipi: str, erisim: str, gecmis_araligi_sn=None):
     conn = get_db()
     try:
         conn.execute('''
-            UPDATE tagler SET ad = ?, modbus_adres = ?, veri_tipi = ?, erisim = ?
+            UPDATE tagler SET ad = ?, modbus_adres = ?, veri_tipi = ?, erisim = ?, gecmis_araligi_sn = ?
             WHERE id = ?
-        ''', (ad.strip(), modbus_adres.strip(), veri_tipi, erisim, tag_id))
+        ''', (ad.strip(), modbus_adres.strip(), veri_tipi, erisim, gecmis_araligi_sn, tag_id))
         conn.commit()
         return True, None
     except sqlite3.IntegrityError:
@@ -846,40 +888,97 @@ def tagler_yazilacak_temizle(tag_idleri):
 
 # Kullanıcı isteği: grafik geçmişine her canlı güncellemede değil, en fazla
 # şu aralıkla bir satır düşsün (10-30sn aralığı istendi, ortası seçildi) —
-# ESP32/simülatör çok daha sık senkron olsa bile veritabanı şişmesin.
+# ESP32/simülatör çok daha sık senkron olsa bile veritabanı şişmesin. Bu
+# GLOBAL varsayılan; tag'in kendi gecmis_araligi_sn'i doluysa o kullanılır.
 GECMIS_MIN_ARALIK_SN = 20
+
+# Ham (saniyelik/dakikalık) veri en az bu kadar saat tutulur — "24 saat"
+# butonuna biraz tampon payı bırakmak için 24'ten biraz fazla.
+GECMIS_HAM_SAKLAMA_SAAT = 30
+# Saatlik özet veri en az bu kadar gün tutulur — "3 ay" butonu 90 gün ister,
+# tampon payı bırakıldı.
+GECMIS_SAATLIK_SAKLAMA_GUN = 100
+# Sorgu sonucu tek seferde en fazla bu kadar satır dönsün (uç durumda çok
+# sık örnekleme + uzun aralık seçilse bile tarayıcı/DB aşırı yüklenmesin).
+GECMIS_SORGU_MAKS_SATIR = 20000
+
+# Grafik elementindeki hazır zaman aralığı butonları: ad -> (saniye, kaynak).
+# 'ham' -> tag_deger_gecmis (ince taneli), 'saatlik' -> tag_deger_gecmis_saatlik
+# (saatlik ortalama) tablosundan okunur.
+ARALIK_TANIMLARI = {
+    '15dk': (900, 'ham'),
+    '30dk': (1800, 'ham'),
+    '1sa': (3600, 'ham'),
+    '3sa': (10800, 'ham'),
+    '6sa': (21600, 'ham'),
+    '12sa': (43200, 'ham'),
+    '24sa': (86400, 'ham'),
+    '1hf': (604800, 'saatlik'),
+    '1ay': (2592000, 'saatlik'),
+    '3ay': (7776000, 'saatlik'),
+}
 
 
 def tag_deger_guncelle(tag_id: int, deger):
     """ESP32'den gelen okunan değeri kaydeder (xchange sırasında kullanılacak).
     Aynı zamanda grafik elementinin okuyabilmesi için bir geçmiş satırı da
-    ekler (tag_deger_gecmis) — ama en fazla GECMIS_MIN_ARALIK_SN'de bir kez;
-    her tag için son GECMIS_MAKS_SATIR satır tutulur."""
+    ekler (tag_deger_gecmis) — ama en fazla tag'in kendi gecmis_araligi_sn'i
+    (yoksa GECMIS_MIN_ARALIK_SN) kadar sıklıkla. Bir saat kapandığında o
+    saatin özeti tag_deger_gecmis_saatlik'e düşer (uzun vadeli, kompakt
+    saklama — bkz. 1hf/1ay/3ay butonları) ve eski satırlar budanır."""
     conn = get_db()
     try:
         conn.execute(
             "UPDATE tagler SET deger = ?, deger_zamani = datetime('now', '+3 hours') WHERE id = ?",
             (str(deger), tag_id)
         )
+        tag_row = conn.execute(
+            "SELECT gecmis_araligi_sn FROM tagler WHERE id = ?", (tag_id,)
+        ).fetchone()
+        aralik_sn = (tag_row['gecmis_araligi_sn'] if tag_row and tag_row['gecmis_araligi_sn'] else GECMIS_MIN_ARALIK_SN)
         son = conn.execute(
             "SELECT zaman FROM tag_deger_gecmis WHERE tag_id = ? ORDER BY id DESC LIMIT 1",
             (tag_id,)
         ).fetchone()
         yeterince_eski = (son is None) or conn.execute(
             "SELECT (julianday(datetime('now', '+3 hours')) - julianday(?)) * 86400 >= ?",
-            (son['zaman'], GECMIS_MIN_ARALIK_SN)
+            (son['zaman'], aralik_sn)
         ).fetchone()[0]
         if yeterince_eski:
             conn.execute(
                 "INSERT INTO tag_deger_gecmis (tag_id, deger) VALUES (?, ?)",
                 (tag_id, str(deger))
             )
-        GECMIS_MAKS_SATIR = 500
+
+        # Tamamlanmış son saatin özetini çıkar (varsa ve daha önce
+        # yapılmadıysa — UNIQUE(tag_id, saat) + INSERT OR IGNORE sayesinde
+        # aynı saat için tekrar tekrar hesaplanmaz). Sadece son ~2 saatlik
+        # pencereyi tarıyor (idx_gecmis_tag_zaman ile ucuz).
+        once = conn.total_changes
         conn.execute('''
-            DELETE FROM tag_deger_gecmis WHERE tag_id = ? AND id NOT IN (
-                SELECT id FROM tag_deger_gecmis WHERE tag_id = ? ORDER BY id DESC LIMIT ?
+            INSERT OR IGNORE INTO tag_deger_gecmis_saatlik (tag_id, saat, ort_deger, min_deger, maks_deger, adet)
+            SELECT tag_id,
+                   strftime('%Y-%m-%d %H:00:00', zaman) AS saat_grubu,
+                   AVG(CAST(deger AS REAL)), MIN(CAST(deger AS REAL)), MAX(CAST(deger AS REAL)), COUNT(*)
+            FROM tag_deger_gecmis
+            WHERE tag_id = ?
+              AND zaman >= datetime('now', '+3 hours', '-2 hours')
+              AND zaman <  strftime('%Y-%m-%d %H:00:00', datetime('now', '+3 hours'))
+            GROUP BY saat_grubu
+        ''', (tag_id,))
+        saat_kapandi = conn.total_changes > once
+
+        if saat_kapandi:
+            # Saatte bir kez tetiklenen ucuz bir bakım penceresi — ham veriyi
+            # ve çok eski saatlik özetleri buda.
+            conn.execute(
+                "DELETE FROM tag_deger_gecmis WHERE tag_id = ? AND zaman < datetime('now', '+3 hours', ?)",
+                (tag_id, f'-{GECMIS_HAM_SAKLAMA_SAAT} hours')
             )
-        ''', (tag_id, tag_id, GECMIS_MAKS_SATIR))
+            conn.execute(
+                "DELETE FROM tag_deger_gecmis_saatlik WHERE tag_id = ? AND saat < datetime('now', '+3 hours', ?)",
+                (tag_id, f'-{GECMIS_SAATLIK_SAKLAMA_GUN} days')
+            )
         conn.commit()
     finally:
         conn.close()
@@ -891,7 +990,8 @@ def tag_deger_guncelle(tag_id: int, deger):
 
 def tag_deger_gecmisi(tag_id: int, limit: int = 100):
     """Bir tag'in en son `limit` geçmiş değerini ESKİDEN YENİYE sıralı döner:
-    [{deger, zaman}, ...] — grafik elementi bunu çizer."""
+    [{deger, zaman}, ...] — grafik elementinin "canlı" (varsayılan) modu
+    bunu kullanır."""
     conn = get_db()
     try:
         rows = conn.execute(
@@ -907,6 +1007,43 @@ def tagler_deger_gecmisi(tag_idler: list, limit: int = 100):
     """Birden fazla tag için geçmiş değerleri tek seferde döner:
     {tag_id: [{deger, zaman}, ...]} — grafik elementinde çoklu seri desteği için."""
     return {tid: tag_deger_gecmisi(tid, limit) for tid in tag_idler}
+
+
+def tag_deger_gecmisi_araliktan(tag_id: int, aralik: str):
+    """Hazır zaman aralığı adına göre (bkz. ARALIK_TANIMLARI — 15dk..3ay)
+    ham ya da saatlik özet tablodan geçmiş döner: [{deger, zaman}, ...]
+    eskiden yeniye. Bilinmeyen aralık adı gelirse boş liste döner."""
+    tanim = ARALIK_TANIMLARI.get(aralik)
+    if not tanim:
+        return []
+    saniye, kaynak = tanim
+    conn = get_db()
+    try:
+        if kaynak == 'ham':
+            rows = conn.execute('''
+                SELECT deger, zaman FROM (
+                    SELECT id, deger, zaman FROM tag_deger_gecmis
+                    WHERE tag_id = ? AND zaman >= datetime('now', '+3 hours', ?)
+                    ORDER BY id DESC LIMIT ?
+                ) ORDER BY id ASC
+            ''', (tag_id, f'-{saniye} seconds', GECMIS_SORGU_MAKS_SATIR)).fetchall()
+        else:
+            rows = conn.execute('''
+                SELECT ort_deger AS deger, saat AS zaman FROM (
+                    SELECT id, ort_deger, saat FROM tag_deger_gecmis_saatlik
+                    WHERE tag_id = ? AND saat >= datetime('now', '+3 hours', ?)
+                    ORDER BY id DESC LIMIT ?
+                ) ORDER BY id ASC
+            ''', (tag_id, f'-{saniye} seconds', GECMIS_SORGU_MAKS_SATIR)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def tagler_deger_gecmisi_araliktan(tag_idler: list, aralik: str):
+    """tag_deger_gecmisi_araliktan'ın çoklu-tag hali (grafik elementi çoklu
+    seri için): {tag_id: [{deger, zaman}, ...]}."""
+    return {tid: tag_deger_gecmisi_araliktan(tid, aralik) for tid in tag_idler}
 
 
 # ============================================================

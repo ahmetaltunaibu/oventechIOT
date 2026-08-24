@@ -184,6 +184,8 @@
     </div>
 </div>
 
+<!-- Grafik elementi için (yerel, CDN yok — fabrikada internet olmasa da çalışsın) -->
+<script src="{{ url_for('static', filename='js/apexcharts.min.js') }}"></script>
 <script>
 const masaustu = {{ masaustu_json | safe }};
 const mobil = {{ mobil_json | safe }};
@@ -221,6 +223,266 @@ async function grafikGecmisiniYukle() {
         });
         tuvalCiz();
     } catch (e) { /* bağlantı sorunu — canlı polling zaten devam eder */ }
+}
+
+// ---- Grafik elementi (ApexCharts) ----------------------------------------
+// Eskiden tuvalCiz() HER pollde (3sn'de bir) elementin div'ini tamamen
+// silip yeniden çiziyordu — SVG polyline için ucuzdu ama gerçek bir
+// ApexCharts örneği için felaket olurdu: kullanıcı geçmişe bakarken 3sn
+// sonra sıfırlanır, ayrıca her seferinde kütüphaneyi yeniden başlatmak
+// gereksiz yük bindirirdi. Bu yüzden grafik elementleri artık bu ayrı kayıt
+// defterinde (el.id -> {div, chart, ...}) SADECE BİR KEZ oluşturuluyor;
+// tuvalCiz() her çalıştığında var olan örnek varsa onu yeniden kullanıp
+// sadece updateSeries() ile veri güncelliyor.
+let grafikKayitlari = {}; // el.id -> {div, butonBar, kaydirmaSarici, chartDiv, chart, donBtn, ...}
+
+// Kullanıcı isteği: "15dk/30dk/1sa/.../3ay gibi hazır aralık butonları,
+// basınca grafiğe sığdırma olacak, sığmazsa taşıp kaydırma çubuğu
+// devreye girecek" — bkz. grafikVeriyiUygula. null = canlı (varsayılan).
+const ARALIK_BUTONLARI = [
+    { ad: null, etiket: 'Canlı' },
+    { ad: '15dk', etiket: '15dk' },
+    { ad: '30dk', etiket: '30dk' },
+    { ad: '1sa', etiket: '1sa' },
+    { ad: '3sa', etiket: '3sa' },
+    { ad: '6sa', etiket: '6sa' },
+    { ad: '12sa', etiket: '12sa' },
+    { ad: '24sa', etiket: '24sa' },
+    { ad: '1hf', etiket: '1hf' },
+    { ad: '1ay', etiket: '1ay' },
+    { ad: '3ay', etiket: '3ay' },
+];
+// Bir veri noktasına ayrılan en az piksel genişliği — grafik bunun altına
+// düşecek kadar sıkışacaksa (çok fazla nokta), konteyner genişliğini değil
+// GERÇEK genişliği kullanır; sarmalayıcı overflow-x:auto olduğu için
+// tarayıcı kendiliğinden yatay kaydırma çubuğu gösterir.
+const GRAFIK_MIN_PIKSEL_ARALIGI = 6;
+
+function zamanMsCevir(zaman) {
+    if (typeof zaman === 'number') return zaman;
+    // Sunucu 'YYYY-MM-DD HH:MM:SS' formatında, zaten +3 saat kaydırılmış
+    // yerel (TR) saat gönderiyor — tarayıcı da TR saatinde varsayılıyor.
+    return new Date(String(zaman).replace(' ', 'T')).getTime();
+}
+
+function grafikApexAyarlari(el, seriler) {
+    return {
+        chart: {
+            type: 'line',
+            height: '100%',
+            width: '100%',
+            background: 'transparent',
+            fontFamily: 'inherit',
+            toolbar: { show: false },
+            zoom: { enabled: false },
+            animations: { enabled: false },
+            foreColor: '#8aa0b3'
+        },
+        theme: { mode: 'dark' },
+        series: seriler.map(s => ({ name: s.etiket || ('Seri ' + s.tag_id), data: [] })),
+        colors: seriler.map(s => s.renk || '#2e9ed9'),
+        stroke: { width: 2, curve: 'straight' },
+        markers: { size: 0, hover: { size: 4 } },
+        dataLabels: { enabled: false },
+        grid: { borderColor: 'rgba(255,255,255,0.08)', strokeDashArray: 3, padding: { left: 6, right: 6 } },
+        xaxis: {
+            type: 'datetime',
+            labels: { datetimeUTC: false, style: { fontSize: '9px' } },
+            axisBorder: { color: 'rgba(255,255,255,0.12)' },
+            axisTicks: { color: 'rgba(255,255,255,0.12)' }
+        },
+        yaxis: {
+            labels: {
+                style: { fontSize: '9px' },
+                formatter: v => (v === null || v === undefined || isNaN(v)) ? '' : (Math.round(v * 100) / 100) + (el.birim || '')
+            }
+        },
+        tooltip: { theme: 'dark', x: { format: 'dd MMM HH:mm:ss' } },
+        legend: { show: seriler.length > 1, position: 'bottom', fontSize: '10px', labels: { colors: '#8aa0b3' }, markers: { width: 8, height: 8 } },
+        title: el.baslik ? { text: el.baslik, style: { fontSize: '11px', color: '#8aa0b3', fontWeight: 700 } } : undefined,
+        noData: { text: seriler.length ? 'Veri toplanıyor…' : 'Seri seçilmedi', style: { color: '#8aa0b3', fontSize: '11px' } }
+    };
+}
+
+// "Canlıya Dön" durumu — ya kullanıcı bir aralık butonuna bastığı (geçmişe
+// gittiği) ya da canlı görünümde sarmalayıcıyı elle sola kaydırdığı için
+// tetiklenir. Basılınca: aralık modu kapanır, otomatik-en-sağa-kaydırma
+// (canlı takip) yeniden açılır.
+function grafikCanliDurdur(kayit) {
+    if (!kayit) return;
+    kayit.canliTakip = false;
+    kayit.donBtn.style.display = 'block';
+}
+function grafikCanliBaslat(el, kayit) {
+    if (!kayit) return;
+    kayit.aktifAralik = null;
+    kayit.aralikVerisi = null;
+    kayit.canliTakip = true;
+    kayit.donBtn.style.display = 'none';
+    grafikButonlariGuncelle(kayit);
+    grafikVeriyiUygula(el, kayit);
+}
+
+function grafikButonlariGuncelle(kayit) {
+    kayit.butonlar.forEach(b => {
+        const aktif = b.ad === kayit.aktifAralik;
+        b.el.style.background = aktif ? 'var(--accent)' : 'rgba(255,255,255,0.06)';
+        b.el.style.color = aktif ? '#fff' : '#8aa0b3';
+    });
+}
+
+async function grafikAralikYukle(el, kayit, aralikAdi) {
+    kayit.aktifAralik = aralikAdi;
+    grafikCanliDurdur(kayit);
+    grafikButonlariGuncelle(kayit);
+    try {
+        const tagIdler = kayit.seriler.map(s => s.tag_id).filter(Boolean);
+        if (!tagIdler.length) return;
+        const res = await fetch(`/api/cihaz/${cihazId}/gecmis?tagler=${tagIdler.join(',')}&aralik=${encodeURIComponent(aralikAdi)}`);
+        if (!res.ok) return;
+        const veri = await res.json();
+        kayit.aralikVerisi = {};
+        Object.keys(veri).forEach(tagId => {
+            kayit.aralikVerisi[tagId] = veri[tagId]
+                .map(r => ({ deger: parseFloat(r.deger), zaman: r.zaman }))
+                .filter(r => !isNaN(r.deger));
+        });
+        grafikVeriyiUygula(el, kayit);
+    } catch (e) { /* bağlantı sorunu */ }
+}
+
+function grafikElementiCizVeyaGuncelle(el, tuval) {
+    const seriler = (el.seriler && el.seriler.length) ? el.seriler
+        : (el.tag_id ? [{ tag_id: el.tag_id, etiket: el.baslik || '', renk: el.cizgi_rengi || '#2e9ed9' }] : []);
+    const serilerAnahtar = JSON.stringify(seriler.map(s => s.tag_id + '|' + (s.etiket || '') + '|' + (s.renk || '')));
+    let kayit = grafikKayitlari[el.id];
+
+    if (!kayit || kayit.serilerAnahtar !== serilerAnahtar) {
+        if (kayit && kayit.chart) { try { kayit.chart.destroy(); } catch (e) { /* yoksay */ } }
+        const div = document.createElement('div');
+        div.style.position = 'absolute';
+        div.style.boxSizing = 'border-box';
+        div.style.overflow = 'hidden';
+        div.style.background = el.arkaplan_rengi || '#17222e';
+        div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
+        div.style.display = 'flex';
+        div.style.flexDirection = 'column';
+        div.style.padding = '4px';
+
+        // Hazır aralık butonları — dar elementlerde sığmazsa kendi içinde
+        // yatay kayar (overflow-x:auto), tuvalın geri kalanını etkilemez.
+        const butonBar = document.createElement('div');
+        butonBar.style.cssText = 'display:flex;gap:3px;overflow-x:auto;overflow-y:hidden;flex-shrink:0;'
+            + 'padding-bottom:3px;scrollbar-width:thin;';
+        const butonlar = ARALIK_BUTONLARI.map(tanim => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = tanim.etiket;
+            b.style.cssText = 'flex-shrink:0;border:none;border-radius:4px;padding:2px 7px;'
+                + 'font-size:9px;font-weight:600;cursor:pointer;background:rgba(255,255,255,0.06);color:#8aa0b3;';
+            b.addEventListener('click', () => {
+                if (tanim.ad === null) grafikCanliBaslat(el, kayit);
+                else grafikAralikYukle(el, kayit, tanim.ad);
+            });
+            butonBar.appendChild(b);
+            return { ad: tanim.ad, el: b };
+        });
+        div.appendChild(butonBar);
+
+        // Taşma/kaydırma sarmalayıcı — grafik verinin genişliği konteynerden
+        // fazlaysa (çok nokta), tarayıcının KENDİ yatay kaydırma çubuğu
+        // devreye girer (bkz. grafikVeriyiUygula).
+        const kaydirmaSarici = document.createElement('div');
+        kaydirmaSarici.style.cssText = 'flex:1;min-height:0;overflow-x:auto;overflow-y:hidden;position:relative;';
+        div.appendChild(kaydirmaSarici);
+
+        const chartDiv = document.createElement('div');
+        chartDiv.style.cssText = 'height:100%;';
+        kaydirmaSarici.appendChild(chartDiv);
+
+        const donBtn = document.createElement('button');
+        donBtn.type = 'button';
+        donBtn.textContent = '◀ Canlıya Dön';
+        donBtn.style.cssText = 'position:absolute;top:2px;right:4px;z-index:5;display:none;'
+            + 'background:var(--accent);color:#fff;border:none;border-radius:5px;padding:4px 10px;'
+            + 'font-size:10px;font-weight:600;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.4);';
+        div.appendChild(donBtn);
+
+        kayit = {
+            div, butonBar, butonlar, kaydirmaSarici, chartDiv, chart: null, donBtn,
+            seriler, serilerAnahtar, canliTakip: true, aktifAralik: null, aralikVerisi: null,
+            programatikKaydirma: false, el
+        };
+        grafikKayitlari[el.id] = kayit;
+
+        donBtn.addEventListener('click', () => grafikCanliBaslat(el, kayit));
+        // Kullanıcı canlı moddayken sarmalayıcıyı elle sola kaydırırsa bu
+        // "geçmişe bakmak istedi" demektir — otomatik-en-sağa-kaydırmayı
+        // durdur, "Canlıya Dön" göster. programatikKaydirma bayrağı bizim
+        // kendi otomatik kaydırmamızın bunu YANLIŞLIKLA tetiklemesini önler.
+        kaydirmaSarici.addEventListener('scroll', () => {
+            if (kayit.programatikKaydirma || kayit.aktifAralik) return;
+            grafikCanliDurdur(kayit);
+        });
+
+        elemDonusUygula(div, el);
+        if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+
+        kayit.chart = new ApexCharts(chartDiv, grafikApexAyarlari(el, seriler));
+        kayit.chart.render();
+        grafikButonlariGuncelle(kayit);
+    }
+
+    kayit.el = el;
+    // Bu div kalıcı/tekrar kullanılıyor (bkz. yukarıdaki açıklama) — diğer
+    // element tiplerinde her pollde taze bir div oluştuğu için display:none
+    // hep sıfırdan başlar, burada elle sıfırlamazsak bir kez gizlenen grafik
+    // koşul artık geçerli olmasa bile hep gizli kalırdı.
+    kayit.div.style.display = '';
+    kayit.div.style.left = el.x + 'px';
+    kayit.div.style.top = el.y + 'px';
+    kayit.div.style.width = el.w + 'px';
+    kayit.div.style.height = el.h + 'px';
+
+    hedefKatmanaEkle(kayit.div, el, tuval);
+    grafikVeriyiUygula(el, kayit);
+}
+
+function grafikVeriyiUygula(el, kayit) {
+    let noktaListeleri;
+    if (kayit.aktifAralik && kayit.aralikVerisi) {
+        noktaListeleri = kayit.seriler.map(s => kayit.aralikVerisi[s.tag_id] || []);
+    } else {
+        const noktaSayisi = el.nokta_sayisi || 20;
+        noktaListeleri = kayit.seriler.map(s => (grafikGecmisi[s.tag_id] || []).slice(-noktaSayisi));
+    }
+    const yeniSeriler = kayit.seriler.map((s, i) => ({
+        name: s.etiket || ('Seri ' + s.tag_id),
+        data: noktaListeleri[i].map(g => [zamanMsCevir(g.zaman), g.deger])
+    }));
+
+    // Kullanıcı isteği: veri noktası konteynere sığmayacak kadar çoksa
+    // grafiği GERÇEK (daha geniş) piksel genişliğinde çiz — sarmalayıcı
+    // overflow-x:auto olduğu için taşan kısım için tarayıcı kendiliğinden
+    // yatay kaydırma çubuğu gösterir. Az veri varsa konteyner genişliğinde
+    // kalır (hiç taşmaz, kaydırma çubuğu da çıkmaz).
+    const maksNokta = Math.max(1, ...noktaListeleri.map(l => l.length));
+    const konteynerGenislik = kayit.kaydirmaSarici.clientWidth || Math.max(1, (el.w || 100) - 8);
+    const gerekliGenislik = Math.max(konteynerGenislik, maksNokta * GRAFIK_MIN_PIKSEL_ARALIGI);
+    kayit.chartDiv.style.width = gerekliGenislik + 'px';
+
+    try {
+        kayit.chart.updateOptions({ chart: { width: gerekliGenislik } }, false, false);
+        kayit.chart.updateSeries(yeniSeriler, false);
+    } catch (e) { /* henüz render olmamış olabilir */ }
+
+    // Canlı moddaysa (aralık seçilmedi, kullanıcı elle kaydırmadı) en
+    // güncel veriyi göstermek için sarmalayıcıyı en sağa sabitle.
+    if (!kayit.aktifAralik && kayit.canliTakip) {
+        kayit.programatikKaydirma = true;
+        kayit.kaydirmaSarici.scrollLeft = kayit.kaydirmaSarici.scrollWidth;
+        setTimeout(() => { kayit.programatikKaydirma = false; }, 100);
+    }
 }
 
 function sayfaSec() {
@@ -261,6 +523,14 @@ function tuvalCiz() {
     const sabitAlt = sabitKatmanGetirYaOlustur('tuval-sabit-alt', 'alt');
     sabitUst.innerHTML = ''; sabitAlt.innerHTML = '';
     aktifSayfa.elementler.forEach(el => {
+        // Grafik elementi kendi div/ApexCharts örneğini KALICI olarak yönetir
+        // (bkz. grafikElementiCizVeyaGuncelle) — aşağıdaki paylaşılan
+        // div oluşturma/silme döngüsüne hiç girmez, yoksa her pollde
+        // grafiği sıfırdan kurup zoom/kaydırma durumunu kaybederdik.
+        if (el.type === 'grafik') {
+            grafikElementiCizVeyaGuncelle(el, tuval);
+            return;
+        }
         const div = document.createElement('div');
         // KRİTİK: position:absolute burada, KOŞULSUZ ayarlanıyor. Önceden
         // her element tipinin kendi dalı bunu ayarlaması gerekiyordu
@@ -457,6 +727,25 @@ function tuvalCiz() {
             return;
         }
 
+        if (el.type === 'sonveri') {
+            // Tag'e bağlı değil — cihazdan ESP32'nin sunucuya en son ne
+            // zaman veri gönderdiğini (bağlantı durumu) gösterir. saniyede
+            // bir kendi textContent'ini güncelleyen ayrı bir döngüyle
+            // çalışır (bkz. sonVeriTumGuncelle) — periyodik olarak da
+            // sunucudan taze "kaç saniye önce" değeri çekilir.
+            div.style.fontSize = (el.font_boyutu || 14) + 'px';
+            div.style.fontWeight = '600';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
+            div.style.boxSizing = 'border-box';
+            div.dataset.sonveriId = el.id;
+            sonVeriDivGuncelle(div, el);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            hedefKatmanaEkle(div, el, tuval);
+            return;
+        }
+
         if (el.type === 'textbox') {
             div.className = '';
             div.style.background = el.renk_arkaplan || '#17222e';
@@ -562,95 +851,6 @@ function tuvalCiz() {
                     + 'width:100%;height:100%;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.6);';
                 div.appendChild(yazi);
             }
-            elemDonusUygula(div, el);
-            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
-            hedefKatmanaEkle(div, el, tuval);
-            return;
-        }
-
-        if (el.type === 'grafik') {
-            div.style.background = el.arkaplan_rengi || '#17222e';
-            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
-            div.style.boxSizing = 'border-box';
-            div.style.padding = '6px';
-            div.style.overflow = 'hidden';
-            div.textContent = '';
-            // Geriye dönük uyumluluk: eski tek-seri kayıtlarda tag_id/cizgi_rengi
-            // vardı, seriler yoktu — varsa onu tek elemanlı bir seri say.
-            const seriler = (el.seriler && el.seriler.length) ? el.seriler
-                : (el.tag_id ? [{ tag_id: el.tag_id, etiket: el.baslik || '', renk: el.cizgi_rengi || '#2e9ed9' }] : []);
-            const noktaSayisi = el.nokta_sayisi || 20;
-            const ustBosluk = el.baslik ? 22 : 6;
-            const altBosluk = seriler.length > 1 ? 18 : 6;
-            const genislik = el.w - 12, yukseklik = el.h - ustBosluk - altBosluk;
-            const svgNs = 'http://www.w3.org/2000/svg';
-            const svg = document.createElementNS(svgNs, 'svg');
-            svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%');
-            svg.style.display = 'block';
-
-            let herhangiVeriVar = false;
-            seriler.forEach(s => {
-                const gecmis = (grafikGecmisi[s.tag_id] || []).slice(-noktaSayisi);
-                if (gecmis.length < 2) return;
-                herhangiVeriVar = true;
-                const degerlerListesi = gecmis.map(g => g.deger);
-                let minV = Math.min(...degerlerListesi), maxV = Math.max(...degerlerListesi);
-                if (minV === maxV) { minV -= 1; maxV += 1; } // duz cizgi olmasin diye kucuk bir aralik ac
-                const puanlar = gecmis.map((g, i) => {
-                    const xOran = i / (gecmis.length - 1);
-                    const yOran = (g.deger - minV) / (maxV - minV);
-                    return `${xOran * genislik},${yukseklik - yOran * yukseklik}`;
-                }).join(' ');
-                const polyline = document.createElementNS(svgNs, 'polyline');
-                polyline.setAttribute('points', puanlar);
-                polyline.setAttribute('fill', 'none');
-                polyline.setAttribute('stroke', s.renk || '#2e9ed9');
-                polyline.setAttribute('stroke-width', '2');
-                polyline.setAttribute('stroke-linejoin', 'round');
-                polyline.setAttribute('stroke-linecap', 'round');
-                polyline.setAttribute('transform', `translate(6,${ustBosluk})`);
-                svg.appendChild(polyline);
-            });
-            if (!herhangiVeriVar) {
-                const yaziEl = document.createElement('div');
-                yaziEl.textContent = seriler.length ? 'Veri toplanıyor…' : 'Seri seçilmedi';
-                yaziEl.style.cssText = `position:absolute;top:${ustBosluk}px;left:6px;right:6px;bottom:${altBosluk}px;`
-                    + 'display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-secondary);';
-                div.appendChild(yaziEl);
-            }
-            if (el.baslik) {
-                const baslikEl = document.createElement('div');
-                baslikEl.textContent = el.baslik;
-                baslikEl.style.cssText = 'position:absolute;top:6px;left:10px;font-size:11px;font-weight:700;color:var(--text-secondary);';
-                div.appendChild(baslikEl);
-            }
-            // Çoklu seri iken alt kısımda küçük bir gösterge (legend): renk +
-            // etiket + o serinin en güncel değeri.
-            if (seriler.length > 1) {
-                const legend = document.createElement('div');
-                legend.style.cssText = 'position:absolute;left:6px;right:6px;bottom:3px;display:flex;'
-                    + 'flex-wrap:wrap;gap:6px;font-size:9px;color:var(--text-secondary);pointer-events:none;';
-                seriler.forEach(s => {
-                    const gecmis = grafikGecmisi[s.tag_id] || [];
-                    const son = gecmis.length ? gecmis[gecmis.length - 1].deger : null;
-                    const item = document.createElement('span');
-                    item.style.cssText = 'display:inline-flex;align-items:center;gap:3px;';
-                    item.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:${s.renk || '#2e9ed9'};display:inline-block;"></span>`
-                        + `${s.etiket || ''}${son !== null ? ' ' + son + (el.birim || '') : ''}`;
-                    legend.appendChild(item);
-                });
-                div.appendChild(legend);
-            } else if (seriler.length === 1) {
-                const gecmis = grafikGecmisi[seriler[0].tag_id] || [];
-                const son = gecmis.length ? gecmis[gecmis.length - 1].deger : null;
-                if (son !== null) {
-                    const sonEl = document.createElement('div');
-                    sonEl.textContent = son + (el.birim || '');
-                    sonEl.style.cssText = 'position:absolute;top:6px;right:10px;font-size:11px;font-weight:700;color:var(--text-secondary);';
-                    div.appendChild(sonEl);
-                }
-            }
-            div.appendChild(svg);
             elemDonusUygula(div, el);
             if (el.custom_css) div.style.cssText += ';' + el.custom_css;
             hedefKatmanaEkle(div, el, tuval);
@@ -827,6 +1027,55 @@ function saatTarihTumGuncelle() {
     });
 }
 setInterval(saatTarihTumGuncelle, 1000);
+
+// ---------- Son Veri (bağlantı durumu) ----------
+// Sunucu her istekte sadece "kaç saniye önceydi" (bir tam sayı) döner —
+// biz bunu bir "taban" olarak saklayıp aradaki geçen yerel süreyi ekleyerek
+// saniyede bir taze görünüm üretiyoruz; her saniye sunucuya sormaya gerek yok.
+let sonVeriSaniyeBaz = null; // sunucudan son gelen saniye_once değeri
+let sonVeriBazZaman = 0;     // o değerin alındığı yerel an (Date.now())
+async function sonVeriGetir() {
+    try {
+        const res = await fetch(`/api/cihaz/${cihazId}/son-gorulme`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (typeof data.saniye_once === 'number') {
+            sonVeriSaniyeBaz = data.saniye_once;
+            sonVeriBazZaman = Date.now();
+        }
+    } catch (e) { /* ağ sorunu — sessiz geç, bir sonraki denemede güncellenir */ }
+}
+function sonVeriMetniVeSaglik(el) {
+    if (sonVeriSaniyeBaz === null) return { metin: (el.on_ek || '') + 'bilinmiyor', saglikli: null };
+    const saniye = sonVeriSaniyeBaz + Math.floor((Date.now() - sonVeriBazZaman) / 1000);
+    let sureMetni;
+    if (saniye < 5) sureMetni = 'az önce';
+    else if (saniye < 60) sureMetni = saniye + ' saniye önce';
+    else if (saniye < 3600) sureMetni = Math.floor(saniye / 60) + ' dakika önce';
+    else sureMetni = Math.floor(saniye / 3600) + ' saat önce';
+    return { metin: (el.on_ek || '') + sureMetni, saglikli: saniye <= (el.saglik_esik_sn ?? 15) };
+}
+function sonVeriDivGuncelle(div, el) {
+    const { metin, saglikli } = sonVeriMetniVeSaglik(el);
+    div.textContent = metin;
+    if (el.saglik_renk_goster !== false && saglikli !== null) {
+        div.style.background = saglikli ? '#1c3326' : '#3a1f22';
+        div.style.color = saglikli ? '#2ecc71' : '#e74c3c';
+    } else {
+        div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
+        div.style.color = el.renk_yazi || '#e8eef4';
+    }
+}
+function sonVeriTumGuncelle() {
+    if (!aktifSayfa) return;
+    document.querySelectorAll('[data-sonveri-id]').forEach(div => {
+        const el = aktifSayfa.elementler.find(e => e.id === div.dataset.sonveriId);
+        if (el) sonVeriDivGuncelle(div, el);
+    });
+}
+sonVeriGetir();
+setInterval(sonVeriGetir, 5000);   // sunucudan taze taban değeri
+setInterval(sonVeriTumGuncelle, 1000); // ekrandaki metni/rengi her saniye tazele
 
 function sekilArkaplanCSS(el) {
     if (el.sekil_gradient_aktif) {

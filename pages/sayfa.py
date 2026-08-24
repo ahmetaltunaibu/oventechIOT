@@ -363,11 +363,25 @@ def api_degerler(cihaz_id):
     return jsonify(database.cihaz_tag_degerleri(cihaz_id))
 
 
+@sayfa_bp.route('/api/cihaz/<int:cihaz_id>/son-gorulme')
+@login_required
+def api_son_gorulme(cihaz_id):
+    """Kullanıcı isteği: 'Son Veri' elementi için — cihazdan ESP32'nin en
+    son ne zaman haber verdiğini (saniye cinsinden) döner."""
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    return jsonify({'saniye_once': database.cihaz_son_gorulme_saniye_once(cihaz_id)})
+
+
 @sayfa_bp.route('/api/cihaz/<int:cihaz_id>/gecmis')
 @login_required
 def api_gecmis(cihaz_id):
     """Grafik elementi için — birden fazla tag'in geçmiş değerlerini tek
-    seferde döner: {tag_id: [{deger, zaman}, ...]}. ?tagler=1,2,3&limit=100"""
+    seferde döner: {tag_id: [{deger, zaman}, ...]}.
+    ?tagler=1,2,3&limit=100 (canlı/varsayılan mod — son N ham satır) ya da
+    ?tagler=1,2,3&aralik=1sa (hazır aralık butonları — 15dk..3ay, bkz.
+    database.ARALIK_TANIMLARI; kısa aralıklar ham veriden, uzun aralıklar
+    (1hf/1ay/3ay) saatlik özet tablosundan gelir)."""
     if not _cihaz_dogrula(cihaz_id):
         return jsonify({'error': 'Cihaz bulunamadı'}), 404
     tagler_param = request.args.get('tagler', '')
@@ -377,10 +391,13 @@ def api_gecmis(cihaz_id):
         return jsonify({'error': 'Geçersiz tagler parametresi'}), 400
     if not tag_idler:
         return jsonify({})
-    limit = min(max(request.args.get('limit', 100, type=int), 2), 500)
     # Bu cihaza ait olmayan tag id'leri sızdırmayalım.
     cihaz_tag_idleri = {t['id'] for t in database.cihaz_tagleri(cihaz_id)}
     tag_idler = [t for t in tag_idler if t in cihaz_tag_idleri]
+    aralik = request.args.get('aralik')
+    if aralik and aralik in database.ARALIK_TANIMLARI:
+        return jsonify(database.tagler_deger_gecmisi_araliktan(tag_idler, aralik))
+    limit = min(max(request.args.get('limit', 100, type=int), 2), 500)
     return jsonify(database.tagler_deger_gecmisi(tag_idler, limit))
 
 

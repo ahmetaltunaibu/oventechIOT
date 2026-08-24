@@ -184,7 +184,14 @@ def tag_alan_guncelle(cihaz_id, tag_id):
     erisim = veri.get('erisim', mevcut['erisim'])
     if not ad or not modbus_adres:
         return jsonify({'error': 'Tag adı ve Modbus adresi boş olamaz'}), 400
-    ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim)
+    gecmis_ham = veri.get('gecmis_araligi_sn', mevcut.get('gecmis_araligi_sn'))
+    try:
+        gecmis_araligi_sn = int(gecmis_ham) if gecmis_ham not in (None, '') else None
+        if gecmis_araligi_sn is not None and gecmis_araligi_sn < 1:
+            return jsonify({'error': 'Kayıt aralığı en az 1 saniye olmalı'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Kayıt aralığı sayısal olmalı'}), 400
+    ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn)
     if not ok:
         return jsonify({'error': hata}), 400
     return jsonify({'success': True})
@@ -202,7 +209,14 @@ def tag_ekle_json(cihaz_id):
     erisim = veri.get('erisim') or 'read'
     if not ad or not modbus_adres:
         return jsonify({'error': 'Tag adı ve Modbus adresi zorunlu'}), 400
-    ok, sonuc = database.tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim)
+    gecmis_ham = veri.get('gecmis_araligi_sn')
+    try:
+        gecmis_araligi_sn = int(gecmis_ham) if gecmis_ham not in (None, '') else None
+        if gecmis_araligi_sn is not None and gecmis_araligi_sn < 1:
+            return jsonify({'error': 'Kayıt aralığı en az 1 saniye olmalı'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Kayıt aralığı sayısal olmalı'}), 400
+    ok, sonuc = database.tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn)
     if not ok:
         return jsonify({'error': sonuc}), 400
     return jsonify({'success': True, 'id': sonuc})
