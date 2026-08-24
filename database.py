@@ -618,6 +618,85 @@ def proje_kopyala(kaynak_proje_id: int, yeni_kod: str, yeni_ad: str):
     return True, yeni_proje_id
 
 
+def cihaz_kopyala(kaynak_cihaz_id: int, yeni_ad: str = None):
+    """Kullanıcı isteği: proje_kopyala() ile AYNI mantık ama TEK bir cihaz
+    için — kaynak cihazla AYNI projede yeni bir cihaz oluşturur: aynı
+    tag'ler, aynı yüklü medya (resimler), aynı sayfalar (tag_id/resim_url
+    referansları yeni id'lere göre yeniden yazılarak). Yeni cihaza YENİ/BOŞ
+    bir cihaz_kimlik verilir (henüz hiçbir ESP32'ye bağlı değil). Canlı/
+    geçmiş veri (tag değerleri, alarm kayıtları, son_gorulme, Modbus
+    durumu) kopyalanmaz — bkz. proje_kopyala docstring, aynı gerekçe."""
+    conn = get_db()
+    try:
+        kaynak = conn.execute('SELECT * FROM cihazlar WHERE id = ?', (kaynak_cihaz_id,)).fetchone()
+        if not kaynak:
+            return False, 'Cihaz bulunamadı'
+        yeni_kimlik = secrets.token_hex(12)
+        yeni_ad_deger = (yeni_ad or '').strip() or f"{kaynak['ad']} (kopya)"
+        cur = conn.execute('''
+            INSERT INTO cihazlar (proje_id, cihaz_kimlik, ad, nav_stili, baslangic_sayfa)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (kaynak['proje_id'], yeni_kimlik, yeni_ad_deger, kaynak['nav_stili'], kaynak['baslangic_sayfa']))
+        yeni_cihaz_id = cur.lastrowid
+
+        tag_id_eslesme = {}
+        for t in conn.execute('SELECT * FROM tagler WHERE cihaz_id = ?', (kaynak_cihaz_id,)).fetchall():
+            cur = conn.execute('''
+                INSERT INTO tagler (cihaz_id, ad, modbus_adres, veri_tipi, erisim,
+                                     olcek_min_raw, olcek_max_raw, olcek_min_muh, olcek_max_muh,
+                                     gecmis_araligi_sn, gecmis_kayit_aktif)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (yeni_cihaz_id, t['ad'], t['modbus_adres'], t['veri_tipi'], t['erisim'],
+                  t['olcek_min_raw'], t['olcek_max_raw'], t['olcek_min_muh'], t['olcek_max_muh'],
+                  t['gecmis_araligi_sn'], t['gecmis_kayit_aktif']))
+            tag_id_eslesme[t['id']] = cur.lastrowid
+
+        medya_id_eslesme = {}
+        for m in conn.execute('SELECT * FROM medya WHERE cihaz_id = ?', (kaynak_cihaz_id,)).fetchall():
+            cur = conn.execute(
+                'INSERT INTO medya (cihaz_id, dosya_adi, mime_tipi, veri) VALUES (?, ?, ?, ?)',
+                (yeni_cihaz_id, m['dosya_adi'], m['mime_tipi'], m['veri'])
+            )
+            medya_id_eslesme[m['id']] = cur.lastrowid
+
+        sayfalar = conn.execute('SELECT * FROM sayfalar WHERE cihaz_id = ?', (kaynak_cihaz_id,)).fetchall()
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Sayfalar — bağlantılı (şablon) sayfalarda kaynak cihaz kopyalanan
+    # cihazın KENDİSİ olmadığı sürece (normal durum — bir cihaz kendi
+    # kendine şablon olmaz) referans AYNEN korunur, yeniden eşleme gerekmez.
+    for s in sayfalar:
+        if s['sablon_kaynak_cihaz_id'] and s['sablon_kaynak_sayfa_ad']:
+            sayfa_baglantili_olustur(yeni_cihaz_id, s['ad'], s['sablon_kaynak_cihaz_id'], s['sablon_kaynak_sayfa_ad'])
+            continue
+        elementler = json.loads(s['elementler'])
+        elementler = [_element_referanslarini_yenile(el, tag_id_eslesme, medya_id_eslesme) for el in elementler]
+        sayfa_kaydet(
+            yeni_cihaz_id, s['ad'], elementler, hedef=s['hedef'],
+            tuval_w=s['tuval_w'], tuval_h=s['tuval_h'], arkaplan=s['arkaplan'],
+            arkaplan_resim=_medya_url_yenile(s['arkaplan_resim'], medya_id_eslesme),
+            arkaplan_sigdirma=s['arkaplan_sigdirma'],
+            arkaplan_gradient_aktif=bool(s['arkaplan_gradient_aktif']),
+            arkaplan_gradient_renk1=s['arkaplan_gradient_renk1'],
+            arkaplan_gradient_renk2=s['arkaplan_gradient_renk2'],
+            arkaplan_gradient_yon=s['arkaplan_gradient_yon'],
+            sayfa_turu=s['sayfa_turu'], giris_animasyonu=s['giris_animasyonu'],
+        )
+        for el in elementler:
+            if el.get('type') == 'alarm' and el.get('tag_id'):
+                alarm_kural_kaydet(
+                    el['id'], yeni_cihaz_id, el['tag_id'], el.get('tip') or 'bool',
+                    bool_tetik_deger=el.get('bool_tetik_deger') or '1',
+                    karsilastirma=el.get('karsilastirma') or '>',
+                    esik_deger=el.get('esik_deger') or 0,
+                    mesaj=el.get('mesaj') or '',
+                )
+
+    return True, yeni_cihaz_id
+
+
 def proje_getir_kod(kod: str):
     conn = get_db()
     try:

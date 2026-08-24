@@ -16,6 +16,11 @@
             </div>
             <button type="submit">Kaydet</button>
         </form>
+        <form method="POST" action="{{ url_for('dashboard.cihaz_kopyala', cihaz_id=cihaz.id) }}" onsubmit="return cihazKopyalaOnayla(this, '{{ cihaz.ad|e }}');">
+            <input type="hidden" name="ad" class="cihaz-kopya-ad-input">
+            <label style="visibility:hidden;">.</label>
+            <button type="submit" style="background:var(--panel2);display:block;">📋 Cihazı Kopyala</button>
+        </form>
         <form method="POST" action="{{ url_for('dashboard.cihaz_sil', cihaz_id=cihaz.id) }}" onsubmit="return confirm('{{ cihaz.ad }} silinsin mi? Tüm tag ve sayfaları da silinir.');">
             <label style="visibility:hidden;">.</label>
             <button type="submit" style="background:var(--red);display:block;">Cihazı Sil</button>
@@ -23,6 +28,18 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+// Kullanıcı isteği: proje kopyalamayla aynı mantık, tek cihaz için — aynı
+// projede tag/sayfa/medyasıyla birlikte yeni bir cihaz oluşturur.
+function cihazKopyalaOnayla(formEl, kaynakAd) {
+    const varsayilan = kaynakAd + ' (kopya)';
+    const yeniAd = prompt('Yeni cihazın adı ne olsun?', varsayilan);
+    if (!yeniAd || !yeniAd.trim()) return false; // iptal edildi
+    formEl.querySelector('.cihaz-kopya-ad-input').value = yeniAd.trim();
+    return confirm(`"${kaynakAd}" cihazı "${yeniAd.trim()}" adıyla kopyalanacak (tüm tag/sayfa/resimleriyle) — yeni cihaz henüz hiçbir ESP32'ye bağlı olmayacak. Devam edilsin mi?`);
+}
+</script>
 
 <div class="card">
     <h2>📶 Bağlantı ve Modbus Durumu</h2>

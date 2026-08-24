@@ -102,6 +102,23 @@ def cihaz_wifi_sifirla_iste(cihaz_id):
     return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
 
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/kopyala', methods=['POST'])
+@tasarimci_required
+def cihaz_kopyala(cihaz_id):
+    """Kullanıcı isteği: proje kopyalama gibi ama TEK cihaz için — aynı
+    projede tag/sayfa/medyasıyla birlikte yeni bir cihaz oluşturur."""
+    if not _cihaz_dogrula(cihaz_id):
+        flash('Cihaz bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    yeni_ad = request.form.get('ad', '').strip()
+    ok, sonuc = database.cihaz_kopyala(cihaz_id, yeni_ad)
+    if ok:
+        flash(f'Cihaz kopyalandı — yeni cihaz henüz hiçbir ESP32\'ye bağlı değil, kimliğini yeni cihazın yönetim sayfasından görebilirsin.', 'success')
+        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=sonuc))
+    flash(f'Hata: {sonuc}', 'danger')
+    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/sil', methods=['POST'])
 @tasarimci_required
 def cihaz_sil(cihaz_id):
