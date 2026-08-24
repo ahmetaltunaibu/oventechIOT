@@ -663,7 +663,7 @@ function tuvalCiz() {
         if (el.type === 'switch') {
             const switchBeklemede = el.tag_id && beklemedeYazmalar[el.tag_id];
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
-            const acikMi = !switchBeklemede && guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+            const acikMi = !switchBeklemede && guncelDeger !== null && degerlerEsitMi(guncelDeger, el.acik_deger);
             div.style.background = switchBeklemede ? '#5a6270' : (acikMi ? el.renk_acik : el.renk_kapali);
             if (switchBeklemede) div.classList.add('el-beklemede');
             div.style.borderRadius = (el.h / 2) + 'px';
@@ -692,7 +692,7 @@ function tuvalCiz() {
         if (el.type === 'checkbox') {
             const checkboxBeklemede = el.tag_id && beklemedeYazmalar[el.tag_id];
             const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
-            const acikMi = !checkboxBeklemede && guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+            const acikMi = !checkboxBeklemede && guncelDeger !== null && degerlerEsitMi(guncelDeger, el.acik_deger);
             div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'sol'); div.style.gap = '8px';
             div.style.color = el.renk_yazi || '#e8eef4';
             div.style.fontSize = (el.font_boyutu || 14) + 'px';
@@ -921,7 +921,7 @@ function tuvalCiz() {
             renkGuncelle(div, el);
         }
         const guncelDegerBtn = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
-        const acikMi = guncelDegerBtn !== null && String(guncelDegerBtn) === String(el.acik_deger);
+        const acikMi = guncelDegerBtn !== null && degerlerEsitMi(guncelDegerBtn, el.acik_deger);
         const butonResimUrl = acikMi ? el.resim_url_acik : el.resim_url_kapali;
         const ikonOlcek = (el.font_boyutu || 13) / 13;
         if (butonResimUrl) {
@@ -1215,7 +1215,7 @@ function alarmTetiklendiMi(el, deger) {
 function renkGuncelle(div, el) {
     if (el.seffaf_arkaplan) { div.style.background = 'transparent'; return; }
     const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
-    const acik = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+    const acik = guncelDeger !== null && degerlerEsitMi(guncelDeger, el.acik_deger);
     div.style.background = acik ? el.renk_acik : el.renk_kapali;
 }
 
@@ -1226,8 +1226,18 @@ function tikla(el) {
     if (beklemedeYazmalar[el.tag_id]) return;
     if (el.mod === 'set_on') { yaz(el, el.acik_deger); return; }
     if (el.mod === 'set_off') { yaz(el, el.kapali_deger); return; }
+    // "Kalıcı / Maintained" (eski adıyla toggle): basınca durumu tersine
+    // çevirir. Kullanıcı raporu: bazı tag'lerde basınca kalıcı olmuyor,
+    // eski duruma geri dönüyordu — kök neden muhtemelen burada kullanılan
+    // KATI string karşılaştırmaydı (String(a)===String(b)); PLC'den gelen
+    // değer biçimi (örn. "1.00") ile acik_deger'in biçimi ("1") birebir
+    // aynı olmayınca "açık mıyım" sorusu hep YANLIŞ çıkıyor, bu da her
+    // tıklamada hep AYNI (acik_deger) yazılmasına yol açıyordu — dıştan
+    // "basınca değişmiyor/eski haline dönüyor" gibi görünüyordu. degerlerEsitMi
+    // (sayısal toleranslı karşılaştırma — 195 ile 195.00 gibi) kullanılarak
+    // düzeltildi; aynı fonksiyon zaman aşımı kontrolünde de kullanılıyor.
     const guncelDeger = degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
-    const acik = guncelDeger !== null && String(guncelDeger) === String(el.acik_deger);
+    const acik = guncelDeger !== null && degerlerEsitMi(guncelDeger, el.acik_deger);
     yaz(el, acik ? el.kapali_deger : el.acik_deger);
 }
 
