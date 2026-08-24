@@ -125,6 +125,24 @@
        eskiden sadece hata/bekleme vardı, başarı sessizdi. */
     #hata-toast.basarili { background: #123a24; border-color: #2ecc71; color: #8ff0b8; }
 
+    /* Kullanıcı isteği: WiFi/Modbus sorununda OPERATÖR de görsün —
+       tasarımcının hiçbir şey eklemesine gerek kalmadan HER çalışma
+       sayfasında otomatik çıkan, göz kırpan bir uyarı. #hata-toast'ın
+       biraz üstünde durur ki ikisi aynı anda görünürse üst üste binmesin
+       (yazma hatası + bağlantı sorunu aynı anda olabilir). */
+    @keyframes baglantiSorunuGozKirp { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    #baglanti-sorunu-toast {
+        position: fixed; left: 50%; bottom: 68px; transform: translateX(-50%) translateY(20px);
+        background: #3a1f22; border: 2px solid var(--red, #e74c3c); color: #ff8a8a;
+        padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 700;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.5); z-index: 901; opacity: 0; pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease; max-width: 90vw; text-align: center;
+    }
+    #baglanti-sorunu-toast.gorunur {
+        transform: translateX(-50%) translateY(0);
+        animation: baglantiSorunuGozKirp 1s ease-in-out infinite;
+    }
+
     /* Kullanıcı isteği: buton/switch/onay kutusuna basınca PLC'den onay
        gelene kadar (poll ile doğrulanana ya da zaman aşımına uğrayana
        kadar) ASLA anında yeni duruma geçmesin — nötr, "bekliyor" görünümü
@@ -188,6 +206,11 @@
      uygulamıyor, bunun yerine burada kısa süreli bir hata bildirimi (toast)
      gösteriyor — bkz. hataGoster(). -->
 <div id="hata-toast"></div>
+
+<!-- Kullanıcı isteği: WiFi/Modbus sorununda operatör de görsün — tasarımcının
+     bir şey eklemesine gerek kalmadan otomatik, göz kırpan bir uyarı. Bkz.
+     baglantiDurumuKontrolEt(). -->
+<div id="baglanti-sorunu-toast"></div>
 
 <!-- Popup ekranı (sayfa_turu='popup' hedefine "Sayfaya Git" ile gidilince) -->
 <div id="popup-arkaplan" onclick="if (event.target === this) popupKapat()">
@@ -1200,6 +1223,32 @@ async function alarmGecmisiYukle() {
 }
 alarmGecmisiYukle();
 setInterval(alarmGecmisiYukle, 10000);
+
+// ---------- Bağlantı/Modbus sorunu uyarısı (otomatik, tüm sayfalarda) ----------
+// Kullanıcı isteği: tasarımcının bir element eklemesine GEREK KALMADAN,
+// WiFi/Modbus sorununda operatör de görsün — mevcut yazma hata/bekleme
+// toast'ıyla aynı görsel dilde, göz kırparak, ekranın altında otomatik çıkar.
+const BAGLANTI_SORUNU_ESIK_SN = 20; // bu kadar saniye veri gelmezse "bağlantı koptu" say
+async function baglantiDurumuKontrolEt() {
+    try {
+        const res = await fetch(`/api/cihaz/${cihazId}/baglanti-durumu`);
+        if (!res.ok) return;
+        const d = await res.json();
+        const toast = document.getElementById('baglanti-sorunu-toast');
+        if (!toast) return;
+        if (d.saniye_once === null || d.saniye_once === undefined || d.saniye_once > BAGLANTI_SORUNU_ESIK_SN) {
+            toast.textContent = '⚠️ Bağlantı Sorunu — cihazdan veri alınamıyor (WiFi/sunucu kontrol edilmeli)';
+            toast.classList.add('gorunur');
+        } else if (d.modbus_saglikli === false) {
+            toast.textContent = `⚠️ Modbus Hatası — ${d.modbus_hata_sayisi} tag okunamıyor` + (d.modbus_hata_mesaji ? `: ${d.modbus_hata_mesaji}` : '');
+            toast.classList.add('gorunur');
+        } else {
+            toast.classList.remove('gorunur');
+        }
+    } catch (e) { /* bağlantı sorunu — bir sonraki denemede güncellenir */ }
+}
+baglantiDurumuKontrolEt();
+setInterval(baglantiDurumuKontrolEt, 5000);
 
 function sekilArkaplanCSS(el) {
     if (el.sekil_gradient_aktif) {

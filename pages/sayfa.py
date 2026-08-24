@@ -373,6 +373,24 @@ def api_son_gorulme(cihaz_id):
     return jsonify({'saniye_once': database.cihaz_son_gorulme_saniye_once(cihaz_id)})
 
 
+@sayfa_bp.route('/api/cihaz/<int:cihaz_id>/baglanti-durumu')
+@login_required
+def api_baglanti_durumu(cihaz_id):
+    """Kullanıcı isteği: WiFi/Modbus sorununda OPERATÖR de görsün — bu uç
+    sayfa_calistir.html'de HER sayfada otomatik (tasarımcının bir şey
+    eklemesine gerek kalmadan) polling ile çekilir; bağlantı koptuysa ya
+    da Modbus hata bildiriyorsa ekranda göz kırpan bir uyarı çıkar."""
+    cihaz = _cihaz_dogrula(cihaz_id)
+    if not cihaz:
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    return jsonify({
+        'saniye_once': database.cihaz_son_gorulme_saniye_once(cihaz_id),
+        'modbus_saglikli': cihaz.get('son_modbus_saglikli'),
+        'modbus_hata_sayisi': cihaz.get('son_modbus_hata_sayisi') or 0,
+        'modbus_hata_mesaji': cihaz.get('son_modbus_hata_mesaji') or '',
+    })
+
+
 @sayfa_bp.route('/api/cihaz/<int:cihaz_id>/alarm-gecmisi')
 @login_required
 def api_alarm_gecmisi(cihaz_id):
