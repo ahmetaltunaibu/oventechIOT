@@ -147,8 +147,23 @@
          Modbus Adresi) doldurulup kutudan çıkılınca gerçek tag olarak oluşur. -->
     <style>
         .tag-tablo-sarici { overflow-x: auto; }
-        #tagTablosu { width: 100%; border-collapse: collapse; }
+        /* Kullanıcı raporu: sütunlar bazen sığmıyor, tag isimleri kesiliyor,
+           genişletemiyordu. Kök neden: width:100% + çok sayıda sütun —
+           tarayıcı hepsini konteynere SIĞDIRMAK için orantılı olarak
+           SIKIŞTIRIYORDU (üstteki overflow-x:auto hiç devreye girmiyordu,
+           çünkü tablo asla 100%'ü aşmıyordu). Artık tablo gerektiğinde
+           konteynerden GENİŞ olabiliyor (width:auto + min-width:100%) —
+           sığmayınca sıkışmak yerine sarmalayıcı yatay kayıyor; her hücreye
+           de asgari bir genişlik (min-width) verildi ki metin/girdi alanı
+           asla aşırı daralmasın. */
+        #tagTablosu { width: auto; min-width: 100%; border-collapse: collapse; }
         #tagTablosu th, #tagTablosu td { padding: 0; border: 1px solid var(--border); }
+        /* :has() yerine doğrudan alan üzerinden — eski tarayıcılarda da çalışsın. */
+        .tag-hucre[data-alan="ad"] { min-width: 160px; }
+        .tag-hucre[data-alan="modbus_adres"] { min-width: 110px; }
+        select.tag-hucre[data-alan="veri_tipi"] { min-width: 150px; }
+        select.tag-hucre[data-alan="erisim"] { min-width: 130px; }
+        .tag-hucre[data-alan="gecmis_araligi_sn"] { min-width: 100px; }
         #tagTablosu th {
             padding: 8px 10px; text-align: left; font-size: 12px; color: var(--text-secondary);
             background: var(--panel2); user-select: none; white-space: nowrap;

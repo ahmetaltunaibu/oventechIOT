@@ -493,7 +493,7 @@
     </div>
 
     <div id="ozAlanDurum" class="ozel-alan">
-        <label>Bağlı Tag</label>
+        <label>Varsayılan Tag (aşağıdaki durumlardan kendi tag'ini seçmeyenler bunu kullanır)</label>
         <select id="ozDurumTag"><option value="">— seçilmedi —</option></select>
 
         <label>Durum Modu</label>
@@ -1478,10 +1478,14 @@ function cizgiEkle(x, y) {
 // durumla başlasın ama 3/4/5... istediği kadar duruma çıkarabilsin, her
 // durumun kendi metni/arkaplan-yazı rengi/font boyutu/(opsiyonel) kendi
 // genişlik-yüksekliği ve/veya kendi resmi olabilsin.
-function yeniDurum(deger, metin, renkArkaplan, renkYazi) {
+function yeniDurum(deger, metin, renkArkaplan, renkYazi, tagId) {
     return {
+        // tag_id: null ise bu durum elementin üstteki "Varsayılan Tag"ını
+        // kullanır (bkz. sayfa_calistir.html hedefKatmanaEkle/durum dalı) —
+        // kullanıcı isteği: her durum kendi tag'ini gösterebilsin, bazısı
+        // bool bazısı int gibi FARKLI tag'ler tek göstergede birleşebilsin.
         deger: deger, metin: metin, renk_arkaplan: renkArkaplan, renk_yazi: renkYazi,
-        font_boyutu: 14, resim_url: '', genislik: '', yukseklik: ''
+        font_boyutu: 14, resim_url: '', genislik: '', yukseklik: '', tag_id: tagId || null
     };
 }
 function durumEkle(x, y) {
@@ -3327,6 +3331,8 @@ function durumSatirlariCiz() {
         satir.dataset.idx = i;
         satir.innerHTML = `
             <div class="durum-satir-baslik">Durum ${i}</div>
+            <label>Bu Durumun Tag'i (boş = yukarıdaki Varsayılan Tag) — bazı durumlar bool bazıları int/float tag'e bakabilir</label>
+            <select class="durum-tag"><option value="">— varsayılan tag —</option></select>
             <label>Tag Değeri (bu değere eşitse bu durum aktif olur)</label>
             <input type="text" class="durum-deger" value="${(d.deger ?? '').toString().replace(/"/g, '&quot;')}">
             ${modu === 'resim' ? `
@@ -3353,6 +3359,8 @@ function durumSatirlariCiz() {
             </div>
         `;
         kapsayici.appendChild(satir);
+        tagSecenekleriDoldur(satir.querySelector('.durum-tag'), '— varsayılan tag —');
+        satir.querySelector('.durum-tag').value = d.tag_id || '';
 
         if (modu === 'resim') {
             const dosyaInput = satir.querySelector('.durum-resim-dosya');
@@ -3406,8 +3414,10 @@ function _durumSatirlariniOku(el) {
     el.durumlar = satirlar.map(satir => {
         const eskiIdx = parseInt(satir.dataset.idx);
         const eski = (el.durumlar || [])[eskiIdx] || {};
+        const tagSel = satir.querySelector('.durum-tag').value;
         const durum = {
             deger: satir.querySelector('.durum-deger').value,
+            tag_id: tagSel ? parseInt(tagSel) : null,
             metin: modu === 'resim' ? (eski.metin || '') : satir.querySelector('.durum-metin').value,
             renk_arkaplan: modu === 'resim' ? (eski.renk_arkaplan || '#333333') : satir.querySelector('.durum-renk-arkaplan').value,
             renk_yazi: modu === 'resim' ? (eski.renk_yazi || '#ffffff') : satir.querySelector('.durum-renk-yazi').value,

@@ -120,6 +120,10 @@
     }
     #hata-toast.gorunur { opacity: 1; transform: translateX(-50%) translateY(0); }
     #hata-toast.bekleme { background: #2d2410; border-color: #f39c12; color: #ffd27a; }
+    /* Kullanıcı isteği: PLC'ye yazma gerçekten onaylanınca (geri okuma
+       hedeflenen değerle eşleşince) da kısa bir olumlu bildirim çıksın —
+       eskiden sadece hata/bekleme vardı, başarı sessizdi. */
+    #hata-toast.basarili { background: #123a24; border-color: #2ecc71; color: #8ff0b8; }
 
     /* Kullanıcı isteği: buton/switch/onay kutusuna basınca PLC'den onay
        gelene kadar (poll ile doğrulanana ya da zaman aşımına uğrayana
@@ -634,8 +638,17 @@ function tuvalCiz() {
             div.className = 'el-durum';
             div.textContent = '';
             const dList = el.durumlar || [];
-            const guncelDeger = el.tag_id && degerler[el.tag_id] ? degerler[el.tag_id].deger : null;
-            let durum = dList.find(d => String(d.deger) === String(guncelDeger));
+            // Kullanıcı isteği: her durum KENDİ tag'ine bakabilsin (biri
+            // bool bir Y çıkışını, biri int bir alarm kodunu izleyebilir) —
+            // durum.tag_id doluysa o kullanılır, boşsa elementin üstteki
+            // "varsayılan" tag'ine (el.tag_id) düşülür. Sayısal-toleranslı
+            // karşılaştırma (degerlerEsitMi) ile "195" / "195.00" gibi
+            // biçim farkları da sorun çıkarmaz.
+            let durum = dList.find(d => {
+                const hedefTagId = d.tag_id || el.tag_id;
+                const deger = hedefTagId && degerler[hedefTagId] ? degerler[hedefTagId].deger : null;
+                return deger !== null && degerlerEsitMi(deger, d.deger);
+            });
             if (!durum) durum = dList[0];
             div.style.borderRadius = (el.kose_yaricapi || 0) + 'px';
             if (durum) {
@@ -1280,7 +1293,7 @@ let _hataToastZamanlayici = null;
 function hataGoster(mesaj) {
     const toast = document.getElementById('hata-toast');
     if (!toast) return;
-    toast.classList.remove('bekleme');
+    toast.classList.remove('bekleme', 'basarili');
     toast.textContent = mesaj;
     toast.classList.add('gorunur');
     clearTimeout(_hataToastZamanlayici);
@@ -1290,12 +1303,24 @@ function beklemeGoster(mesaj) {
     const toast = document.getElementById('hata-toast');
     if (!toast) return;
     clearTimeout(_hataToastZamanlayici); // bekleme mesajı kendi kendine kapanmasın
+    toast.classList.remove('basarili');
     toast.textContent = mesaj;
     toast.classList.add('gorunur', 'bekleme');
 }
 function kaldirBeklemeToast() {
     const toast = document.getElementById('hata-toast');
     if (toast && toast.classList.contains('bekleme')) toast.classList.remove('gorunur', 'bekleme');
+}
+// PLC'ye yazma onaylandığında (bekleme başarıyla bitince) kısa süreli
+// yeşil bildirim — bkz. degerleriYenile()'deki 'geldi' dalı.
+function basariGoster(mesaj) {
+    const toast = document.getElementById('hata-toast');
+    if (!toast) return;
+    toast.classList.remove('bekleme');
+    toast.textContent = mesaj;
+    toast.classList.add('gorunur', 'basarili');
+    clearTimeout(_hataToastZamanlayici);
+    _hataToastZamanlayici = setTimeout(() => toast.classList.remove('gorunur', 'basarili'), 2000);
 }
 
 async function yaz(el, deger) {
@@ -1368,6 +1393,8 @@ async function degerleriYenile() {
             const geldi = yeniDegerler[tagId] && degerlerEsitMi(yeniDegerler[tagId].deger, bekleme.hedefDeger);
             if (geldi) {
                 delete beklemedeYazmalar[tagId];
+                const tagAdi = yeniDegerler[tagId].ad || '';
+                basariGoster('✅ PLC\'ye yazıldı' + (tagAdi ? ' — ' + tagAdi : ''));
             } else if (simdi - bekleme.zaman > YAZMA_ZAMAN_ASIMI_MS) {
                 delete beklemedeYazmalar[tagId];
                 hataGoster('❌ Zaman aşımı — PLC\'den yanıt alınamadı');
