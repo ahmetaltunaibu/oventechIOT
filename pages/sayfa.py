@@ -25,7 +25,10 @@ _MAKS_BOYUT = 4 * 1024 * 1024  # 4 MB — DB'ye BLOB olarak yaziliyor, cok buyum
 
 
 def _cihaz_dogrula(cihaz_id):
-    cihazlar = {c['id']: c for c in database.proje_cihazlari(session['proje_id'])}
+    # Kullanıcı isteği: 'operator' rolü artık projedeki tüm cihazları değil,
+    # sadece kendisine açıkça verilen cihazları görebilir/kullanabilir.
+    cihazlar = {c['id']: c for c in database.kullanici_erisebilir_cihazlar(
+        session.get('kullanici_id'), session.get('rol'), session['proje_id'])}
     return cihazlar.get(cihaz_id)
 
 

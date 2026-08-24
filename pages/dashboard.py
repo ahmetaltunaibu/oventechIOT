@@ -13,7 +13,7 @@ def dashboard_page():
             return redirect(url_for('admin.admin_page'))
         flash('Herhangi bir projeye bağlı değilsiniz.', 'danger')
         return redirect(url_for('login.login_page'))
-    cihazlar = database.proje_cihazlari(session['proje_id'])
+    cihazlar = database.kullanici_erisebilir_cihazlar(session.get('kullanici_id'), session.get('rol'), session['proje_id'])
     # Kullanıcı isteği: tam ekran/kart görünümü SADECE operatör girişinde —
     # admin ve tasarımcı için eski yapı (üst çubuk + tablo) korunuyor,
     # onlar yönetim/tasarım yapıyor, "gerçek program" hissi operatöre özel.
@@ -41,8 +41,10 @@ def cihaz_ekle():
 
 
 def _cihaz_dogrula(cihaz_id):
-    """Cihazın oturumdaki projeye ait olduğunu doğrular, yoksa None döner."""
-    cihazlar = {c['id']: c for c in database.proje_cihazlari(session['proje_id'])}
+    """Cihazın oturumdaki projeye ait olduğunu VE (operator ise) kullanıcının
+    bu cihaza erişimi olduğunu doğrular, yoksa None döner."""
+    cihazlar = {c['id']: c for c in database.kullanici_erisebilir_cihazlar(
+        session.get('kullanici_id'), session.get('rol'), session['proje_id'])}
     return cihazlar.get(cihaz_id)
 
 

@@ -43,7 +43,7 @@
             </div>
             <div>
                 <label>Rol</label>
-                <select name="rol" style="margin-bottom:0;">
+                <select name="rol" class="rol-secim" onchange="cihazListesiGuncelle(this)" style="margin-bottom:0;">
                     <option value="operator" {% if k.rol == 'operator' %}selected{% endif %}>Operatör</option>
                     <option value="tasarimci" {% if k.rol == 'tasarimci' %}selected{% endif %}>Tasarımcı</option>
                 </select>
@@ -52,6 +52,20 @@
                 <label>Yeni Şifre (boş bırakılırsa değişmez)</label>
                 <input type="password" name="yeni_sifre" style="margin-bottom:0;">
             </div>
+            {% if cihazlar %}
+            <div class="cihaz-erisim-alani" style="{{ '' if k.rol == 'operator' else 'display:none;' }}flex-basis:100%;margin-top:2px;padding:10px;background:var(--panel2);border-radius:8px;">
+                <label style="margin-bottom:6px;">Erişebileceği Cihazlar (işaretlenmezse hiçbirini göremez)</label>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                    {% for c in cihazlar %}
+                    <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:13px;color:var(--text);">
+                        <input type="checkbox" name="cihaz_idler" value="{{ c.id }}" style="width:auto;margin:0;"
+                               {% if c.id in kullanici_cihaz_erisimleri.get(k.id, []) %}checked{% endif %}>
+                        {{ c.ad }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             <button type="submit">Kaydet</button>
         </form>
     </div>
@@ -71,13 +85,38 @@
         <label>Ad Soyad</label>
         <input type="text" name="ad_soyad" required>
         <label>Rol</label>
-        <select name="rol">
+        <select name="rol" class="rol-secim" onchange="cihazListesiGuncelle(this)">
             <option value="operator">Operatör (sadece görüntüler/kontrol eder)</option>
             <option value="tasarimci">Tasarımcı (sayfa/element/tag düzenler)</option>
         </select>
+        {% if cihazlar %}
+        <div class="cihaz-erisim-alani" style="margin:10px 0;padding:10px;background:var(--panel2);border-radius:8px;">
+            <label style="margin-bottom:6px;">Erişebileceği Cihazlar (işaretlenmezse hiçbirini göremez)</label>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                {% for c in cihazlar %}
+                <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:13px;color:var(--text);">
+                    <input type="checkbox" name="cihaz_idler" value="{{ c.id }}" style="width:auto;margin:0;">
+                    {{ c.ad }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
         <button type="submit">Kullanıcı Ekle</button>
     </form>
 </div>
+
+<script>
+// Kullanıcı isteği: 'operator' rolü artık sadece kendisine açıkça verilen
+// cihazları görsün — bu yüzden cihaz erişim listesi sadece Operatör
+// seçiliyken anlamlı, Tasarımcı seçiliyken gizleniyor (yine de gönderilirse
+// zararsız, sunucu tasarımcı için bu listeyi hiç kullanmıyor).
+function cihazListesiGuncelle(selectEl) {
+    const form = selectEl.closest('form');
+    const alan = form.querySelector('.cihaz-erisim-alani');
+    if (alan) alan.style.display = (selectEl.value === 'operator') ? '' : 'none';
+}
+</script>
 
 <div class="card">
     <h2>Cihazlar</h2>

@@ -163,6 +163,10 @@ def kullanici_duzenle(proje_id, kullanici_id):
         return redirect(url_for('admin.proje_detay', proje_id=proje_id))
 
     database.kullanici_guncelle(kullanici_id, ad_soyad, rol, yeni_sifre or None)
+    # Kullanıcı isteği: 'operator' rolü artık sadece kendisine açıkça
+    # verilen cihazları görsün — bu formdaki işaretli cihaz listesi.
+    cihaz_idler = [int(x) for x in request.form.getlist('cihaz_idler') if x.isdigit()]
+    database.kullanici_cihaz_erisimlerini_ayarla(kullanici_id, cihaz_idler)
     flash('Kullanıcı güncellendi.' + (' Şifre de değiştirildi.' if yeni_sifre else ''), 'success')
     return redirect(url_for('admin.proje_detay', proje_id=proje_id))
 
@@ -187,7 +191,9 @@ def proje_detay(proje_id):
         return redirect(url_for('admin.admin_page'))
     kullanicilar = database.proje_kullanicilari(proje_id)
     cihazlar = database.proje_cihazlari(proje_id)
-    return render_template('admin_proje.html', proje=proje, kullanicilar=kullanicilar, cihazlar=cihazlar)
+    kullanici_cihaz_erisimleri = {k['id']: database.kullanici_cihaz_erisim_idleri(k['id']) for k in kullanicilar}
+    return render_template('admin_proje.html', proje=proje, kullanicilar=kullanicilar, cihazlar=cihazlar,
+                            kullanici_cihaz_erisimleri=kullanici_cihaz_erisimleri)
 
 
 @admin_bp.route('/proje/<int:proje_id>/kullanici-ekle', methods=['POST'])
@@ -209,6 +215,9 @@ def kullanici_ekle(proje_id):
 
     ok, sonuc = database.kullanici_ekle(proje_id, kullanici_adi, sifre, ad_soyad, rol)
     if ok:
+        cihaz_idler = [int(x) for x in request.form.getlist('cihaz_idler') if x.isdigit()]
+        if cihaz_idler:
+            database.kullanici_cihaz_erisimlerini_ayarla(sonuc, cihaz_idler)
         flash(f'Kullanıcı eklendi: {kullanici_adi}', 'success')
     else:
         flash(f'Hata: {sonuc}', 'danger')

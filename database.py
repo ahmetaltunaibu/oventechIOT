@@ -68,6 +68,19 @@ def init_db():
         )
     ''')
 
+    # Kullanıcı isteği: 'operator' rolü artık projedeki TÜM cihazları değil,
+    # sadece kendisine AÇIKÇA verilen cihazları görsün — 'tasarimci' ve
+    # platform admin bundan etkilenmez, her zaman tüm cihazları görür.
+    # Kayıt yoksa (yeni kullanıcı, ya da bu tablo henüz boşsa) kullanıcı
+    # KASITLI OLARAK hiçbir cihaz göremez — elle atanması gerekiyor.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS kullanici_cihaz_erisim (
+            kullanici_id INTEGER NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
+            cihaz_id INTEGER NOT NULL REFERENCES cihazlar(id) ON DELETE CASCADE,
+            PRIMARY KEY (kullanici_id, cihaz_id)
+        )
+    ''')
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS cihazlar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -802,6 +815,46 @@ def proje_cihazlari(proje_id: int):
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+def kullanici_cihaz_erisim_idleri(kullanici_id: int):
+    """Bir kullanıcıya AÇIKÇA verilmiş cihaz id'lerini (set) döner."""
+    conn = get_db()
+    try:
+        rows = conn.execute('SELECT cihaz_id FROM kullanici_cihaz_erisim WHERE kullanici_id = ?', (kullanici_id,)).fetchall()
+        return {r['cihaz_id'] for r in rows}
+    finally:
+        conn.close()
+
+
+def kullanici_cihaz_erisimlerini_ayarla(kullanici_id: int, cihaz_idler: list):
+    """Bir kullanıcının cihaz erişim listesini TAMAMEN bu listeyle değiştirir
+    (eskisi silinir, yenisi yazılır) — kullanıcı düzenleme formundaki onay
+    kutuları listesinden çağrılır."""
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM kullanici_cihaz_erisim WHERE kullanici_id = ?', (kullanici_id,))
+        for cid in cihaz_idler:
+            conn.execute(
+                'INSERT OR IGNORE INTO kullanici_cihaz_erisim (kullanici_id, cihaz_id) VALUES (?, ?)',
+                (kullanici_id, cid)
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def kullanici_erisebilir_cihazlar(kullanici_id: int, rol: str, proje_id: int):
+    """Bir kullanıcının GÖREBİLECEĞİ cihazları döner. 'tasarimci' projedeki
+    tüm cihazları görür (tag/sayfa tasarlamak zaten hepsini yönetmeyi
+    gerektiriyor); 'operator' ise SADECE kullanici_cihaz_erisim'de kendisine
+    açıkça verilmiş cihazları görür — kayıt yoksa hiçbirini görmez (kullanıcı
+    isteği: varsayılan kısıtlı, elle açılması gerekiyor)."""
+    tum_cihazlar = proje_cihazlari(proje_id)
+    if rol != 'operator':
+        return tum_cihazlar
+    izinli_idler = kullanici_cihaz_erisim_idleri(kullanici_id)
+    return [c for c in tum_cihazlar if c['id'] in izinli_idler]
 
 
 def cihaz_getir_kimlik(cihaz_kimlik: str):
