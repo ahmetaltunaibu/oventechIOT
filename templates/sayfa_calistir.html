@@ -1048,6 +1048,22 @@ async function yaz(el, deger) {
     }
 }
 
+// KRİTİK (kullanıcı raporu): "PLC'den yanıt bekleniyor" hiç bitmeyip
+// zaman aşımına uğruyordu — ama PLC'de yazma aslında BAŞARILIYDI. Sebep:
+// onay kontrolü hedeflenen değeri (kullanıcının yazdığı HAM metin, örn.
+// "195") sunucudan gelen değerle (ESP32'nin PLC'den okuyup float için 2
+// ondalıkla FORMATLADIĞI hâli, örn. "195.00") BİREBİR METİN olarak
+// karşılaştırıyordu — "195" ≠ "195.00" olduğu için asla eşleşmiyordu.
+// Artık sayısal değerler SAYI olarak (küçük bir tolerans payıyla)
+// karşılaştırılıyor; sadece ikisi de sayı değilse (bool "0"/"1", metin
+// vb.) metin karşılaştırmasına düşülüyor.
+function degerlerEsitMi(a, b) {
+    if (String(a) === String(b)) return true;
+    const na = parseFloat(a), nb = parseFloat(b);
+    if (!isNaN(na) && !isNaN(nb)) return Math.abs(na - nb) < 0.005;
+    return false;
+}
+
 async function degerleriYenile() {
     try {
         const res = await fetch(`/api/cihaz/${cihazId}/degerler`);
@@ -1062,7 +1078,7 @@ async function degerleriYenile() {
         // (zaten hiç değiştirilmemişti).
         Object.keys(beklemedeYazmalar).forEach(tagId => {
             const bekleme = beklemedeYazmalar[tagId];
-            const geldi = yeniDegerler[tagId] && String(yeniDegerler[tagId].deger) === bekleme.hedefDeger;
+            const geldi = yeniDegerler[tagId] && degerlerEsitMi(yeniDegerler[tagId].deger, bekleme.hedefDeger);
             if (geldi) {
                 delete beklemedeYazmalar[tagId];
             } else if (simdi - bekleme.zaman > YAZMA_ZAMAN_ASIMI_MS) {
