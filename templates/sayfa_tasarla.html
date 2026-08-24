@@ -808,6 +808,30 @@
         <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Cihazın ESP32'sinden sunucuya en son ne zaman veri geldiğini gösterir ("X saniye önce" gibi) — bağlantı sağlıklı renk aktifse, eşik süresi aşılınca kırmızıya döner (cihaz muhtemelen offline).</p>
     </div>
 
+    <!-- Kullanıcı isteği: tekil "Alarm Oluştur" elementleri zaten
+         alarm_kayitlari'na yazıyor ama bunu görmek sadece cihaz_detay
+         (tasarımcı/admin) sayfasındaydı — operatör hiç göremiyordu. Bu
+         element aynı veriyi (TÜM alarm kurallarından gelen sinyaller, tek
+         yerde) doğrudan çalışma zamanı sayfasına getiriyor. -->
+    <div id="ozAlanAlarmGecmisi" class="ozel-alan">
+        <label>Başlık (opsiyonel)</label>
+        <input type="text" id="ozAlarmGecmisiBaslik" placeholder="örn. Arıza Geçmişi">
+        <label>Gösterilecek Kayıt Sayısı</label>
+        <input type="number" id="ozAlarmGecmisiLimit" value="20" min="1" max="200">
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="ozAlarmGecmisiSadeceAktif" style="width:auto;margin:0;"> Sadece Devam Eden (Giderilmemiş) Alarmlar
+        </label>
+        <label>Font Boyutu (px)</label>
+        <input type="number" id="ozAlarmGecmisiFontBoyutu" value="12" min="8" max="40">
+        <label>Yazı Rengi</label>
+        <input type="color" id="ozAlarmGecmisiRenkYazi" value="#e8eef4" style="height:38px;">
+        <label>Arka Plan</label>
+        <input type="color" id="ozAlarmGecmisiRenkArkaplan" value="#17222e" style="height:38px;">
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozAlarmGecmisiKoseYaricapi" value="6" min="0" max="200">
+        <p style="font-size:11px;color:var(--text-secondary);margin:4px 0 0;">Bu sayfadaki değil, CİHAZDAKİ TÜM alarm kurallarından gelen kayıtları listeler (en yeni üstte) — hâlâ devam eden (giderilmemiş) alarmlar kırmızı vurguyla gösterilir. Belli bir tag'e bağlanmaz.</p>
+    </div>
+
     <label>Custom CSS (ileri seviye — istediğin herhangi bir CSS özelliğini doğrudan yaz)</label>
     <textarea id="ozCustomCss" rows="3" placeholder="örn. box-shadow: 0 4px 12px #000; transform: rotate(2deg);" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:monospace;padding:8px;margin-bottom:10px;box-sizing:border-box;"></textarea>
 
@@ -1616,6 +1640,19 @@ function sonVeriEkle(x, y) {
     });
 }
 
+// Kullanıcı isteği: tekil "Alarm Oluştur" elementleri (tag'e bağlı kurallar)
+// zaten alarm_kayitlari'na yazıyor — bu element belli bir tag'e değil,
+// CİHAZIN TÜM alarm kurallarına bakıp geçmişi tek listede gösterir.
+function alarmGecmisiEkle(x, y) {
+    elementEkle({
+        id: uid(), type: 'alarmgecmisi',
+        x: Math.max(0, x - 130), y: Math.max(0, y - 80), w: 260, h: 160,
+        baslik: '', limit: 20, sadece_aktif: false,
+        font_boyutu: 12, renk_yazi: '#e8eef4', renk_arkaplan: '#17222e',
+        kose_yaricapi: 6, custom_css: ''
+    });
+}
+
 const GRAFIK_RENK_PALETI = ['#2e9ed9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e84393', '#95a5a6'];
 function grafikEkle(x, y) {
     elementEkle({
@@ -1963,6 +2000,34 @@ function render() {
             div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.boxSizing = 'border-box';
             div.textContent = (el.on_ek || '') + ornekSaniye + ' saniye önce';
+        } else if (el.type === 'alarmgecmisi') {
+            // Tasarımda gerçek alarm kaydı yok — örnek satırlarla nasıl
+            // görüneceğini gösteren statik bir önizleme.
+            div.style.background = el.renk_arkaplan || '#17222e';
+            div.style.color = el.renk_yazi || '#e8eef4';
+            div.style.fontSize = (el.font_boyutu || 12) + 'px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
+            div.style.boxSizing = 'border-box';
+            div.style.overflow = 'hidden';
+            div.style.padding = '6px 8px';
+            div.textContent = '';
+            const ornekler = [
+                { tag: 'YÜKSEK SICAKLIK', mesaj: 'Eşik aşıldı', aktif: true },
+                { tag: 'FAN ALARM', mesaj: 'Termik attı', aktif: false },
+            ];
+            if (el.baslik) {
+                const b = document.createElement('div');
+                b.textContent = el.baslik;
+                b.style.cssText = 'font-weight:700;font-size:0.95em;margin-bottom:4px;opacity:0.85;';
+                div.appendChild(b);
+            }
+            ornekler.forEach(o => {
+                const satir = document.createElement('div');
+                satir.style.cssText = 'display:flex;justify-content:space-between;gap:8px;padding:3px 0;'
+                    + 'border-bottom:1px solid rgba(255,255,255,0.08);' + (o.aktif ? 'color:#e74c3c;' : '');
+                satir.innerHTML = `<span>${o.tag} — ${o.mesaj}</span><span style="opacity:0.7;white-space:nowrap;">${o.aktif ? 'devam ediyor' : '2sa önce'}</span>`;
+                div.appendChild(satir);
+            });
         } else {
             // Kullanıcı isteği: seçtiği stil (açık/kapalı renk) tuvalde görünmüyordu
             // — "Önizleme Durumu" seçimine göre ilgili renk gösterilir.
@@ -3011,6 +3076,7 @@ function tuvalBaglamMenusu(e) {
         { etiket: '🖼️ Grup Kutusu / Çerçeve Ekle', aksiyon: () => groupboxEkle(tuvalX, tuvalY) },
         { etiket: '📈 Grafik Ekle', aksiyon: () => grafikEkle(tuvalX, tuvalY) },
         { etiket: '🚨 Alarm Oluştur', aksiyon: () => alarmEkle(tuvalX, tuvalY) },
+        { etiket: '📋 Alarm Geçmişi Ekle', aksiyon: () => alarmGecmisiEkle(tuvalX, tuvalY) },
         { etiket: '🕐 Saat/Tarih Ekle', aksiyon: () => saatTarihEkle(tuvalX, tuvalY) },
         { etiket: '📡 Son Veri (Bağlantı) Ekle', aksiyon: () => sonVeriEkle(tuvalX, tuvalY) },
         { ayrac: true },
@@ -3082,7 +3148,7 @@ const TIP_ADLARI = {
     durum: 'Durum Göstergesi', switch: 'Switch (Sürgü)', textbox: 'Metin Kutusu', inputbox: 'Giriş Kutusu',
     combobox: 'Açılır Liste', checkbox: 'Onay Kutusu', progressbar: 'İlerleme Çubuğu',
     groupbox: 'Grup Kutusu/Çerçeve', grafik: 'Grafik', alarm: 'Alarm', saattarih: 'Saat/Tarih',
-    sonveri: 'Son Veri (Bağlantı)',
+    sonveri: 'Son Veri (Bağlantı)', alarmgecmisi: 'Alarm Geçmişi',
 };
 // Metin hizalamanın tipe göre varsayılanı — mevcut (bu özellik eklenmeden
 // önceki) görünümü bozmasın diye her tipin ESKİ sabit davranışıyla aynı.
@@ -3117,6 +3183,7 @@ function guncellePanel() {
     document.getElementById('ozAlanAlarm').classList.toggle('gorunur', el.type === 'alarm');
     document.getElementById('ozAlanSaatTarih').classList.toggle('gorunur', el.type === 'saattarih');
     document.getElementById('ozAlanSonVeri').classList.toggle('gorunur', el.type === 'sonveri');
+    document.getElementById('ozAlanAlarmGecmisi').classList.toggle('gorunur', el.type === 'alarmgecmisi');
 
     document.getElementById('ozW').value = el.w;
     document.getElementById('ozH').value = el.h;
@@ -3299,6 +3366,14 @@ function guncellePanel() {
         document.getElementById('ozSonVeriSeffaf').checked = sonVeriSeffaf;
         document.getElementById('ozSonVeriRenkArkaplan').value = sonVeriSeffaf ? '#1e2d3d' : el.renk_arkaplan;
         document.getElementById('ozSonVeriKoseYaricapi').value = el.kose_yaricapi ?? 6;
+    } else if (el.type === 'alarmgecmisi') {
+        document.getElementById('ozAlarmGecmisiBaslik').value = el.baslik || '';
+        document.getElementById('ozAlarmGecmisiLimit').value = el.limit || 20;
+        document.getElementById('ozAlarmGecmisiSadeceAktif').checked = !!el.sadece_aktif;
+        document.getElementById('ozAlarmGecmisiFontBoyutu').value = el.font_boyutu || 12;
+        document.getElementById('ozAlarmGecmisiRenkYazi').value = el.renk_yazi || '#e8eef4';
+        document.getElementById('ozAlarmGecmisiRenkArkaplan').value = el.renk_arkaplan || '#17222e';
+        document.getElementById('ozAlarmGecmisiKoseYaricapi').value = el.kose_yaricapi ?? 6;
     }
 
     document.getElementById('ozCustomCss').value = el.custom_css || '';
@@ -3679,6 +3754,14 @@ function uygula() {
         el.renk_yazi = document.getElementById('ozSonVeriRenkYazi').value;
         el.renk_arkaplan = document.getElementById('ozSonVeriSeffaf').checked ? 'transparent' : document.getElementById('ozSonVeriRenkArkaplan').value;
         el.kose_yaricapi = parseInt(document.getElementById('ozSonVeriKoseYaricapi').value) || 0;
+    } else if (el.type === 'alarmgecmisi') {
+        el.baslik = document.getElementById('ozAlarmGecmisiBaslik').value;
+        el.limit = Math.min(200, Math.max(1, parseInt(document.getElementById('ozAlarmGecmisiLimit').value) || 20));
+        el.sadece_aktif = document.getElementById('ozAlarmGecmisiSadeceAktif').checked;
+        el.font_boyutu = parseInt(document.getElementById('ozAlarmGecmisiFontBoyutu').value) || 12;
+        el.renk_yazi = document.getElementById('ozAlarmGecmisiRenkYazi').value;
+        el.renk_arkaplan = document.getElementById('ozAlarmGecmisiRenkArkaplan').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozAlarmGecmisiKoseYaricapi').value) || 0;
     } else if (el.type === 'sekil') {
         el.sekil_dolgu = document.getElementById('ozSekilDolgu').value;
         el.sekil_kenarlik = document.getElementById('ozSekilKenarlik').value;

@@ -87,6 +87,18 @@ def esp32_xchange(cihaz_kimlik):
     if not isinstance(degerler, dict):
         return jsonify({'error': 'degerler bir obje olmalı: {"tag_id": "deger"}'}), 400
 
+    # Kullanıcı isteği: ESP32'nin bu turdaki Modbus okuma/yazma sağlığını
+    # (eskiden sadece Seri Monitör'de görünen bilgi) sunucuya da bildirsin —
+    # cihaz yönetim sayfasında görülebilsin. Alanlar opsiyonel — eski
+    # firmware (bunları göndermeyen) hâlâ sorunsuz çalışır.
+    if 'modbus_saglikli' in veri:
+        database.cihaz_modbus_durumu_guncelle(
+            cihaz_kimlik,
+            bool(veri.get('modbus_saglikli')),
+            int(veri.get('modbus_hata_sayisi') or 0),
+            str(veri.get('modbus_hata_mesaji') or '')[:500]
+        )
+
     tagler = database.cihaz_tagleri(cihaz['id'])
     tag_idleri = {t['id'] for t in tagler}
     islenen = 0
@@ -119,7 +131,13 @@ def esp32_xchange(cihaz_kimlik):
     if yazilan_tag_idleri:
         database.tagler_yazilacak_temizle(yazilan_tag_idleri)
 
-    return jsonify({'success': True, 'islenen': islenen, 'yazilacaklar': yazilacaklar})
+    # Kullanıcı isteği: cihaz yönetim sayfasındaki "WiFi Ayarlarını Uzaktan
+    # Sıfırla" butonuna basıldıysa, ESP32 hâlâ bağlıyken (bu isteği
+    # yapabildiğine göre) burada haber veriliyor — bayrak tek seferlik,
+    # okunur okunmaz sıfırlanıyor.
+    wifi_sifirla = database.cihaz_wifi_sifirlama_durumu_al_ve_temizle(cihaz_kimlik)
+
+    return jsonify({'success': True, 'islenen': islenen, 'yazilacaklar': yazilacaklar, 'wifi_sifirla': wifi_sifirla})
 
 
 # ============================================================

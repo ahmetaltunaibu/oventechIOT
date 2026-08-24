@@ -91,6 +91,17 @@ def cihaz_baslangic_sayfa(cihaz_id):
     return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
 
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/wifi-sifirla-iste', methods=['POST'])
+@tasarimci_required
+def cihaz_wifi_sifirla_iste(cihaz_id):
+    if not _cihaz_dogrula(cihaz_id):
+        flash('Cihaz bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    database.cihaz_wifi_sifirlama_iste(cihaz_id)
+    flash('WiFi sıfırlama isteği gönderildi — cihaz internete bağlıysa bir sonraki senkronunda (en fazla ~5sn) kendi WiFi ayarlarını unutup kurulum moduna girecek. Cihaz o an offline ise bu komuta ulaşamaz, tekrar denemen gerekir.', 'success')
+    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/sil', methods=['POST'])
 @tasarimci_required
 def cihaz_sil(cihaz_id):

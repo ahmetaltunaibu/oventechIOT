@@ -71,6 +71,18 @@ gemba-iot-gateway ile aynı kart düzeni/pin numaraları kullanılıyor — kır
 
 oventechIOT'ta cihazın yönetim sayfasında (cihaz_detay) bir "📡 Firmware" kartı var — oradan `.bin` dosyası yüklersin, hedef olarak "Bu Cihaz" ya da "Tüm Cihazlar" seçersin. ESP32 her 10 dakikada bir sunucuya sorar (`GET /esp32/<kimlik>/firmware/kontrol`), yeni sürüm varsa indirip kendini flaslar ve yeniden başlar — kabloya bağlamana gerek yok.
 
+## Uzaktan WiFi sıfırlama (v1.5.0)
+
+Kullanıcı isteği: WiFi ayarını değiştirmek (örn. cihaz taşındı, ağ şifresi değişti) için artık BOOT butonuna 5sn basmaya gerek yok — cihaz yönetim sayfasındaki **"🔄 WiFi Ayarlarını Uzaktan Sıfırla"** butonuna basılır. ESP32 bir sonraki `xchange` senkronunda (cihaz hâlâ WiFi'ye bağlıysa, en fazla ~5sn içinde) bunu görür, kendi WiFi bilgisini (SSID/şifre) unutur ve kurulum portalını (`OventechIOT-Kurulum` ağı) açar — **cihaz kimliği ve sunucu adresi dokunulmadan kalır**, tekrar girmene gerek yok.
+
+⚠️ **Cihaz o an offline'sa bu buton işe yaramaz** — komut cihaza WiFi üzerinden ulaşıyor, WiFi zaten kopuksa gönderilemez. Böyle bir durumda hâlâ fiziksel BOOT butonu (5sn basılı tutma) gerekir.
+
+Teknik: sunucu bir bayrak (`cihazlar.wifi_sifirlama_istendi`) işaretler; ESP32 `xchange` cevabında `wifi_sifirla:true` görünce bunu Preferences'a (`zorlaSifirlaSonraki`) yazıp kendini yeniden başlatır — `setup()` bunu fiziksel BOOT butonuyla AYNI şekilde işler (`kurulumPortaliBaslat(true)` → `wm.resetSettings()`), okunur okunmaz temizlenir (tek seferlik).
+
+## Modbus durumunu sunucuda görme (v1.5.0)
+
+Eskiden bir tag'in Modbus okuma/yazma hatası SADECE Seri Monitör'de (USB kablosuyla) görünüyordu. Artık her `xchange` senkronunda ESP32, o turun sonucunu da gönderiyor (`modbus_saglikli`, `modbus_hata_sayisi`, `modbus_hata_mesaji` — hangi tag'de hangi hata olduğu dahil) — cihaz yönetim sayfasındaki **"📶 Bağlantı ve Modbus Durumu"** kartında görünür, kabloya bağlanmana gerek kalmaz.
+
 **Yeni bir sürüm derleyip yüklerken** `.ino` dosyasının başındaki `FIRMWARE_VERSION` sabitini artırmayı unutma (örn. `"1.0.0"` → `"1.1.0"`) — sürüm karşılaştırması bu string'e göre yapılıyor, artırmazsan ESP32 "zaten güncelim" diyip indirmez.
 
 ## Veri tipi ↔ Modbus eşlemesi

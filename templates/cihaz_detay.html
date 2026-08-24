@@ -25,6 +25,45 @@
 </div>
 
 <div class="card">
+    <h2>📶 Bağlantı ve Modbus Durumu</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:-6px;">
+        ESP32'nin her senkronda bildirdiği bilgiler — kabloya bağlanıp Seri Monitör açmana gerek kalmadan buradan görebilirsin.
+    </p>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:10px;">
+        <div>
+            <div style="font-size:11px;color:var(--text-secondary);">Sunucuya Son Bağlanma</div>
+            <div style="font-size:14px;font-weight:600;">{{ cihaz.son_gorulme or 'hiç bağlanmadı' }}</div>
+        </div>
+        <div>
+            <div style="font-size:11px;color:var(--text-secondary);">Modbus Durumu (son rapor)</div>
+            {% if cihaz.son_modbus_rapor_zamani %}
+                {% if cihaz.son_modbus_saglikli %}
+                    <span class="badge on" style="background:#2ecc71;color:#fff;">✅ Sağlıklı</span>
+                {% else %}
+                    <span class="badge" style="background:var(--red);color:#fff;">❌ {{ cihaz.son_modbus_hata_sayisi }} tag'de hata{% if cihaz.son_modbus_hata_mesaji %} — {{ cihaz.son_modbus_hata_mesaji }}{% endif %}</span>
+                {% endif %}
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">{{ cihaz.son_modbus_rapor_zamani }}</div>
+            {% else %}
+                <div style="font-size:13px;color:var(--text-secondary);">Henüz rapor yok (eski firmware ya da hiç senkron olmadı)</div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+    <div style="margin-top:16px;">
+        <form method="POST" action="{{ url_for('dashboard.cihaz_wifi_sifirla_iste', cihaz_id=cihaz.id) }}"
+              onsubmit="return confirm('Cihaz şu an bağlı olduğu WiFi ağını unutacak ve kurulum moduna girecek. Cihaz internete bağlıysa bu birkaç saniye içinde uygulanır. Emin misin?');">
+            <button type="submit" style="background:var(--panel2);">🔄 WiFi Ayarlarını Uzaktan Sıfırla</button>
+        </form>
+        {% if cihaz.wifi_sifirlama_istendi %}
+        <p style="font-size:12px;color:#f39c12;margin-top:6px;">⏳ Sıfırlama isteği gönderildi, cihazın bir sonraki senkronunu bekliyor…</p>
+        {% endif %}
+        <p style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Sadece WiFi bilgisi unutulur — cihaz kimliği ve sunucu adresi kalır, tekrar girmene gerek yok.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
     <h2>🚨 Alarm Geçmişi
         {% set aktif_alarmlar = alarmlar | selectattr('giderilme_zamani', 'none') | list %}
         {% if aktif_alarmlar %}<span class="badge" style="background:var(--red);color:#fff;">{{ aktif_alarmlar|length }} AKTİF</span>{% endif %}

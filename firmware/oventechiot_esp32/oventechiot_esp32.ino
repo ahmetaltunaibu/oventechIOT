@@ -54,7 +54,7 @@
  * ---------------------------------------------------------------
  */
 
-#define FIRMWARE_VERSION "1.4.0"
+#define FIRMWARE_VERSION "1.5.0"
 
 #include <WiFi.h>
 #include <WiFiManager.h>          // tzapu/WiFiManager
@@ -171,6 +171,13 @@ Led ledHeartbeat(PIN_LED_HEARTBEAT);
 // çıkıyor, bayrağı hiç güncellemiyordu. Artık KÖTÜMSER (false) başlıyor —
 // LED'ler ancak GERÇEK bir başarılı senkrondan sonra "iyi" gösterecek.
 bool sonSenkronBasariliMi = false;  // ledSunucu/ledHeartbeat'in loop()'ta hangi paterni çizeceğine karar vermek için
+
+// Kullanıcı isteği: Modbus okuma/yazma hatası eskiden SADECE Seri
+// Monitör'e (USB kablosuyla) yazılıyordu — artık her senkron turunda bu
+// bilgi sunucuya da bildiriliyor (bkz. sunucuIleSenkronOl), cihaz yönetim
+// sayfasında görülebiliyor. tagOku() her hata anında bu değişkeni
+// günceller; her turun başında sıfırlanır.
+String sonModbusHatasi = "";
 
 // ================== RS485 YÖN KONTROLÜ ==================
 // ModbusMaster her okuma/yazmadan önce/sonra bu callback'leri çağırır —
@@ -404,7 +411,11 @@ String tagOku(const TagTanimi &tag) {
     uint8_t sonuc = (erisim == "read")
       ? modbus.readDiscreteInputs(tag.modbusAdres, 1)
       : modbus.readCoils(tag.modbusAdres, 1);
-    if (sonuc != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc)); return ""; }
+    if (sonuc != modbus.ku8MBSuccess) {
+      Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc));
+      sonModbusHatasi = String(tag.ad) + ": " + modbusHataMetni(sonuc);
+      return "";
+    }
     return (modbus.getResponseBuffer(0) & 0x01) ? "1" : "0";
   }
 
@@ -421,11 +432,19 @@ String tagOku(const TagTanimi &tag) {
     // çiftinin genelde İKİNCİ (yüksek) yarısı "görünen" adres olabiliyor,
     // öyleyse tag'e bir eksiğini gir (bkz. README "Veri tipi ↔ Modbus eşlemesi").
     uint8_t sonuc0 = modbus.readHoldingRegisters(tag.modbusAdres, 1);
-    if (sonuc0 != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata (reg0, adres=%u): %s\n", tag.modbusAdres, modbusHataMetni(sonuc0)); return ""; }
+    if (sonuc0 != modbus.ku8MBSuccess) {
+      Serial.printf("    -> Modbus hata (reg0, adres=%u): %s\n", tag.modbusAdres, modbusHataMetni(sonuc0));
+      sonModbusHatasi = String(tag.ad) + ": " + modbusHataMetni(sonuc0);
+      return "";
+    }
     uint16_t reg0 = modbus.getResponseBuffer(0);
 
     uint8_t sonuc1 = modbus.readHoldingRegisters(tag.modbusAdres + 1, 1);
-    if (sonuc1 != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata (reg1, adres=%u): %s\n", tag.modbusAdres + 1, modbusHataMetni(sonuc1)); return ""; }
+    if (sonuc1 != modbus.ku8MBSuccess) {
+      Serial.printf("    -> Modbus hata (reg1, adres=%u): %s\n", tag.modbusAdres + 1, modbusHataMetni(sonuc1));
+      sonModbusHatasi = String(tag.ad) + ": " + modbusHataMetni(sonuc1);
+      return "";
+    }
     uint16_t reg1 = modbus.getResponseBuffer(0);
 
     uint32_t ham = ((uint32_t)reg1 << 16) | reg0;
@@ -441,7 +460,11 @@ String tagOku(const TagTanimi &tag) {
 
   // Tek register: int/uint/word/byte/sint/usint
   uint8_t sonuc = modbus.readHoldingRegisters(tag.modbusAdres, 1);
-  if (sonuc != modbus.ku8MBSuccess) { Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc)); return ""; }
+  if (sonuc != modbus.ku8MBSuccess) {
+    Serial.printf("    -> Modbus hata: %s\n", modbusHataMetni(sonuc));
+    sonModbusHatasi = String(tag.ad) + ": " + modbusHataMetni(sonuc);
+    return "";
+  }
   uint16_t deger = modbus.getResponseBuffer(0);
   if (tip == "int" || tip == "sint") return String((int16_t)deger);
   return String(deger);
@@ -528,6 +551,8 @@ void sunucuIleSenkronOl() {
   JsonDocument gonderilecek;
   JsonObject degerler = gonderilecek["degerler"].to<JsonObject>();
   int okunanSayisi = 0;
+  int okunamayanSayisi = 0;
+  sonModbusHatasi = ""; // bu turun hatasını (varsa) tagOku() dolduracak
   for (int i = 0; i < tagSayisi; i++) {
     if (String(tagListesi[i].erisim) == "write") continue; // sadece-yazma tag'i okumaya gerek yok
     String v = tagOku(tagListesi[i]);
@@ -539,8 +564,16 @@ void sunucuIleSenkronOl() {
     if (v.length() > 0) {
       degerler[String(tagListesi[i].id)] = v;
       okunanSayisi++;
+    } else {
+      okunamayanSayisi++;
     }
   }
+
+  // Kullanıcı isteği: bu turun Modbus sağlığını da sunucuya bildir —
+  // eskiden sadece Seri Monitör'de görünüyordu.
+  gonderilecek["modbus_saglikli"] = (okunamayanSayisi == 0);
+  gonderilecek["modbus_hata_sayisi"] = okunamayanSayisi;
+  if (okunamayanSayisi > 0) gonderilecek["modbus_hata_mesaji"] = sonModbusHatasi;
 
   String govdeStr;
   serializeJson(gonderilecek, govdeStr);
@@ -585,6 +618,23 @@ void sunucuIleSenkronOl() {
   }
 
   Serial.printf("Senkron OK — okunan:%d yazilan:%d\n", okunanSayisi, yazilanSayisi);
+
+  // Kullanıcı isteği: fiziksel BOOT butonuna basmadan, sunucudan (cihaz
+  // yönetim sayfasındaki "WiFi Ayarlarını Uzaktan Sıfırla" butonu ile)
+  // WiFi sıfırlama komutu gönderilebilsin — cihaz hâlâ bağlıyken (bu
+  // isteği yapabildiğine göre) çalışır. WiFi'nin KENDİSİ bir Preferences
+  // bayrağıyla setup()'a "bu sefer portalı aç" diye işaret ediyoruz —
+  // cihaz kimliği/sunucu adresi (ayrı namespace'te) DOKUNULMADAN kalıyor.
+  bool wifiSifirlaIstendi = cevap["wifi_sifirla"] | false;
+  if (wifiSifirlaIstendi) {
+    Serial.println("Sunucu WiFi sifirlama istedi - kurulum moduna gecmek icin yeniden baslatiliyor...");
+    Preferences p;
+    p.begin("oventech", false);
+    p.putBool("zorlaSifirlaSonraki", true);
+    p.end();
+    delay(500);
+    ESP.restart();
+  }
 }
 
 // ================== UZAKTAN GÜNCELLEME (OTA) ==================
@@ -741,6 +791,23 @@ void setup() {
     unsigned long basStart = millis();
     while (digitalRead(PIN_RESET_BUTON) == LOW && millis() - basStart < 5000) delay(50);
     if (millis() - basStart >= 5000) sifirlaIstendi = true;
+  }
+
+  // Kullanıcı isteği: sunucudan uzaktan WiFi sıfırlama komutu (bkz.
+  // sunucuIleSenkronOl() — cevapta wifi_sifirla:true gelince buraya bir
+  // Preferences bayrağı bırakıp kendini yeniden başlatıyordu). Fiziksel
+  // BOOT butonuyla AYNI şekilde işleniyor — tek fark tetikleyici. Okunur
+  // okunmaz temizleniyor (tek seferlik, sonraki normal açılışları etkilemesin).
+  {
+    Preferences p;
+    p.begin("oventech", false);
+    bool sunucuSifirlamaIstedi = p.getBool("zorlaSifirlaSonraki", false);
+    if (sunucuSifirlamaIstedi) {
+      p.putBool("zorlaSifirlaSonraki", false);
+      Serial.println("Sunucu tarafinda WiFi sifirlama istenmisti - kurulum moduna giriliyor...");
+      sifirlaIstendi = true;
+    }
+    p.end();
   }
 
   // Kullanıcı isteği: cihaz daha önce kurulmuşsa (cihazKimlik kayıtlı) ve

@@ -787,6 +787,66 @@ function tuvalCiz() {
             return;
         }
 
+        if (el.type === 'alarmgecmisi') {
+            // Kullanıcı isteği: tekil "Alarm Oluştur" elementleri zaten
+            // alarm_kayitlari'na yazıyor ama bunu görmek sadece cihaz_detay
+            // (tasarımcı) sayfasındaydı — bu element aynı veriyi (cihazın
+            // TÜM alarm kurallarından, tek listede) operatör sayfasına
+            // getiriyor. Belli bir tag'e bağlı değil. Veri periyodik olarak
+            // (10sn'de bir) ayrıca çekilip alarmGecmisiVerisi'nde tutuluyor
+            // (bkz. alarmGecmisiYukle) — burada ondan filtrelenip çiziliyor.
+            div.style.background = el.renk_arkaplan || '#17222e';
+            div.style.color = el.renk_yazi || '#e8eef4';
+            div.style.fontSize = (el.font_boyutu || 12) + 'px';
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
+            div.style.boxSizing = 'border-box';
+            div.style.overflow = 'hidden';
+            div.style.display = 'flex'; div.style.flexDirection = 'column';
+            div.textContent = '';
+            if (el.baslik) {
+                const baslikEl = document.createElement('div');
+                baslikEl.textContent = el.baslik;
+                baslikEl.style.cssText = 'font-weight:700;padding:6px 8px 2px;flex-shrink:0;opacity:0.85;';
+                div.appendChild(baslikEl);
+            }
+            const liste = document.createElement('div');
+            liste.style.cssText = 'flex:1;overflow-y:auto;padding:2px 8px 6px;min-height:0;';
+            let kayitlar = alarmGecmisiVerisi;
+            if (el.sadece_aktif) kayitlar = kayitlar.filter(k => !k.giderilme_zamani);
+            kayitlar = kayitlar.slice(0, el.limit || 20);
+            if (!kayitlar.length) {
+                const bos = document.createElement('div');
+                bos.textContent = 'Alarm kaydı yok';
+                bos.style.cssText = 'opacity:0.6;padding:6px 0;font-size:0.9em;';
+                liste.appendChild(bos);
+            } else {
+                kayitlar.forEach(k => {
+                    const aktif = !k.giderilme_zamani;
+                    const satir = document.createElement('div');
+                    satir.style.cssText = 'display:flex;justify-content:space-between;gap:8px;padding:4px 0;'
+                        + 'border-bottom:1px solid rgba(255,255,255,0.08);' + (aktif ? 'color:#e74c3c;font-weight:600;' : '');
+                    satir.title = 'Oluşma: ' + (k.olusma_zamani || '—') + (k.giderilme_zamani ? ' | Giderilme: ' + k.giderilme_zamani : '');
+                    const sol = document.createElement('span');
+                    sol.textContent = (k.tag_ad || '—') + (k.mesaj ? ' — ' + k.mesaj : '');
+                    const sag = document.createElement('span');
+                    sag.style.cssText = 'opacity:0.75;white-space:nowrap;flex-shrink:0;';
+                    sag.textContent = aktif ? 'devam ediyor' : (k.giderilme_zamani || k.olusma_zamani || '');
+                    satir.appendChild(sol); satir.appendChild(sag);
+                    liste.appendChild(satir);
+                });
+            }
+            // Kullanıcı isteği: liste her 3sn'lik pollde sıfırdan çizilse
+            // bile, okurken kaydırdığı yer sıçramasın — scrollTop'u element
+            // bazında hatırlayıp geri veriyoruz.
+            liste.scrollTop = alarmGecmisiKaydirmaKonumlari[el.id] || 0;
+            liste.addEventListener('scroll', () => { alarmGecmisiKaydirmaKonumlari[el.id] = liste.scrollTop; });
+            div.appendChild(liste);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            hedefKatmanaEkle(div, el, tuval);
+            return;
+        }
+
         if (el.type === 'textbox') {
             div.className = '';
             div.style.background = el.renk_arkaplan || '#17222e';
@@ -1117,6 +1177,29 @@ function sonVeriTumGuncelle() {
 sonVeriGetir();
 setInterval(sonVeriGetir, 5000);   // sunucudan taze taban değeri
 setInterval(sonVeriTumGuncelle, 1000); // ekrandaki metni/rengi her saniye tazele
+
+// ---------- Alarm Geçmişi elementi ----------
+// Bir tag'e değil, CİHAZIN TÜM alarm kurallarından gelen kayıtlara bakar —
+// sayfada kaç tane "alarmgecmisi" elementi olursa olsun tek bir sunucu
+// isteğiyle (limit=100) çekilip her element kendi limit/sadece_aktif
+// filtresini CLIENT tarafında uyguluyor (bkz. tuvalCiz). 3sn'lik ana poll
+// döngüsünden bağımsız, daha seyrek (10sn) — alarm geçmişi o kadar hızlı
+// değişen bir şey değil.
+let alarmGecmisiVerisi = []; // [{tag_ad, mesaj, deger, olusma_zamani, giderilme_zamani}, ...]
+let alarmGecmisiKaydirmaKonumlari = {}; // el.id -> scrollTop (liste her pollde yeniden çizilse de kaydırma yeri korunsun diye)
+async function alarmGecmisiYukle() {
+    if (!aktifSayfa || !aktifSayfa.elementler) return;
+    if (!aktifSayfa.elementler.some(el => el.type === 'alarmgecmisi')) return; // bu sayfada hiç yoksa boşuna istek atma
+    try {
+        const res = await fetch(`/api/cihaz/${cihazId}/alarm-gecmisi?limit=100`);
+        if (!res.ok) return;
+        const data = await res.json();
+        alarmGecmisiVerisi = data.kayitlar || [];
+        tuvalCiz();
+    } catch (e) { /* bağlantı sorunu — bir sonraki denemede güncellenir */ }
+}
+alarmGecmisiYukle();
+setInterval(alarmGecmisiYukle, 10000);
 
 function sekilArkaplanCSS(el) {
     if (el.sekil_gradient_aktif) {

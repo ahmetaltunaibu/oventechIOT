@@ -92,6 +92,25 @@ def init_db():
     if cihaz_kolonlari and 'baslangic_sayfa' not in cihaz_kolonlari:
         cursor.execute("ALTER TABLE cihazlar ADD COLUMN baslangic_sayfa TEXT")
 
+    # Migration: kullanıcı isteği — (1) fiziksel BOOT butonuna basmadan,
+    # sunucudan "WiFi ayarlarını unut, kurulum moduna gir" komutu
+    # gönderebilmek (cihaz zaten WiFi'ye bağlıyken çalışır — bağlantı
+    # koptuysa komut cihaza ulaşamaz, bu normal); (2) ESP32'nin her
+    # senkronda bildirdiği Modbus okuma/yazma sağlığını sunucuda görmek
+    # (eskiden sadece Seri Monitör'de görünüyordu, kabloya bağlı olman
+    # gerekiyordu).
+    cihaz_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(cihazlar)").fetchall()}
+    if cihaz_kolonlari and 'wifi_sifirlama_istendi' not in cihaz_kolonlari:
+        cursor.execute("ALTER TABLE cihazlar ADD COLUMN wifi_sifirlama_istendi INTEGER NOT NULL DEFAULT 0")
+    if cihaz_kolonlari and 'son_modbus_saglikli' not in cihaz_kolonlari:
+        cursor.execute("ALTER TABLE cihazlar ADD COLUMN son_modbus_saglikli INTEGER")
+    if cihaz_kolonlari and 'son_modbus_hata_sayisi' not in cihaz_kolonlari:
+        cursor.execute("ALTER TABLE cihazlar ADD COLUMN son_modbus_hata_sayisi INTEGER NOT NULL DEFAULT 0")
+    if cihaz_kolonlari and 'son_modbus_hata_mesaji' not in cihaz_kolonlari:
+        cursor.execute("ALTER TABLE cihazlar ADD COLUMN son_modbus_hata_mesaji TEXT")
+    if cihaz_kolonlari and 'son_modbus_rapor_zamani' not in cihaz_kolonlari:
+        cursor.execute("ALTER TABLE cihazlar ADD COLUMN son_modbus_rapor_zamani TIMESTAMP")
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tagler (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -607,6 +626,53 @@ def cihaz_son_gorulme_guncelle(cihaz_kimlik: str):
             "UPDATE cihazlar SET son_gorulme = datetime('now', '+3 hours') WHERE cihaz_kimlik = ?",
             (cihaz_kimlik,)
         )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def cihaz_wifi_sifirlama_iste(cihaz_id: int):
+    """Cihaz yönetim sayfasındaki "WiFi Ayarlarını Uzaktan Sıfırla" butonu
+    çağırır — bir bayrak işaretler, ESP32 bir sonraki senkronunda (WiFi
+    hâlâ açıksa) bunu görüp kendi WiFi ayarlarını unutup kurulum moduna
+    girer. Cihaz zaten offline'sa bu komut kendisine hiç ulaşmaz."""
+    conn = get_db()
+    try:
+        conn.execute('UPDATE cihazlar SET wifi_sifirlama_istendi = 1 WHERE id = ?', (cihaz_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def cihaz_wifi_sifirlama_durumu_al_ve_temizle(cihaz_kimlik: str) -> bool:
+    """ESP32'nin xchange isteğinde çağrılır — bayrak açıksa True döner VE
+    hemen sıfırlar (tek seferlik, tekrar tekrar yeniden başlatmasın diye)."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT id, wifi_sifirlama_istendi FROM cihazlar WHERE cihaz_kimlik = ?', (cihaz_kimlik,)
+        ).fetchone()
+        if not row or not row['wifi_sifirlama_istendi']:
+            return False
+        conn.execute('UPDATE cihazlar SET wifi_sifirlama_istendi = 0 WHERE id = ?', (row['id'],))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def cihaz_modbus_durumu_guncelle(cihaz_kimlik: str, saglikli: bool, hata_sayisi: int, hata_mesaji: str):
+    """ESP32 her senkronda bu turun Modbus okuma/yazma sonucunu bildirir —
+    eskiden sadece Seri Monitör'de görünüyordu, artık sunucuda (cihaz
+    yönetim sayfasında) da görülebiliyor."""
+    conn = get_db()
+    try:
+        conn.execute('''
+            UPDATE cihazlar
+            SET son_modbus_saglikli = ?, son_modbus_hata_sayisi = ?, son_modbus_hata_mesaji = ?,
+                son_modbus_rapor_zamani = datetime('now', '+3 hours')
+            WHERE cihaz_kimlik = ?
+        ''', (1 if saglikli else 0, hata_sayisi, hata_mesaji or None, cihaz_kimlik))
         conn.commit()
     finally:
         conn.close()

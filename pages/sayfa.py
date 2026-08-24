@@ -373,6 +373,24 @@ def api_son_gorulme(cihaz_id):
     return jsonify({'saniye_once': database.cihaz_son_gorulme_saniye_once(cihaz_id)})
 
 
+@sayfa_bp.route('/api/cihaz/<int:cihaz_id>/alarm-gecmisi')
+@login_required
+def api_alarm_gecmisi(cihaz_id):
+    """"Alarm Geçmişi" elementi için — kullanıcı isteği: tekil alarm
+    kuralları zaten alarm_kayitlari'na yazıyor, ama bunu görmek eskiden
+    sadece cihaz_detay (tasarımcı/admin) sayfasındaydı. Artık operatör
+    sayfalarına da eklenebilen bir element bunu okuyabiliyor —
+    {kayitlar: [{tag_ad, mesaj, deger, olusma_zamani, giderilme_zamani}, ...]}"""
+    if not _cihaz_dogrula(cihaz_id):
+        return jsonify({'error': 'Cihaz bulunamadı'}), 404
+    limit = min(max(request.args.get('limit', 50, type=int), 1), 200)
+    sadece_aktif = request.args.get('sadece_aktif') == '1'
+    kayitlar = database.alarm_kayitlari_listele(cihaz_id, limit)
+    if sadece_aktif:
+        kayitlar = [k for k in kayitlar if not k.get('giderilme_zamani')]
+    return jsonify({'kayitlar': kayitlar})
+
+
 @sayfa_bp.route('/api/cihaz/<int:cihaz_id>/gecmis')
 @login_required
 def api_gecmis(cihaz_id):
