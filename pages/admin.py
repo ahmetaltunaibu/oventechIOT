@@ -93,6 +93,34 @@ def proje_ekle():
     return redirect(url_for('admin.admin_page'))
 
 
+@admin_bp.route('/proje/<int:proje_id>/kopyala', methods=['POST'])
+@admin_required
+def proje_kopyala(proje_id):
+    """Kullanıcı isteği: bir projeyi (tüm cihaz/tag/sayfa/medyasıyla) YENİ
+    bir proje olarak kopyalar — yeni bir müşteri/kurulum için şablon.
+    Kullanıcılar kopyalanmaz, cihazlara yeni cihaz_kimlik verilir (bkz.
+    database.proje_kopyala docstring)."""
+    kaynak = database.proje_getir(proje_id)
+    if not kaynak:
+        flash('Kaynak proje bulunamadı.', 'danger')
+        return redirect(url_for('admin.admin_page'))
+    yeni_ad = request.form.get('ad', '').strip() or f"{kaynak['ad']} (kopya)"
+
+    taban_kod = _slug_uret(yeni_ad)
+    kod = taban_kod
+    sayac = 2
+    while database.proje_getir_kod(kod):
+        kod = f'{taban_kod}-{sayac}'
+        sayac += 1
+
+    ok, sonuc = database.proje_kopyala(proje_id, kod, yeni_ad)
+    if ok:
+        flash(f"Proje kopyalandı: {yeni_ad} — kullanıcı hesapları kopyalanmadı, cihazlara yeni (henüz hiçbir ESP32'ye bağlı olmayan) kimlikler verildi.", 'success')
+    else:
+        flash(f'Hata: {sonuc}', 'danger')
+    return redirect(url_for('admin.admin_page'))
+
+
 @admin_bp.route('/proje/<int:proje_id>/duzenle', methods=['POST'])
 @admin_required
 def proje_duzenle(proje_id):

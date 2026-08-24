@@ -1,4 +1,4 @@
-from flask import Flask, redirect, url_for, session
+from flask import Flask, redirect, url_for, session, request
 import os
 import database
 from pages.login import login_bp
@@ -25,6 +25,17 @@ app.register_blueprint(esp32_bp)
 
 @app.after_request
 def no_cache(response):
+    # Kullanıcı raporu: sayfa geçişlerinde gecikme + grafik elementinin
+    # "önce boş, sonra dolu" iki aşamalı görünmesi. Kök neden: bu kural
+    # /static/ altındaki dosyalara da (örn. ApexCharts kütüphanesi, ~540KB)
+    # uygulanıyordu — tarayıcı hiç önbelleğe alamıyor, HER sayfa geçişinde
+    # sıfırdan indiriyordu. Canlı SCADA verisi (tag değerleri, sayfa JSON'u,
+    # API cevapları vb.) için no-cache KESİNLİKLE doğru/gerekli — ama
+    # statik dosyalar (JS/CSS, neredeyse hiç değişmiyor) bunun dışında
+    # tutulmalı, Flask'ın kendi varsayılan (makul) önbellek başlığı geçerli
+    # olsun diye burada erken dönülüyor.
+    if request.path.startswith('/static/'):
+        return response
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
     return response
 

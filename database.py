@@ -467,6 +467,157 @@ def proje_sil(proje_id: int):
         conn.close()
 
 
+def _medya_url_yenile(url, medya_id_eslesme):
+    """"/medya/<eski_id>" biçimindeki URL'leri yeni medya id'sine çevirir —
+    proje_kopyala() kopyalanan sayfalardaki resim referanslarının kırık
+    kalmaması için kullanır. Dış URL'lere ya da None'a dokunmaz."""
+    if not url or not isinstance(url, str) or not url.startswith('/medya/'):
+        return url
+    id_kismi = url[len('/medya/'):]
+    if id_kismi.isdigit() and int(id_kismi) in medya_id_eslesme:
+        return '/medya/' + str(medya_id_eslesme[int(id_kismi)])
+    return url
+
+
+def _element_referanslarini_yenile(el, tag_id_eslesme, medya_id_eslesme):
+    """proje_kopyala() için — bir elementin (ve grafik seriler / durum
+    listesi gibi iç içe yapıların) tag_id ve resim_url referanslarını
+    YENİ (kopyalanan) tag/medya id'lerine göre yeniden yazar. Eşlemede
+    olmayan (bilinmeyen) bir referansa dokunmaz."""
+    el = dict(el)
+    if el.get('tag_id') in tag_id_eslesme:
+        el['tag_id'] = tag_id_eslesme[el['tag_id']]
+    if el.get('gizle_tag_id') in tag_id_eslesme:
+        el['gizle_tag_id'] = tag_id_eslesme[el['gizle_tag_id']]
+    for alan in ('resim_url', 'resim_url_acik', 'resim_url_kapali'):
+        if el.get(alan):
+            el[alan] = _medya_url_yenile(el[alan], medya_id_eslesme)
+    if el.get('seriler'):  # grafik elementi — her serinin kendi tag_id'si
+        yeni_seriler = []
+        for s in el['seriler']:
+            s2 = dict(s)
+            if s2.get('tag_id') in tag_id_eslesme:
+                s2['tag_id'] = tag_id_eslesme[s2['tag_id']]
+            yeni_seriler.append(s2)
+        el['seriler'] = yeni_seriler
+    if el.get('durumlar'):  # durum göstergesi — her durumun kendi tag_id/resim_url'i
+        yeni_durumlar = []
+        for d in el['durumlar']:
+            d2 = dict(d)
+            if d2.get('tag_id') in tag_id_eslesme:
+                d2['tag_id'] = tag_id_eslesme[d2['tag_id']]
+            if d2.get('resim_url'):
+                d2['resim_url'] = _medya_url_yenile(d2['resim_url'], medya_id_eslesme)
+            yeni_durumlar.append(d2)
+        el['durumlar'] = yeni_durumlar
+    return el
+
+
+def proje_kopyala(kaynak_proje_id: int, yeni_kod: str, yeni_ad: str):
+    """Bir projenin TÜM cihazlarını, tag'lerini, yüklü medyasını (resimler)
+    ve sayfalarını (elementler JSON'undaki tag_id/resim referansları YENİ
+    id'lere göre yeniden yazılarak) YENİ bir projeye kopyalar — yeni bir
+    müşteri/kurulum için şablon olarak kullanmak amacıyla.
+
+    Kasıtlı olarak KOPYALANMAYANLAR:
+      - Kullanıcılar (giriş hesapları) — kullanıcı adı tüm sistemde
+        benzersiz olmak zorunda, yeni projede sıfırdan açılır.
+      - Canlı/geçmiş veri (tag değerleri, tag_deger_gecmis, alarm_kayitlari,
+        son_gorulme, Modbus durumu) — yeni cihazlar henüz hiçbir fiziksel
+        donanıma bağlı değil, bunlar anlamsız olurdu.
+      - Cihaz kimlikleri YENİDEN üretilir (secrets.token_hex) — kopyalanan
+        her cihaz kaydı başlangıçta HİÇBİR ESP32'ye bağlı değildir, yeni
+        fiziksel cihaz kurulurken bu kimlik firmware'e girilmelidir.
+
+    Alarm kuralları (alarm_kurallari) ayrıca kopyalanmaz — sayfalar
+    kopyalanırken üzerlerindeki 'alarm' elementleri için otomatik yeniden
+    oluşturulur (bkz. pages/sayfa.py'deki aynı mantık, burada tekrarlanıyor)."""
+    conn = get_db()
+    try:
+        cur = conn.execute('INSERT INTO projeler (kod, ad) VALUES (?, ?)', (yeni_kod.strip(), yeni_ad.strip()))
+        yeni_proje_id = cur.lastrowid
+
+        kaynak_cihazlar = conn.execute('SELECT * FROM cihazlar WHERE proje_id = ?', (kaynak_proje_id,)).fetchall()
+        cihaz_id_eslesme = {}   # eski cihaz_id -> yeni cihaz_id
+        tag_id_eslesme = {}     # eski tag_id -> yeni tag_id
+        medya_id_eslesme = {}   # eski medya_id -> yeni medya_id
+
+        for c in kaynak_cihazlar:
+            yeni_kimlik = secrets.token_hex(12)
+            cur = conn.execute('''
+                INSERT INTO cihazlar (proje_id, cihaz_kimlik, ad, nav_stili, baslangic_sayfa)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (yeni_proje_id, yeni_kimlik, c['ad'], c['nav_stili'], c['baslangic_sayfa']))
+            cihaz_id_eslesme[c['id']] = cur.lastrowid
+
+        for eski_cihaz_id, yeni_cihaz_id in cihaz_id_eslesme.items():
+            for t in conn.execute('SELECT * FROM tagler WHERE cihaz_id = ?', (eski_cihaz_id,)).fetchall():
+                cur = conn.execute('''
+                    INSERT INTO tagler (cihaz_id, ad, modbus_adres, veri_tipi, erisim,
+                                         olcek_min_raw, olcek_max_raw, olcek_min_muh, olcek_max_muh,
+                                         gecmis_araligi_sn, gecmis_kayit_aktif)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (yeni_cihaz_id, t['ad'], t['modbus_adres'], t['veri_tipi'], t['erisim'],
+                      t['olcek_min_raw'], t['olcek_max_raw'], t['olcek_min_muh'], t['olcek_max_muh'],
+                      t['gecmis_araligi_sn'], t['gecmis_kayit_aktif']))
+                tag_id_eslesme[t['id']] = cur.lastrowid
+
+        for eski_cihaz_id, yeni_cihaz_id in cihaz_id_eslesme.items():
+            for m in conn.execute('SELECT * FROM medya WHERE cihaz_id = ?', (eski_cihaz_id,)).fetchall():
+                cur = conn.execute(
+                    'INSERT INTO medya (cihaz_id, dosya_adi, mime_tipi, veri) VALUES (?, ?, ?, ?)',
+                    (yeni_cihaz_id, m['dosya_adi'], m['mime_tipi'], m['veri'])
+                )
+                medya_id_eslesme[m['id']] = cur.lastrowid
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Sayfalar — ayrı bir bağlantıyla, zaten var olan sayfa_kaydet() /
+    # alarm_kural_kaydet() / sayfa_baglantili_olustur() fonksiyonları
+    # üzerinden (aynı doğrulanmış mantığı tekrar icat etmemek için).
+    for eski_cihaz_id, yeni_cihaz_id in cihaz_id_eslesme.items():
+        conn2 = get_db()
+        try:
+            sayfalar = conn2.execute('SELECT * FROM sayfalar WHERE cihaz_id = ?', (eski_cihaz_id,)).fetchall()
+        finally:
+            conn2.close()
+        for s in sayfalar:
+            if s['sablon_kaynak_cihaz_id'] and s['sablon_kaynak_sayfa_ad']:
+                # Bağlantılı (şablon) sayfa — içeriği yok, sadece bağlantıyı
+                # kopyala. Kaynak cihaz da bu kopyalamanın içindeyse YENİ
+                # kopyasına bağla, değilse (proje dışı bir kaynak — normalde
+                # olmaz ama güvenlik payı) eski kaynağa bağlı kalır.
+                kaynak_cihaz = cihaz_id_eslesme.get(s['sablon_kaynak_cihaz_id'], s['sablon_kaynak_cihaz_id'])
+                sayfa_baglantili_olustur(yeni_cihaz_id, s['ad'], kaynak_cihaz, s['sablon_kaynak_sayfa_ad'])
+                continue
+            elementler = json.loads(s['elementler'])
+            elementler = [_element_referanslarini_yenile(el, tag_id_eslesme, medya_id_eslesme) for el in elementler]
+            sayfa_kaydet(
+                yeni_cihaz_id, s['ad'], elementler, hedef=s['hedef'],
+                tuval_w=s['tuval_w'], tuval_h=s['tuval_h'], arkaplan=s['arkaplan'],
+                arkaplan_resim=_medya_url_yenile(s['arkaplan_resim'], medya_id_eslesme),
+                arkaplan_sigdirma=s['arkaplan_sigdirma'],
+                arkaplan_gradient_aktif=bool(s['arkaplan_gradient_aktif']),
+                arkaplan_gradient_renk1=s['arkaplan_gradient_renk1'],
+                arkaplan_gradient_renk2=s['arkaplan_gradient_renk2'],
+                arkaplan_gradient_yon=s['arkaplan_gradient_yon'],
+                sayfa_turu=s['sayfa_turu'], giris_animasyonu=s['giris_animasyonu'],
+            )
+            for el in elementler:
+                if el.get('type') == 'alarm' and el.get('tag_id'):
+                    alarm_kural_kaydet(
+                        el['id'], yeni_cihaz_id, el['tag_id'], el.get('tip') or 'bool',
+                        bool_tetik_deger=el.get('bool_tetik_deger') or '1',
+                        karsilastirma=el.get('karsilastirma') or '>',
+                        esik_deger=el.get('esik_deger') or 0,
+                        mesaj=el.get('mesaj') or '',
+                    )
+
+    return True, yeni_proje_id
+
+
 def proje_getir_kod(kod: str):
     conn = get_db()
     try:

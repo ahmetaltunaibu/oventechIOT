@@ -15,6 +15,10 @@
                 <td>{{ p.kullanici_sayisi }}</td>
                 <td style="white-space:nowrap;">
                     <a class="btn" href="{{ url_for('admin.proje_gir', proje_id=p.id) }}" style="padding:5px 10px;font-size:12px;">Cihazlara Gir</a>
+                    <form method="POST" action="{{ url_for('admin.proje_kopyala', proje_id=p.id) }}" style="display:inline;" onsubmit="return projeKopyalaOnayla(this, '{{ p.ad|e }}');">
+                        <input type="hidden" name="ad" class="proje-kopya-ad-input">
+                        <button type="submit" style="background:var(--panel2);padding:5px 10px;font-size:12px;">Kopyala</button>
+                    </form>
                     <form method="POST" action="{{ url_for('admin.proje_sil', proje_id=p.id) }}" style="display:inline;" onsubmit="return confirm('{{ p.ad }} silinsin mi? Tüm kullanıcı/cihaz/tag/sayfaları da silinir.');">
                         <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
                     </form>
@@ -36,4 +40,16 @@
         <button type="submit">Proje Oluştur</button>
     </form>
 </div>
+
+<script>
+// Kullanıcı isteği: bir projeyi (cihaz/tag/sayfa/medya dahil) yeni bir
+// müşteri için şablon olarak kopyalama — isim sorup formu dolduruyor.
+function projeKopyalaOnayla(formEl, kaynakAd) {
+    const varsayilan = kaynakAd + ' (kopya)';
+    const yeniAd = prompt('Yeni projenin adı ne olsun?', varsayilan);
+    if (!yeniAd || !yeniAd.trim()) return false; // iptal edildi
+    formEl.querySelector('.proje-kopya-ad-input').value = yeniAd.trim();
+    return confirm(`"${kaynakAd}" projesi "${yeniAd.trim()}" adıyla kopyalanacak (tüm cihaz/tag/sayfa/resimleriyle, kullanıcı hesapları hariç). Devam edilsin mi?`);
+}
+</script>
 {% endblock %}
