@@ -191,7 +191,8 @@ def tag_alan_guncelle(cihaz_id, tag_id):
             return jsonify({'error': 'Kayıt aralığı en az 1 saniye olmalı'}), 400
     except (TypeError, ValueError):
         return jsonify({'error': 'Kayıt aralığı sayısal olmalı'}), 400
-    ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn)
+    gecmis_kayit_aktif = veri.get('gecmis_kayit_aktif', bool(mevcut.get('gecmis_kayit_aktif')))
+    ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn, gecmis_kayit_aktif)
     if not ok:
         return jsonify({'error': hata}), 400
     return jsonify({'success': True})
@@ -216,7 +217,8 @@ def tag_ekle_json(cihaz_id):
             return jsonify({'error': 'Kayıt aralığı en az 1 saniye olmalı'}), 400
     except (TypeError, ValueError):
         return jsonify({'error': 'Kayıt aralığı sayısal olmalı'}), 400
-    ok, sonuc = database.tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn)
+    gecmis_kayit_aktif = bool(veri.get('gecmis_kayit_aktif'))
+    ok, sonuc = database.tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn, gecmis_kayit_aktif)
     if not ok:
         return jsonify({'error': sonuc}), 400
     return jsonify({'success': True, 'id': sonuc})

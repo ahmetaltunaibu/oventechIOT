@@ -174,7 +174,8 @@
                     <th class="siralanabilir" data-sirala="modbus_adres">Modbus Adres</th>
                     <th class="siralanabilir" data-sirala="veri_tipi">Tip</th>
                     <th class="siralanabilir" data-sirala="erisim">Erişim</th>
-                    <th title="Grafik geçmişine en fazla ne sıklıkla satır düşsün (saniye). Boşsa varsayılan (20sn) kullanılır.">Kayıt Aralığı (sn)</th>
+                    <th title="İşaretlenmezse bu tag grafik geçmişine HİÇ kaydedilmez.">Geçmişe Kaydet</th>
+                    <th title="Sadece 'Geçmişe Kaydet' işaretliyken geçerli — en fazla ne sıklıkla satır düşsün (saniye). Boşsa varsayılan (20sn) kullanılır.">Kayıt Aralığı (sn)</th>
                     <th></th>
                 </tr>
             </thead>
@@ -186,7 +187,8 @@
                     <td><input type="text" class="tag-hucre" data-alan="modbus_adres" value="{{ t.modbus_adres }}" placeholder="örn. 40001" style="font-family:monospace;"></td>
                     <td><select class="tag-hucre" data-alan="veri_tipi"></select></td>
                     <td><select class="tag-hucre" data-alan="erisim"></select></td>
-                    <td><input type="number" min="1" class="tag-hucre" data-alan="gecmis_araligi_sn" value="{{ t.gecmis_araligi_sn or '' }}" placeholder="20 (varsayılan)"></td>
+                    <td style="text-align:center;"><input type="checkbox" class="tag-hucre" data-alan="gecmis_kayit_aktif" onchange="tagKayitAktifDegisti(this)" {{ 'checked' if t.gecmis_kayit_aktif else '' }}></td>
+                    <td><input type="number" min="1" class="tag-hucre" data-alan="gecmis_araligi_sn" value="{{ t.gecmis_araligi_sn or '' }}" placeholder="20 (varsayılan)" {{ '' if t.gecmis_kayit_aktif else 'disabled' }}></td>
                     <td class="tag-sil-hucre"><button type="button" class="tag-sil-btn" onclick="tagSatirSil(this)">Sil</button></td>
                 </tr>
                 {% endfor %}
@@ -209,7 +211,7 @@
     </noscript>
     {% elif tagler %}
     <table>
-        <thead><tr><th>Ad</th><th>Modbus Adres</th><th>Tip</th><th>Erişim</th><th>Kayıt Aralığı (sn)</th></tr></thead>
+        <thead><tr><th>Ad</th><th>Modbus Adres</th><th>Tip</th><th>Erişim</th><th>Geçmişe Kaydet</th><th>Kayıt Aralığı (sn)</th></tr></thead>
         <tbody>
         {% for t in tagler %}
             <tr>
@@ -217,7 +219,8 @@
                 <td style="font-family:monospace;">{{ t.modbus_adres }}</td>
                 <td>{{ t.veri_tipi }}</td>
                 <td>{{ t.erisim }}</td>
-                <td>{{ t.gecmis_araligi_sn or '20 (varsayılan)' }}</td>
+                <td>{{ '✅' if t.gecmis_kayit_aktif else '—' }}</td>
+                <td>{{ t.gecmis_araligi_sn or '20 (varsayılan)' if t.gecmis_kayit_aktif else '—' }}</td>
             </tr>
         {% endfor %}
         </tbody>
@@ -260,6 +263,16 @@ function tagDurumYaz(msg, hataMi) {
     if (!hataMi && msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2000);
 }
 
+// "Geçmişe Kaydet" onay kutusu — normal metin hücreleri gibi blur'da değil,
+// tıklanır tıklanmaz (change) kaydedilmeli; ayrıca kapatılınca "Kayıt
+// Aralığı" hücresi anlamsız kaldığı için soluklaştırılıp kilitlenir.
+function tagKayitAktifDegisti(checkboxEl) {
+    const satir = checkboxEl.closest('tr');
+    const araligiInput = satir.querySelector('[data-alan="gecmis_araligi_sn"]');
+    araligiInput.disabled = !checkboxEl.checked;
+    tagHucreDegisti(checkboxEl);
+}
+
 function _tagSatirDegerleriTam(satir) {
     const ad = satir.querySelector('[data-alan="ad"]').value.trim();
     const adres = satir.querySelector('[data-alan="modbus_adres"]').value.trim();
@@ -275,6 +288,7 @@ async function tagHucreDegisti(inputEl) {
         modbus_adres: satir.querySelector('[data-alan="modbus_adres"]').value.trim(),
         veri_tipi: satir.querySelector('[data-alan="veri_tipi"]').value,
         erisim: satir.querySelector('[data-alan="erisim"]').value,
+        gecmis_kayit_aktif: satir.querySelector('[data-alan="gecmis_kayit_aktif"]').checked,
         gecmis_araligi_sn: satir.querySelector('[data-alan="gecmis_araligi_sn"]').value.trim(),
     };
     // Henüz sunucuda oluşturulmamış (yeni eklenen boş) satır — sadece Ad VE
@@ -325,7 +339,8 @@ function tagYeniSatirEkle() {
         <td><input type="text" class="tag-hucre" data-alan="modbus_adres" placeholder="örn. 40001" style="font-family:monospace;"></td>
         <td><select class="tag-hucre" data-alan="veri_tipi"></select></td>
         <td><select class="tag-hucre" data-alan="erisim"></select></td>
-        <td><input type="number" min="1" class="tag-hucre" data-alan="gecmis_araligi_sn" placeholder="20 (varsayılan)"></td>
+        <td style="text-align:center;"><input type="checkbox" class="tag-hucre" data-alan="gecmis_kayit_aktif" onchange="tagKayitAktifDegisti(this)"></td>
+        <td><input type="number" min="1" class="tag-hucre" data-alan="gecmis_araligi_sn" placeholder="20 (varsayılan)" disabled></td>
         <td class="tag-sil-hucre"><button type="button" class="tag-sil-btn" onclick="tagSatirSil(this)">Sil</button></td>
     `;
     _tagSelectDoldur(satir.querySelector('[data-alan="veri_tipi"]'), TAG_VERI_TIPLERI, 'bool');

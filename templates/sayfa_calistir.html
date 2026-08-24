@@ -56,6 +56,15 @@
         min-height: 0;
     }
     #tuval-sarici { margin: 0 auto; }
+    #tuval, #tuval-sabit-ust, #tuval-sabit-alt {
+        /* Kullanıcı raporu (mobil): parmakla basılı tutunca ekranda metin
+           seçimi (mavi vurgu + seçim tutamaçları) çıkıyordu — bir SCADA
+           panelinde dokunma her zaman "tıkla/basılı tut" anlamına gelmeli,
+           tarayıcının metin seçme/büyüteç menüsü asla devreye girmemeli. */
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
     #tuval {
         position: relative;
         background: var(--panel2);
@@ -276,7 +285,12 @@ function grafikApexAyarlari(el, seriler) {
             toolbar: { show: false },
             zoom: { enabled: false },
             animations: { enabled: false },
-            foreColor: '#8aa0b3'
+            foreColor: '#8aa0b3',
+            // Kullanıcı raporu: alt kısımda gereksiz boşluk vardı —
+            // ApexCharts varsayılan olarak konteynerin altına 15px "pay"
+            // bırakır (parentHeightOffset), grafiği sıkıştırıp boşluk
+            // yaratıyordu. 0 yapınca grafik kutuyu tam dolduruyor.
+            parentHeightOffset: 0
         },
         theme: { mode: 'dark' },
         series: seriler.map(s => ({ name: s.etiket || ('Seri ' + s.tag_id), data: [] })),
@@ -284,7 +298,16 @@ function grafikApexAyarlari(el, seriler) {
         stroke: { width: 2, curve: 'straight' },
         markers: { size: 0, hover: { size: 4 } },
         dataLabels: { enabled: false },
-        grid: { borderColor: 'rgba(255,255,255,0.08)', strokeDashArray: 3, padding: { left: 6, right: 6 } },
+        // Kullanıcı isteği: sadece yatay değil, hem yatay hem dikey grid
+        // çizgileri görünsün; Y ekseninde daha sık aralık (tickAmount) ile
+        // grid daha sık/dolu görünsün.
+        grid: {
+            borderColor: 'rgba(255,255,255,0.12)',
+            strokeDashArray: 3,
+            padding: { left: 6, right: 6, top: 0, bottom: 0 },
+            xaxis: { lines: { show: true } },
+            yaxis: { lines: { show: true } }
+        },
         xaxis: {
             type: 'datetime',
             labels: { datetimeUTC: false, style: { fontSize: '9px' } },
@@ -292,13 +315,18 @@ function grafikApexAyarlari(el, seriler) {
             axisTicks: { color: 'rgba(255,255,255,0.12)' }
         },
         yaxis: {
+            tickAmount: 6,
             labels: {
                 style: { fontSize: '9px' },
                 formatter: v => (v === null || v === undefined || isNaN(v)) ? '' : (Math.round(v * 100) / 100) + (el.birim || '')
             }
         },
         tooltip: { theme: 'dark', x: { format: 'dd MMM HH:mm:ss' } },
-        legend: { show: seriler.length > 1, position: 'bottom', fontSize: '10px', labels: { colors: '#8aa0b3' }, markers: { width: 8, height: 8 } },
+        legend: {
+            show: seriler.length > 1, position: 'bottom', fontSize: '10px',
+            labels: { colors: '#8aa0b3' }, markers: { width: 8, height: 8 },
+            offsetY: 0, itemMargin: { horizontal: 6, vertical: 0 }
+        },
         title: el.baslik ? { text: el.baslik, style: { fontSize: '11px', color: '#8aa0b3', fontWeight: 700 } } : undefined,
         noData: { text: seriler.length ? 'Veri toplanıyor…' : 'Seri seçilmedi', style: { color: '#8aa0b3', fontSize: '11px' } }
     };
