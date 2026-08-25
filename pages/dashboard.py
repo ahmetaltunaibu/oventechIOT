@@ -61,7 +61,11 @@ def cihaz_detay(cihaz_id):
     alarmlar = database.alarm_kayitlari_listele(cihaz_id, limit=30)
     firmwarelar = database.firmware_listesi(session['proje_id'])
     firmware_gecmisi = database.firmware_gecmisi_listele(cihaz_id, limit=15)
-    plc_profilleri = database.plc_profilleri_listele()
+    # Sadece id/ad değil, JS tarafında "Doğal Adres" alanının önek (X/Y/M/D)
+    # combobox'ını doldurmak için her profilin bölgelerine (onek listesine)
+    # de ihtiyaç var — bu yüzden düz listeleme yerine her profili tek tek
+    # detaylı (bolgeler dahil) çekiyoruz.
+    plc_profilleri = [database.plc_profil_getir(p['id']) for p in database.plc_profilleri_listele()]
     return render_template('cihaz_detay.html', cihaz=cihaz, tagler=tagler, sayfalar=sayfalar,
                             proje_sayfalari=proje_sayfalari, alarmlar=alarmlar,
                             firmwarelar=firmwarelar, firmware_gecmisi=firmware_gecmisi,

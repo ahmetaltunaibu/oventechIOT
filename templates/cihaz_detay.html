@@ -203,7 +203,7 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
     {% endif %}
 </div>
 
-<div class="card">
+<div class="card tag-tablo-karti">
     <h2>Tag'ler</h2>
     {% set tasarimci_mi = session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
     {% if tasarimci_mi %}
@@ -214,6 +214,20 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
          + Yeni Tag Satırı ile boş bir satır eklenir, ilk iki hücre (Ad +
          Modbus Adresi) doldurulup kutudan çıkılınca gerçek tag olarak oluşur. -->
     <style>
+        /* Kullanıcı raporu: tag tablosu çok sütunlu (PLC Profili, Doğal
+           Adres artık 2 parça, Modbus Adres, Tip, Erişim, Geçmiş...) hale
+           gelince üst .container'ın sabit max-width:900px sınırına
+           sığmıyordu, kart kenarından taşıyor/kırpılıyor gibi duruyordu.
+           Bu kartı, ekran genişliği izin verdiği sürece .container'dan
+           BAĞIMSIZ olarak (viewport'a göre ortalanmış, negatif margin ile
+           "container'dan taşma" tekniği) çok daha geniş yapıyoruz — böylece
+           yatay kaydırmaya daha az ihtiyaç kalıyor.*/
+        .tag-tablo-karti {
+            max-width: 1400px;
+            width: calc(100vw - 32px);
+            margin-left: calc(50% - 50vw + 16px);
+            margin-right: calc(50% - 50vw + 16px);
+        }
         .tag-tablo-sarici { overflow-x: auto; }
         /* Kullanıcı raporu: sütunlar bazen sığmıyor, tag isimleri kesiliyor,
            genişletemiyordu. Kök neden: width:100% + çok sayıda sütun —
@@ -239,7 +253,8 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
         select.tag-hucre[data-alan="veri_tipi"] { min-width: 150px; }
         select.tag-hucre[data-alan="erisim"] { min-width: 130px; }
         select.tag-hucre[data-alan="plc_profil_id"] { min-width: 140px; }
-        .tag-hucre[data-alan="dogal_adres"] { min-width: 90px; }
+        .tag-hucre[data-alan="dogal_onek"] { width: auto; flex: 0 0 auto; min-width: 54px; padding: 8px 6px; }
+        .tag-hucre[data-alan="dogal_sayi"] { width: auto; flex: 0 0 auto; min-width: 50px; max-width: 70px; }
         .tag-hucre[data-alan="gecmis_araligi_sn"] { min-width: 70px; }
         #tagTablosu th {
             padding: 8px 10px; text-align: left; font-size: 12px; color: var(--text-secondary);
@@ -264,7 +279,7 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
                     <th class="siralanabilir" data-sirala="id">#</th>
                     <th class="siralanabilir" data-sirala="ad">Ad</th>
                     <th title="Seçersen, ham Modbus adresini elle hesaplamana gerek kalmaz — PLC'nin kendi adresini (Doğal Adres) yaz, otomatik çevrilir.">PLC Profili</th>
-                    <th title="PLC'nin kendi gösterdiği adres, örn. X21, D100 (PLC Profili seçiliyken).">Doğal Adres</th>
+                    <th title="Önek (X/Y/M/D...) PLC Profilinden seçilir, adres numarasını sen yazarsın — örn. X + 21 (PLC Profili seçiliyken).">Doğal Adres</th>
                     <th class="siralanabilir" data-sirala="modbus_adres">Modbus Adres (ham)</th>
                     <th class="siralanabilir" data-sirala="veri_tipi">Tip</th>
                     <th class="siralanabilir" data-sirala="erisim">Erişim</th>
@@ -275,7 +290,7 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
             </thead>
             <tbody id="tagTabloGovde">
                 {% for t in tagler %}
-                <tr data-tag-id="{{ t.id }}" data-veri-tipi="{{ t.veri_tipi }}" data-erisim="{{ t.erisim }}">
+                <tr data-tag-id="{{ t.id }}" data-veri-tipi="{{ t.veri_tipi }}" data-erisim="{{ t.erisim }}" data-dogal-adres="{{ t.dogal_adres or '' }}">
                     <td class="tag-id-hucre">{{ t.id }}</td>
                     <td><input type="text" class="tag-hucre" data-alan="ad" value="{{ t.ad }}" placeholder="örn. sicaklik"></td>
                     <td>
@@ -286,7 +301,10 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
                             {% endfor %}
                         </select>
                     </td>
-                    <td><input type="text" class="tag-hucre" data-alan="dogal_adres" value="{{ t.dogal_adres or '' }}" placeholder="örn. X21" style="font-family:monospace;" {{ '' if t.plc_profil_id else 'disabled' }}></td>
+                    <td style="display:flex;gap:4px;">
+                        <select class="tag-hucre" data-alan="dogal_onek" {{ '' if t.plc_profil_id else 'disabled' }}></select>
+                        <input type="text" class="tag-hucre" data-alan="dogal_sayi" placeholder="21" style="font-family:monospace;" {{ '' if t.plc_profil_id else 'disabled' }}>
+                    </td>
                     <td><input type="text" class="tag-hucre" data-alan="modbus_adres" value="{{ t.modbus_adres }}" placeholder="örn. 40001" style="font-family:monospace;" {{ 'readonly' if t.plc_profil_id else '' }}></td>
                     <td><select class="tag-hucre" data-alan="veri_tipi"></select></td>
                     <td><select class="tag-hucre" data-alan="erisim"></select></td>
@@ -344,7 +362,11 @@ const TAG_VERI_TIPLERI = [
 const TAG_ERISIMLER = [
     ['read', 'Sadece okuma'], ['write', 'Sadece yazma'], ['readwrite', 'Okuma + Yazma'],
 ];
-const PLC_PROFILLERI = [{% for p in plc_profilleri %}[{{ p.id }}, {{ ((p.marka + ' — ' if p.marka) ~ p.ad)|tojson }}]{{ ',' if not loop.last }}{% endfor %}];
+const PLC_PROFILLERI = [{% for p in plc_profilleri %}{
+    id: {{ p.id }},
+    etiket: {{ ((p.marka + ' — ' if p.marka) ~ p.ad)|tojson }},
+    onekler: {{ (p.bolgeler | map(attribute='onek') | list) | tojson }}
+}{{ ',' if not loop.last }}{% endfor %}];
 const CIHAZ_PLC_PROFIL_ID = {{ cihaz.plc_profil_id or 'null' }};
 const TAG_CIHAZ_ID = {{ cihaz.id }};
 
@@ -353,12 +375,48 @@ function _tagSelectDoldur(selectEl, secenekler, secili) {
         `<option value="${deger}"${deger === secili ? ' selected' : ''}>${etiket}</option>`
     ).join('');
 }
+
+function _tagProfilBul(profilId) {
+    return PLC_PROFILLERI.find(p => String(p.id) === String(profilId));
+}
+
+// "X21" -> {onek: "X", sayi: "21"}. Kullanıcı isteği: Doğal Adres'in önek
+// kısmı (X/Y/M/D...) artık PLC Profilinden seçilen bölgeler arasından
+// combobox ile seçiliyor, elle yazmaya gerek yok — sadece adres numarasını
+// yazıyor. Sunucuya giderken ikisi tekrar tek bir string olarak birleşiyor
+// (bkz. _tagDogalAdresBirlestir), sunucu tarafında hiçbir değişiklik gerekmedi.
+function _tagOnekSayiAyir(dogalAdres) {
+    const m = /^([A-Za-z]+)\s*(\d*)$/.exec((dogalAdres || '').trim());
+    return m ? { onek: m[1].toUpperCase(), sayi: m[2] } : { onek: '', sayi: '' };
+}
+
+function _tagDogalAdresBirlestir(satir) {
+    const onek = satir.querySelector('[data-alan="dogal_onek"]').value;
+    const sayi = satir.querySelector('[data-alan="dogal_sayi"]').value.trim();
+    return (onek && sayi !== '') ? (onek + sayi) : '';
+}
+
+// Seçili PLC Profiline göre önek combobox'ının seçeneklerini yeniden kurar.
+// mevcutOnek doldurulmak istenen (satırda hâlihazırda olan) önek — profilin
+// listesinde yoksa bile (örn. profil sonradan değişmiş) kaybolmasın diye
+// listeye eklenir.
+function _tagOnekSecenekleriniKur(onekSelect, profilId, mevcutOnek) {
+    const profil = _tagProfilBul(profilId);
+    const onekler = profil ? profil.onekler.slice() : [];
+    if (mevcutOnek && !onekler.includes(mevcutOnek)) onekler.unshift(mevcutOnek);
+    _tagSelectDoldur(onekSelect, [['', '—'], ...onekler.map(o => [o, o])], mevcutOnek || '');
+}
+
 // Sunucudan gelen mevcut tag'lerin <select> seçeneklerini dolduruyoruz —
-// hangi değerin seçili olacağı, satırın data-veri-tipi/data-erisim
-// özniteliklerinden (Jinja tarafında <tr>'e basıldı) okunuyor.
+// hangi değerin seçili olacağı, satırın data-veri-tipi/data-erisim/
+// data-dogal-adres özniteliklerinden (Jinja tarafında <tr>'e basıldı) okunuyor.
 document.querySelectorAll('#tagTabloGovde tr').forEach(satir => {
     _tagSelectDoldur(satir.querySelector('[data-alan="veri_tipi"]'), TAG_VERI_TIPLERI, satir.dataset.veriTipi);
     _tagSelectDoldur(satir.querySelector('[data-alan="erisim"]'), TAG_ERISIMLER, satir.dataset.erisim);
+    const { onek, sayi } = _tagOnekSayiAyir(satir.dataset.dogalAdres);
+    const profilId = satir.querySelector('[data-alan="plc_profil_id"]').value;
+    _tagOnekSecenekleriniKur(satir.querySelector('[data-alan="dogal_onek"]'), profilId, onek);
+    satir.querySelector('[data-alan="dogal_sayi"]').value = sayi;
 });
 
 // Kullanıcı raporu: min-width tek başına yetmedi, uzun tag isimleri yine
@@ -400,22 +458,26 @@ function tagKayitAktifDegisti(checkboxEl) {
 function _tagSatirDegerleriTam(satir) {
     const ad = satir.querySelector('[data-alan="ad"]').value.trim();
     const adres = satir.querySelector('[data-alan="modbus_adres"]').value.trim();
-    const dogalAdres = satir.querySelector('[data-alan="dogal_adres"]').value.trim();
+    const dogalAdres = _tagDogalAdresBirlestir(satir);
     const profilId = satir.querySelector('[data-alan="plc_profil_id"]').value;
     // PLC Profili + Doğal Adres seçiliyse Modbus Adres henüz boş olabilir
     // (sunucu hesaplayacak) — o durumda da "tam" say.
     return ad !== '' && (adres !== '' || (dogalAdres !== '' && profilId !== ''));
 }
 
-// PLC Profili seçilince: Doğal Adres alanı açılır, Modbus Adres alanı
+// PLC Profili seçilince: önek combobox'ı o profilin bölgeleriyle (X/Y/M/D...)
+// yeniden kurulup açılır, adres numarası kutusu açılır, Modbus Adres alanı
 // artık otomatik hesaplanacağı için elle düzenlenemez (readonly) olur.
 // Profil kaldırılınca eski (elle adres girme) davranışına döner.
 function tagProfilDegisti(selectEl) {
     const satir = selectEl.closest('tr');
-    const dogalAdresInput = satir.querySelector('[data-alan="dogal_adres"]');
+    const onekSelect = satir.querySelector('[data-alan="dogal_onek"]');
+    const sayiInput = satir.querySelector('[data-alan="dogal_sayi"]');
     const modbusAdresInput = satir.querySelector('[data-alan="modbus_adres"]');
     const profilSecili = selectEl.value !== '';
-    dogalAdresInput.disabled = !profilSecili;
+    _tagOnekSecenekleriniKur(onekSelect, selectEl.value, onekSelect.value);
+    onekSelect.disabled = !profilSecili;
+    sayiInput.disabled = !profilSecili;
     modbusAdresInput.readOnly = profilSecili;
     tagHucreDegisti(selectEl);
 }
@@ -428,7 +490,7 @@ async function tagHucreDegisti(inputEl) {
         ad: satir.querySelector('[data-alan="ad"]').value.trim(),
         modbus_adres: satir.querySelector('[data-alan="modbus_adres"]').value.trim(),
         plc_profil_id: satir.querySelector('[data-alan="plc_profil_id"]').value,
-        dogal_adres: satir.querySelector('[data-alan="dogal_adres"]').value.trim(),
+        dogal_adres: _tagDogalAdresBirlestir(satir),
         veri_tipi: satir.querySelector('[data-alan="veri_tipi"]').value,
         erisim: satir.querySelector('[data-alan="erisim"]').value,
         gecmis_kayit_aktif: satir.querySelector('[data-alan="gecmis_kayit_aktif"]').checked,
@@ -484,7 +546,10 @@ function tagYeniSatirEkle() {
         <td class="tag-id-hucre">—</td>
         <td><input type="text" class="tag-hucre" data-alan="ad" placeholder="örn. sicaklik"></td>
         <td><select class="tag-hucre" data-alan="plc_profil_id" onchange="tagProfilDegisti(this)"></select></td>
-        <td><input type="text" class="tag-hucre" data-alan="dogal_adres" placeholder="örn. X21" style="font-family:monospace;" disabled></td>
+        <td style="display:flex;gap:4px;">
+            <select class="tag-hucre" data-alan="dogal_onek" disabled></select>
+            <input type="text" class="tag-hucre" data-alan="dogal_sayi" placeholder="21" style="font-family:monospace;" disabled>
+        </td>
         <td><input type="text" class="tag-hucre" data-alan="modbus_adres" placeholder="örn. 40001" style="font-family:monospace;"></td>
         <td><select class="tag-hucre" data-alan="veri_tipi"></select></td>
         <td><select class="tag-hucre" data-alan="erisim"></select></td>
@@ -496,10 +561,15 @@ function tagYeniSatirEkle() {
     // kartındaki "PLC Profili" alanı) yeni tag satırında otomatik öneri
     // olarak gelsin — her tag için tekrar seçmek gerekmesin.
     const varsayilanProfil = CIHAZ_PLC_PROFIL_ID ? String(CIHAZ_PLC_PROFIL_ID) : '';
-    _tagSelectDoldur(satir.querySelector('[data-alan="plc_profil_id"]'), [['', '— seçilmedi —'], ...PLC_PROFILLERI], varsayilanProfil);
+    _tagSelectDoldur(satir.querySelector('[data-alan="plc_profil_id"]'),
+        [['', '— seçilmedi —'], ...PLC_PROFILLERI.map(p => [String(p.id), p.etiket])], varsayilanProfil);
     _tagSelectDoldur(satir.querySelector('[data-alan="veri_tipi"]'), TAG_VERI_TIPLERI, 'bool');
     _tagSelectDoldur(satir.querySelector('[data-alan="erisim"]'), TAG_ERISIMLER, 'read');
-    if (varsayilanProfil) satir.querySelector('[data-alan="dogal_adres"]').disabled = false;
+    if (varsayilanProfil) {
+        _tagOnekSecenekleriniKur(satir.querySelector('[data-alan="dogal_onek"]'), varsayilanProfil, '');
+        satir.querySelector('[data-alan="dogal_onek"]').disabled = false;
+        satir.querySelector('[data-alan="dogal_sayi"]').disabled = false;
+    }
     govde.appendChild(satir);
     satir.querySelector('[data-alan="ad"]').focus();
 }
