@@ -203,6 +203,7 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
     {% endif %}
 </div>
 
+<div class="tag-tablo-breakout">
 <div class="card tag-tablo-karti">
     <h2>Tag'ler</h2>
     {% set tasarimci_mi = session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
@@ -218,15 +219,25 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
            Adres artık 2 parça, Modbus Adres, Tip, Erişim, Geçmiş...) hale
            gelince üst .container'ın sabit max-width:900px sınırına
            sığmıyordu, kart kenarından taşıyor/kırpılıyor gibi duruyordu.
-           Bu kartı, ekran genişliği izin verdiği sürece .container'dan
-           BAĞIMSIZ olarak (viewport'a göre ortalanmış, negatif margin ile
-           "container'dan taşma" tekniği) çok daha geniş yapıyoruz — böylece
-           yatay kaydırmaya daha az ihtiyaç kalıyor.*/
+           İKİ KATMANLI çözüm: dıştaki .tag-tablo-breakout, width:100vw +
+           position:relative/left:50%/margin-left:-50vw ile .container'dan
+           TAMAMEN bağımsız hale gelip TÜM viewport genişliğini kaplıyor
+           (parent'ın max-width'i ne olursa olsun). İçteki .tag-tablo-karti
+           ise o tam-genişlik şeridin İÇİNDE margin:auto ile ortalanıyor.
+           (Tek katmanlı, vw-tabanlı margin + max-width birlikte kullanılan
+           ilk deneme YANLIŞTI: max-width devreye girip genişliği kısaltınca
+           margin'ler yeniden hesaplanmıyordu, kart sola yapışık kalıp sağda
+           boş alan bırakıyordu — bu yüzden iki katmana bölündü.) */
+        .tag-tablo-breakout {
+            width: 100vw;
+            position: relative;
+            left: 50%;
+            margin-left: -50vw;
+        }
         .tag-tablo-karti {
-            max-width: 1400px;
-            width: calc(100vw - 32px);
-            margin-left: calc(50% - 50vw + 16px);
-            margin-right: calc(50% - 50vw + 16px);
+            max-width: 1900px;
+            width: calc(100% - 32px);
+            margin: 0 auto 16px;
         }
         .tag-tablo-sarici { overflow-x: auto; }
         /* Kullanıcı raporu: sütunlar bazen sığmıyor, tag isimleri kesiliyor,
@@ -303,7 +314,7 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
                     </td>
                     <td style="display:flex;gap:4px;">
                         <select class="tag-hucre" data-alan="dogal_onek" {{ '' if t.plc_profil_id else 'disabled' }}></select>
-                        <input type="text" class="tag-hucre" data-alan="dogal_sayi" placeholder="21" style="font-family:monospace;" {{ '' if t.plc_profil_id else 'disabled' }}>
+                        <input type="text" class="tag-hucre" data-alan="dogal_sayi" style="font-family:monospace;" {{ '' if t.plc_profil_id else 'disabled' }}>
                     </td>
                     <td><input type="text" class="tag-hucre" data-alan="modbus_adres" value="{{ t.modbus_adres }}" placeholder="örn. 40001" style="font-family:monospace;" {{ 'readonly' if t.plc_profil_id else '' }}></td>
                     <td><select class="tag-hucre" data-alan="veri_tipi"></select></td>
@@ -349,6 +360,7 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
     {% else %}
     <p style="color:var(--text-secondary);font-size:14px;">Henüz tag eklenmedi.</p>
     {% endif %}
+</div>
 </div>
 
 {% if tasarimci_mi %}
@@ -435,6 +447,20 @@ document.querySelectorAll('#tagTabloGovde [data-alan="ad"], #tagTabloGovde [data
 document.getElementById('tagTabloGovde').addEventListener('input', (e) => {
     if (e.target.dataset.alan === 'ad' || e.target.dataset.alan === 'modbus_adres') {
         tagGirdiBoyutlandir(e.target);
+    }
+});
+
+// Kullanıcı isteği: Modbus Adres (ham) alanı, Doğal Adres seçimine göre
+// otomatik dolsun — önek (X/Y/M/D) zaten SELECT olduğu için değişince
+// (aşağıdaki genel 'change' dinleyicisiyle) anında kaydedilip hesaplanıyor.
+// Adres NUMARASI ise serbest metin girildiği için kutudan çıkılana (blur)
+// kadar beklemek gerekiyordu — burada kısa bir yazma-durakladı (debounce)
+// süresiyle, kutudan çıkmadan da otomatik kaydedip ham adresi güncelliyoruz.
+let _tagDogalSayiZamanlayici = null;
+document.getElementById('tagTabloGovde').addEventListener('input', (e) => {
+    if (e.target.dataset.alan === 'dogal_sayi') {
+        clearTimeout(_tagDogalSayiZamanlayici);
+        _tagDogalSayiZamanlayici = setTimeout(() => tagHucreDegisti(e.target), 600);
     }
 });
 
@@ -548,7 +574,7 @@ function tagYeniSatirEkle() {
         <td><select class="tag-hucre" data-alan="plc_profil_id" onchange="tagProfilDegisti(this)"></select></td>
         <td style="display:flex;gap:4px;">
             <select class="tag-hucre" data-alan="dogal_onek" disabled></select>
-            <input type="text" class="tag-hucre" data-alan="dogal_sayi" placeholder="21" style="font-family:monospace;" disabled>
+            <input type="text" class="tag-hucre" data-alan="dogal_sayi" style="font-family:monospace;" disabled>
         </td>
         <td><input type="text" class="tag-hucre" data-alan="modbus_adres" placeholder="örn. 40001" style="font-family:monospace;"></td>
         <td><select class="tag-hucre" data-alan="veri_tipi"></select></td>
