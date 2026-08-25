@@ -235,3 +235,73 @@ def proje_gir(proje_id):
     session['proje_id'] = proje['id']
     session['proje_ad'] = proje['ad']
     return redirect(url_for('dashboard.dashboard_page'))
+
+
+# ============================================================
+# PLC PROFİLLERİ — kullanıcı isteği: PLC markası/serisi (Delta DVP, AS,
+# 15MC, ileride Siemens vb.) için X/Y/M/D gibi adres öneklerinin hangi
+# Modbus fonksiyonuna ve hangi formülle ham adrese gittiğini burada
+# tanımlarız — tag eklerken artık ham adresi elle hesaplamak yerine
+# "X21" gibi PLC'nin kendi gösterdiği adresi yazmak yeterli olur. Proje
+# bağımsız (tüm projeler paylaşır), bu yüzden platform admin panelinde.
+# ============================================================
+
+@admin_bp.route('/plc-profilleri')
+@admin_required
+def plc_profilleri():
+    profiller = database.plc_profilleri_listele()
+    profiller_detayli = [database.plc_profil_getir(p['id']) for p in profiller]
+    return render_template('plc_profilleri.html', profiller=profiller_detayli)
+
+
+@admin_bp.route('/plc-profil-ekle', methods=['POST'])
+@admin_required
+def plc_profil_ekle():
+    ad = request.form.get('ad', '').strip()
+    aciklama = request.form.get('aciklama', '').strip()
+    if not ad:
+        flash('Profil adı zorunlu.', 'danger')
+        return redirect(url_for('admin.plc_profilleri'))
+    ok, sonuc = database.plc_profil_ekle(ad, aciklama)
+    if ok:
+        flash(f'Profil eklendi: {ad}', 'success')
+    else:
+        flash(f'Hata: {sonuc}', 'danger')
+    return redirect(url_for('admin.plc_profilleri'))
+
+
+@admin_bp.route('/plc-profil/<int:profil_id>/sil', methods=['POST'])
+@admin_required
+def plc_profil_sil(profil_id):
+    database.plc_profil_sil(profil_id)
+    flash('Profil silindi.', 'success')
+    return redirect(url_for('admin.plc_profilleri'))
+
+
+@admin_bp.route('/plc-profil/<int:profil_id>/bolge-kaydet', methods=['POST'])
+@admin_required
+def plc_profil_bolge_kaydet(profil_id):
+    onek = request.form.get('onek', '').strip()
+    modbus_fonksiyon = request.form.get('modbus_fonksiyon', '')
+    sayi_sistemi = request.form.get('sayi_sistemi', 'onluk')
+    varsayilan_veri_tipi = request.form.get('varsayilan_veri_tipi', 'bool')
+    guven_notu = request.form.get('guven_notu', '').strip()
+    if not onek:
+        flash('Önek (örn. X, Y, M, D) zorunlu.', 'danger')
+        return redirect(url_for('admin.plc_profilleri'))
+    try:
+        adres_tabani = int(request.form.get('adres_tabani', '0') or '0')
+    except ValueError:
+        flash('Taban ofset sayısal olmalı.', 'danger')
+        return redirect(url_for('admin.plc_profilleri'))
+    database.plc_profil_bolge_kaydet(profil_id, onek, modbus_fonksiyon, sayi_sistemi, adres_tabani, varsayilan_veri_tipi, guven_notu)
+    flash(f'"{onek.upper()}" bölgesi kaydedildi.', 'success')
+    return redirect(url_for('admin.plc_profilleri'))
+
+
+@admin_bp.route('/plc-profil-bolge/<int:bolge_id>/sil', methods=['POST'])
+@admin_required
+def plc_profil_bolge_sil(bolge_id):
+    database.plc_profil_bolge_sil(bolge_id)
+    flash('Bölge silindi.', 'success')
+    return redirect(url_for('admin.plc_profilleri'))

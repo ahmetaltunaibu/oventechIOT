@@ -124,6 +124,62 @@ def init_db():
     if cihaz_kolonlari and 'son_modbus_rapor_zamani' not in cihaz_kolonlari:
         cursor.execute("ALTER TABLE cihazlar ADD COLUMN son_modbus_rapor_zamani TIMESTAMP")
 
+    # Kullanıcı isteği: PLC markası/serisi değiştikçe (Delta DVP → AS →
+    # 15MC → ileride Siemens vb.) her seferinde ham Modbus adresini elle
+    # hesaplamak yerine — bir "PLC Profili" tanımlanır (X/Y/M/D gibi her
+    # önekin hangi Modbus fonksiyonuna gittiği + doğal adresten ham adrese
+    # çevirme formülü), tag eklerken PLC'nin KENDİ gösterdiği adres
+    # ("X21", "D100" gibi) yazılır, ham adres OTOMATİK hesaplanır. Bu
+    # oturumda X21/Y coil/D-register offsetlerini elle bulmak için harcanan
+    # emeğin kalıcı çözümü. Formüller kesin/evrensel değil (Delta'nın
+    # kendisi bile modele göre değişebiliyor) — bu yüzden veritabanında,
+    # admin panelinden düzenlenebilir tutuluyor, koda gömülmüyor.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS plc_profilleri (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ad TEXT NOT NULL UNIQUE,             -- örn. "Delta DVP Serisi"
+            aciklama TEXT,
+            olusturma_zamani TIMESTAMP DEFAULT (datetime('now', '+3 hours'))
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS plc_profil_bolgeleri (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profil_id INTEGER NOT NULL REFERENCES plc_profilleri(id) ON DELETE CASCADE,
+            onek TEXT NOT NULL,                  -- örn. "X", "Y", "M", "D" (büyük/küçük duyarsız karşılaştırılır)
+            modbus_fonksiyon TEXT NOT NULL,      -- 'discrete_input' | 'coil' | 'holding_register'
+            sayi_sistemi TEXT NOT NULL DEFAULT 'onluk',  -- 'onluk' | 'sekizli' (Delta X'ler oktal)
+            adres_tabani INTEGER NOT NULL DEFAULT 0,     -- doğal sayıya eklenen/çıkarılan ofset
+            varsayilan_veri_tipi TEXT DEFAULT 'bool',    -- bu önek seçilince tag'in veri_tipi'ne öneri
+            guven_notu TEXT,                     -- bu formülün ne kadar doğrulandığı (kullanıcıya gösterilir)
+            UNIQUE(profil_id, onek)
+        )
+    ''')
+
+    # Delta DVP Serisi profilini bir kere tohumla (varsa dokunma — admin
+    # panelinden düzenlenmiş olabilir, üzerine yazma).
+    delta_dvp = cursor.execute("SELECT id FROM plc_profilleri WHERE ad = 'Delta DVP Serisi'").fetchone()
+    if not delta_dvp:
+        cursor.execute(
+            "INSERT INTO plc_profilleri (ad, aciklama) VALUES (?, ?)",
+            ('Delta DVP Serisi', 'DVP serisi PLC için X/Y/M/D adres çevirme kuralları.')
+        )
+        delta_dvp_id = cursor.lastrowid
+        cursor.executemany('''
+            INSERT INTO plc_profil_bolgeleri
+                (profil_id, onek, modbus_fonksiyon, sayi_sistemi, adres_tabani, varsayilan_veri_tipi, guven_notu)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', [
+            (delta_dvp_id, 'X', 'discrete_input', 'sekizli', 1025, 'bool',
+             'TEST EDİLDİ (Seri Monitör ile doğrulandı) — X21 (oktal 21=onluk 17) + 1025 = ham adres 1042.'),
+            (delta_dvp_id, 'Y', 'coil', 'onluk', -1, 'bool',
+             "TAHMİN (Delta'nın adres tablosundan matematiksel çıkarım, henüz donanımda doğrulanmadı) — ilk denemede çalışmazsa 0 dene."),
+            (delta_dvp_id, 'M', 'coil', 'onluk', 0, 'bool',
+             'TAHMİN (doğrulanmadı) — dahili röle, genelde doğrudan adresleniyor.'),
+            (delta_dvp_id, 'D', 'holding_register', 'onluk', 0, 'int',
+             "TAHMİN (doğrulanmadı) — float tag'lerde bazen 1 eksiği gerekebiliyor (WPLSoft'ta görünen adres çiftin yüksek yarısı olabiliyor), deneyerek doğrula."),
+        ])
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tagler (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,6 +221,15 @@ def init_db():
     gecmis_kayit_aktif_yeni_eklendi = 'gecmis_kayit_aktif' not in mevcut_kolonlar
     if gecmis_kayit_aktif_yeni_eklendi:
         cursor.execute('ALTER TABLE tagler ADD COLUMN gecmis_kayit_aktif INTEGER NOT NULL DEFAULT 0')
+
+    # Migration: PLC Profili — tag'e "hangi profille, hangi doğal adresle
+    # (örn. X21) hesaplandı" bilgisini de saklıyoruz (sadece görüntüleme/
+    # düzenleme kolaylığı için — modbus_adres zaten HAM adresi tutuyor,
+    # firmware hâlâ sadece modbus_adres'i kullanıyor, hiç değişmedi).
+    if 'plc_profil_id' not in mevcut_kolonlar:
+        cursor.execute('ALTER TABLE tagler ADD COLUMN plc_profil_id INTEGER REFERENCES plc_profilleri(id) ON DELETE SET NULL')
+    if 'dogal_adres' not in mevcut_kolonlar:
+        cursor.execute('ALTER TABLE tagler ADD COLUMN dogal_adres TEXT')
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sayfalar (
@@ -980,16 +1045,139 @@ def cihaz_son_gorulme_saniye_once(cihaz_id: int):
 
 
 # ============================================================
+# PLC PROFİLLERİ (marka/seri bazlı doğal adres -> ham Modbus adresi çevirisi)
+# ============================================================
+
+def plc_profilleri_listele():
+    conn = get_db()
+    try:
+        return [dict(r) for r in conn.execute('SELECT * FROM plc_profilleri ORDER BY ad').fetchall()]
+    finally:
+        conn.close()
+
+
+def plc_profil_getir(profil_id: int):
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT * FROM plc_profilleri WHERE id = ?', (profil_id,)).fetchone()
+        if not row:
+            return None
+        profil = dict(row)
+        profil['bolgeler'] = [dict(r) for r in conn.execute(
+            'SELECT * FROM plc_profil_bolgeleri WHERE profil_id = ? ORDER BY onek', (profil_id,)
+        ).fetchall()]
+        return profil
+    finally:
+        conn.close()
+
+
+def plc_profil_ekle(ad: str, aciklama: str = ''):
+    conn = get_db()
+    try:
+        cur = conn.execute('INSERT INTO plc_profilleri (ad, aciklama) VALUES (?, ?)', (ad.strip(), aciklama.strip()))
+        conn.commit()
+        return True, cur.lastrowid
+    except sqlite3.IntegrityError:
+        return False, 'Bu isimde bir profil zaten var'
+    finally:
+        conn.close()
+
+
+def plc_profil_sil(profil_id: int):
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM plc_profilleri WHERE id = ?', (profil_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def plc_profil_bolge_kaydet(profil_id: int, onek: str, modbus_fonksiyon: str, sayi_sistemi: str,
+                             adres_tabani: int, varsayilan_veri_tipi: str = 'bool', guven_notu: str = ''):
+    """Var olan önek güncellenir (aynı profil+önek), yoksa eklenir."""
+    conn = get_db()
+    try:
+        conn.execute('''
+            INSERT INTO plc_profil_bolgeleri (profil_id, onek, modbus_fonksiyon, sayi_sistemi, adres_tabani, varsayilan_veri_tipi, guven_notu)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(profil_id, onek) DO UPDATE SET
+                modbus_fonksiyon = excluded.modbus_fonksiyon,
+                sayi_sistemi = excluded.sayi_sistemi,
+                adres_tabani = excluded.adres_tabani,
+                varsayilan_veri_tipi = excluded.varsayilan_veri_tipi,
+                guven_notu = excluded.guven_notu
+        ''', (profil_id, onek.strip().upper(), modbus_fonksiyon, sayi_sistemi, adres_tabani, varsayilan_veri_tipi, guven_notu.strip()))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def plc_profil_bolge_sil(bolge_id: int):
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM plc_profil_bolgeleri WHERE id = ?', (bolge_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def dogal_adresi_coz(profil_id: int, dogal_adres: str):
+    """"X21", "D100" gibi bir doğal PLC adresini, o profildeki bölge
+    kuralına göre (sayı sistemi + taban ofset) HAM Modbus adresine çevirir.
+    Döner: (ok, sonuc) — ok=True ise sonuc {'ham_adres': int, 'modbus_fonksiyon': str,
+    'varsayilan_veri_tipi': str}, ok=False ise sonuc hata mesajı (str)."""
+    dogal_adres = (dogal_adres or '').strip().upper()
+    if not dogal_adres:
+        return False, 'Doğal adres boş olamaz'
+    # Önek = baştaki harfler, geri kalanı sayı (X21 -> onek='X', sayi_metni='21')
+    i = 0
+    while i < len(dogal_adres) and dogal_adres[i].isalpha():
+        i += 1
+    onek, sayi_metni = dogal_adres[:i], dogal_adres[i:]
+    if not onek or not sayi_metni or not sayi_metni.isdigit():
+        return False, f'"{dogal_adres}" tanınamadı — "X21", "D100" gibi harf+sayı biçiminde olmalı'
+
+    conn = get_db()
+    try:
+        bolge = conn.execute(
+            'SELECT * FROM plc_profil_bolgeleri WHERE profil_id = ? AND onek = ?',
+            (profil_id, onek)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not bolge:
+        return False, f'Bu profilde "{onek}" öneki tanımlı değil'
+
+    taban = 8 if bolge['sayi_sistemi'] == 'sekizli' else 10
+    try:
+        sayi = int(sayi_metni, taban)
+    except ValueError:
+        return False, f'"{sayi_metni}" geçerli bir {"sekizli" if taban == 8 else "onluk"} sayı değil'
+
+    ham_adres = sayi + bolge['adres_tabani']
+    if ham_adres < 0:
+        return False, f'Hesaplanan ham adres negatif çıktı ({ham_adres}) — profildeki taban ofseti kontrol et'
+    return True, {
+        'ham_adres': ham_adres,
+        'modbus_fonksiyon': bolge['modbus_fonksiyon'],
+        'varsayilan_veri_tipi': bolge['varsayilan_veri_tipi'],
+    }
+
+
+# ============================================================
 # TAG
 # ============================================================
 
-def tag_ekle(cihaz_id: int, ad: str, modbus_adres: str, veri_tipi: str = 'bool', erisim: str = 'read', gecmis_araligi_sn=None, gecmis_kayit_aktif=False):
+def tag_ekle(cihaz_id: int, ad: str, modbus_adres: str, veri_tipi: str = 'bool', erisim: str = 'read', gecmis_araligi_sn=None, gecmis_kayit_aktif=False, plc_profil_id=None, dogal_adres=None):
     conn = get_db()
     try:
         cur = conn.execute('''
-            INSERT INTO tagler (cihaz_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn, gecmis_kayit_aktif)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (cihaz_id, ad.strip(), modbus_adres.strip(), veri_tipi, erisim, gecmis_araligi_sn, 1 if gecmis_kayit_aktif else 0))
+            INSERT INTO tagler (cihaz_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn, gecmis_kayit_aktif, plc_profil_id, dogal_adres)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (cihaz_id, ad.strip(), modbus_adres.strip(), veri_tipi, erisim, gecmis_araligi_sn, 1 if gecmis_kayit_aktif else 0, plc_profil_id, dogal_adres))
         conn.commit()
         return True, cur.lastrowid
     except sqlite3.IntegrityError:
@@ -998,13 +1186,14 @@ def tag_ekle(cihaz_id: int, ad: str, modbus_adres: str, veri_tipi: str = 'bool',
         conn.close()
 
 
-def tag_guncelle(tag_id: int, ad: str, modbus_adres: str, veri_tipi: str, erisim: str, gecmis_araligi_sn=None, gecmis_kayit_aktif=False):
+def tag_guncelle(tag_id: int, ad: str, modbus_adres: str, veri_tipi: str, erisim: str, gecmis_araligi_sn=None, gecmis_kayit_aktif=False, plc_profil_id=None, dogal_adres=None):
     conn = get_db()
     try:
         conn.execute('''
-            UPDATE tagler SET ad = ?, modbus_adres = ?, veri_tipi = ?, erisim = ?, gecmis_araligi_sn = ?, gecmis_kayit_aktif = ?
+            UPDATE tagler SET ad = ?, modbus_adres = ?, veri_tipi = ?, erisim = ?, gecmis_araligi_sn = ?, gecmis_kayit_aktif = ?,
+                               plc_profil_id = ?, dogal_adres = ?
             WHERE id = ?
-        ''', (ad.strip(), modbus_adres.strip(), veri_tipi, erisim, gecmis_araligi_sn, 1 if gecmis_kayit_aktif else 0, tag_id))
+        ''', (ad.strip(), modbus_adres.strip(), veri_tipi, erisim, gecmis_araligi_sn, 1 if gecmis_kayit_aktif else 0, plc_profil_id, dogal_adres, tag_id))
         conn.commit()
         return True, None
     except sqlite3.IntegrityError:

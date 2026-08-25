@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}PLC Profilleri - Admin{% endblock %}
+{% block content %}
+<p style="margin-bottom:14px;"><a class="item-link" href="{{ url_for('admin.admin_page') }}" style="color:var(--accent);">&larr; Projeler</a></p>
+
+<div class="card">
+    <h2>PLC Profilleri</h2>
+    <p style="font-size:12px;color:var(--text-secondary);">
+        PLC markası/serisine göre X/Y/M/D gibi adres öneklerinin hangi Modbus fonksiyonuna ve hangi formülle ham adrese gittiğini burada tanımlarsın.
+        Tag eklerken artık ham Modbus adresini elle hesaplamak yerine "X21", "D100" gibi PLC'nin kendi gösterdiği adresi yazman yeterli olur — sunucu otomatik çevirir.
+        Bu liste tüm projeler arasında paylaşılır.
+    </p>
+</div>
+
+{% for p in profiller %}
+<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h2 style="margin:0;">{{ p.ad }}</h2>
+        <form method="POST" action="{{ url_for('admin.plc_profil_sil', profil_id=p.id) }}" onsubmit="return confirm('{{ p.ad }} profili (tüm bölgeleriyle) silinsin mi?');">
+            <button type="submit" style="background:var(--red);padding:6px 12px;font-size:12px;">Profili Sil</button>
+        </form>
+    </div>
+    {% if p.aciklama %}<p style="font-size:12px;color:var(--text-secondary);">{{ p.aciklama }}</p>{% endif %}
+
+    <table style="margin-top:10px;">
+        <thead><tr><th>Önek</th><th>Modbus Fonksiyonu</th><th>Sayı Sistemi</th><th>Taban Ofset</th><th>Varsayılan Tip</th><th>Güven Notu</th><th></th></tr></thead>
+        <tbody>
+        {% for b in p.bolgeler %}
+            <tr>
+                <td style="font-family:monospace;font-weight:700;">{{ b.onek }}</td>
+                <td>{{ {'discrete_input':'Discrete Input (02)','coil':'Coil (01/05)','holding_register':'Holding Register (03/06/16)'}.get(b.modbus_fonksiyon, b.modbus_fonksiyon) }}</td>
+                <td>{{ 'Sekizli (Oktal)' if b.sayi_sistemi == 'sekizli' else 'Onluk' }}</td>
+                <td style="font-family:monospace;">{{ b.adres_tabani }}</td>
+                <td>{{ b.varsayilan_veri_tipi }}</td>
+                <td style="font-size:11px;color:var(--text-secondary);max-width:280px;">{{ b.guven_notu }}</td>
+                <td style="white-space:nowrap;">
+                    <form method="POST" action="{{ url_for('admin.plc_profil_bolge_sil', bolge_id=b.id) }}" onsubmit="return confirm('{{ b.onek }} bölgesi silinsin mi?');" style="display:inline;">
+                        <button type="submit" style="background:var(--red);padding:4px 8px;font-size:11px;">Sil</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <details style="margin-top:12px;">
+        <summary style="cursor:pointer;color:var(--accent);font-size:13px;">+ Bölge Ekle / Düzenle</summary>
+        <form method="POST" action="{{ url_for('admin.plc_profil_bolge_kaydet', profil_id=p.id) }}" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+                <label>Önek (örn. X, Y, M, D)</label>
+                <input type="text" name="onek" maxlength="4" required style="width:80px;margin-bottom:0;text-transform:uppercase;">
+            </div>
+            <div>
+                <label>Modbus Fonksiyonu</label>
+                <select name="modbus_fonksiyon" style="margin-bottom:0;">
+                    <option value="discrete_input">Discrete Input (02) — sadece okuma, fiziksel giriş</option>
+                    <option value="coil">Coil (01/05) — okuma+yazma, çıkış/dahili röle</option>
+                    <option value="holding_register">Holding Register (03/06/16) — sayısal register</option>
+                </select>
+            </div>
+            <div>
+                <label>Sayı Sistemi</label>
+                <select name="sayi_sistemi" style="margin-bottom:0;">
+                    <option value="onluk">Onluk</option>
+                    <option value="sekizli">Sekizli (Oktal)</option>
+                </select>
+            </div>
+            <div>
+                <label>Taban Ofset</label>
+                <input type="number" name="adres_tabani" value="0" required style="width:100px;margin-bottom:0;">
+            </div>
+            <div>
+                <label>Varsayılan Veri Tipi</label>
+                <select name="varsayilan_veri_tipi" style="margin-bottom:0;">
+                    <option value="bool">bool</option>
+                    <option value="int">int</option>
+                    <option value="float">float</option>
+                </select>
+            </div>
+            <div style="flex:1;min-width:200px;">
+                <label>Güven Notu (test edildi mi, tahmin mi)</label>
+                <input type="text" name="guven_notu" style="margin-bottom:0;">
+            </div>
+            <button type="submit">Kaydet</button>
+        </form>
+        <p style="font-size:11px;color:var(--text-secondary);margin-top:6px;">Aynı önek tekrar kaydedilirse üzerine yazılır (günceller) — silmene gerek yok, düzeltip tekrar kaydet.</p>
+    </details>
+</div>
+{% endfor %}
+
+<div class="card">
+    <h2>Yeni Profil</h2>
+    <form method="POST" action="{{ url_for('admin.plc_profil_ekle') }}">
+        <label>Profil Adı (örn. "Delta AS Serisi", "Siemens S7-1200")</label>
+        <input type="text" name="ad" required>
+        <label>Açıklama (opsiyonel)</label>
+        <input type="text" name="aciklama">
+        <button type="submit">Profil Oluştur</button>
+    </form>
+</div>
+{% endblock %}

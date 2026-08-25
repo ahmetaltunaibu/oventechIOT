@@ -61,9 +61,11 @@ def cihaz_detay(cihaz_id):
     alarmlar = database.alarm_kayitlari_listele(cihaz_id, limit=30)
     firmwarelar = database.firmware_listesi(session['proje_id'])
     firmware_gecmisi = database.firmware_gecmisi_listele(cihaz_id, limit=15)
+    plc_profilleri = database.plc_profilleri_listele()
     return render_template('cihaz_detay.html', cihaz=cihaz, tagler=tagler, sayfalar=sayfalar,
                             proje_sayfalari=proje_sayfalari, alarmlar=alarmlar,
-                            firmwarelar=firmwarelar, firmware_gecmisi=firmware_gecmisi)
+                            firmwarelar=firmwarelar, firmware_gecmisi=firmware_gecmisi,
+                            plc_profilleri=plc_profilleri)
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/yeniden-adlandir', methods=['POST'])
@@ -199,6 +201,23 @@ def tag_ekle(cihaz_id):
 # formu için hâlâ duruyor, silinmedi.
 # ============================================================
 
+def _dogal_adres_uygula(veri, mevcut_modbus_adres):
+    """Kullanıcı isteği: PLC markası/serisi için bir "PLC Profili" seçilip
+    "X21"/"D100" gibi doğal adres girilirse, ham Modbus adresini elle
+    hesaplamak yerine otomatik çözülsün. Profil/doğal adres verilmezse eski
+    davranış (elle girilen ham modbus_adres) aynen çalışmaya devam eder.
+    Döner: (modbus_adres, plc_profil_id, dogal_adres, hata)."""
+    dogal_adres = str(veri.get('dogal_adres', '') or '').strip()
+    plc_profil_ham = veri.get('plc_profil_id')
+    plc_profil_id = int(plc_profil_ham) if plc_profil_ham not in (None, '') else None
+    if not dogal_adres or not plc_profil_id:
+        return str(veri.get('modbus_adres', mevcut_modbus_adres)).strip(), plc_profil_id, (dogal_adres or None), None
+    ok, sonuc = database.dogal_adresi_coz(plc_profil_id, dogal_adres)
+    if not ok:
+        return None, None, None, sonuc
+    return str(sonuc['ham_adres']), plc_profil_id, dogal_adres, None
+
+
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/tag/<int:tag_id>/alan-guncelle', methods=['POST'])
 @tasarimci_required
 def tag_alan_guncelle(cihaz_id, tag_id):
@@ -209,9 +228,11 @@ def tag_alan_guncelle(cihaz_id, tag_id):
         return jsonify({'error': 'Tag bulunamadı'}), 404
     veri = request.get_json(silent=True) or {}
     ad = str(veri.get('ad', mevcut['ad'])).strip()
-    modbus_adres = str(veri.get('modbus_adres', mevcut['modbus_adres'])).strip()
     veri_tipi = veri.get('veri_tipi', mevcut['veri_tipi'])
     erisim = veri.get('erisim', mevcut['erisim'])
+    modbus_adres, plc_profil_id, dogal_adres, adres_hata = _dogal_adres_uygula(veri, mevcut['modbus_adres'])
+    if adres_hata:
+        return jsonify({'error': adres_hata}), 400
     if not ad or not modbus_adres:
         return jsonify({'error': 'Tag adı ve Modbus adresi boş olamaz'}), 400
     gecmis_ham = veri.get('gecmis_araligi_sn', mevcut.get('gecmis_araligi_sn'))
@@ -222,10 +243,11 @@ def tag_alan_guncelle(cihaz_id, tag_id):
     except (TypeError, ValueError):
         return jsonify({'error': 'Kayıt aralığı sayısal olmalı'}), 400
     gecmis_kayit_aktif = veri.get('gecmis_kayit_aktif', bool(mevcut.get('gecmis_kayit_aktif')))
-    ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn, gecmis_kayit_aktif)
+    ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn, gecmis_kayit_aktif,
+                                      plc_profil_id, dogal_adres)
     if not ok:
         return jsonify({'error': hata}), 400
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'modbus_adres': modbus_adres})
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/tag-ekle-json', methods=['POST'])
@@ -235,9 +257,11 @@ def tag_ekle_json(cihaz_id):
         return jsonify({'error': 'Cihaz bulunamadı'}), 404
     veri = request.get_json(silent=True) or {}
     ad = str(veri.get('ad', '')).strip()
-    modbus_adres = str(veri.get('modbus_adres', '')).strip()
     veri_tipi = veri.get('veri_tipi') or 'bool'
     erisim = veri.get('erisim') or 'read'
+    modbus_adres, plc_profil_id, dogal_adres, adres_hata = _dogal_adres_uygula(veri, '')
+    if adres_hata:
+        return jsonify({'error': adres_hata}), 400
     if not ad or not modbus_adres:
         return jsonify({'error': 'Tag adı ve Modbus adresi zorunlu'}), 400
     gecmis_ham = veri.get('gecmis_araligi_sn')
@@ -248,10 +272,11 @@ def tag_ekle_json(cihaz_id):
     except (TypeError, ValueError):
         return jsonify({'error': 'Kayıt aralığı sayısal olmalı'}), 400
     gecmis_kayit_aktif = bool(veri.get('gecmis_kayit_aktif'))
-    ok, sonuc = database.tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn, gecmis_kayit_aktif)
+    ok, sonuc = database.tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim, gecmis_araligi_sn, gecmis_kayit_aktif,
+                                   plc_profil_id, dogal_adres)
     if not ok:
         return jsonify({'error': sonuc}), 400
-    return jsonify({'success': True, 'id': sonuc})
+    return jsonify({'success': True, 'id': sonuc, 'modbus_adres': modbus_adres})
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/tag/<int:tag_id>/sil-json', methods=['POST'])
