@@ -1,8 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Admin Panel - OventechIOT{% endblock %}
 {% block content %}
-<p style="margin-bottom:14px;"><a class="item-link" href="{{ url_for('admin.plc_profilleri') }}" style="color:var(--accent);">🔌 PLC Profilleri (X/Y/M/D adres çevirme kuralları)</a></p>
-
 <div class="card">
     <h2>Projeler</h2>
     {% if projeler %}

@@ -36,6 +36,11 @@
                 <td>{{ b.varsayilan_veri_tipi }}</td>
                 <td style="font-size:11px;color:var(--text-secondary);max-width:280px;">{{ b.guven_notu }}</td>
                 <td style="white-space:nowrap;">
+                    <button type="button" onclick="bolgeDuzenle(this)"
+                        data-profil="{{ p.id }}" data-onek="{{ b.onek }}" data-fonksiyon="{{ b.modbus_fonksiyon }}"
+                        data-sayi-sistemi="{{ b.sayi_sistemi }}" data-taban="{{ b.adres_tabani }}"
+                        data-tip="{{ b.varsayilan_veri_tipi }}" data-not="{{ b.guven_notu }}"
+                        style="background:var(--panel2);padding:4px 8px;font-size:11px;">Düzenle</button>
                     <form method="POST" action="{{ url_for('admin.plc_profil_bolge_sil', bolge_id=b.id) }}" onsubmit="return confirm('{{ b.onek }} bölgesi silinsin mi?');" style="display:inline;">
                         <button type="submit" style="background:var(--red);padding:4px 8px;font-size:11px;">Sil</button>
                     </form>
@@ -45,9 +50,9 @@
         </tbody>
     </table>
 
-    <details style="margin-top:12px;">
+    <details id="bolge-details-{{ p.id }}" style="margin-top:12px;">
         <summary style="cursor:pointer;color:var(--accent);font-size:13px;">+ Bölge Ekle / Düzenle</summary>
-        <form method="POST" action="{{ url_for('admin.plc_profil_bolge_kaydet', profil_id=p.id) }}" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+        <form id="bolge-form-{{ p.id }}" method="POST" action="{{ url_for('admin.plc_profil_bolge_kaydet', profil_id=p.id) }}" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
             <div>
                 <label>Önek (örn. X, Y, M, D)</label>
                 <input type="text" name="onek" maxlength="4" required style="width:80px;margin-bottom:0;text-transform:uppercase;">
@@ -91,7 +96,7 @@
         </form>
         <p style="font-size:11px;color:var(--text-secondary);margin-top:6px;">
             Taban ofseti elle hesaplamana gerek yok — sadece bildiğin bir noktayı gir (örn. "0" → "1280"), gerisi (1, 2, 3, ...) zaten aynı formülle otomatik ilerliyor.
-            Aynı önek tekrar kaydedilirse üzerine yazılır (günceller) — silmene gerek yok, düzeltip tekrar kaydet.
+            Aynı önek tekrar kaydedilirse üzerine yazılır (günceller) — bir satırı düzenlemek için üstteki tablodaki "Düzenle" butonunu kullan, form otomatik doldurulur.
         </p>
     </details>
 </div>
@@ -111,4 +116,22 @@
         <button type="submit">Profil Oluştur</button>
     </form>
 </div>
+
+<script>
+function bolgeDuzenle(btn) {
+    var d = btn.dataset;
+    var form = document.getElementById('bolge-form-' + d.profil);
+    form.onek.value = d.onek;
+    form.modbus_fonksiyon.value = d.fonksiyon;
+    form.sayi_sistemi.value = d.sayiSistemi;
+    form.baslangic_dogal_adres.value = '0';
+    form.baslangic_ham_adres.value = d.taban;
+    form.varsayilan_veri_tipi.value = d.tip;
+    form.guven_notu.value = d.not;
+    var details = document.getElementById('bolge-details-' + d.profil);
+    details.open = true;
+    details.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form.onek.focus();
+}
+</script>
 {% endblock %}
