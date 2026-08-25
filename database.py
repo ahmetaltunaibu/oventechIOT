@@ -137,11 +137,17 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS plc_profilleri (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ad TEXT NOT NULL UNIQUE,             -- örn. "Delta DVP Serisi"
+            marka TEXT,                          -- örn. "Delta", "Siemens" — gruplama/görüntüleme için
+            ad TEXT NOT NULL UNIQUE,             -- örn. "DVP Standart Serisi"
             aciklama TEXT,
             olusturma_zamani TIMESTAMP DEFAULT (datetime('now', '+3 hours'))
         )
     ''')
+    # Migration: eski kurulumlarda marka kolonu yoksa ekle.
+    profil_kolonlari = {row[1] for row in cursor.execute("PRAGMA table_info(plc_profilleri)").fetchall()}
+    if profil_kolonlari and 'marka' not in profil_kolonlari:
+        cursor.execute('ALTER TABLE plc_profilleri ADD COLUMN marka TEXT')
+    cursor.execute("UPDATE plc_profilleri SET marka = 'Delta' WHERE ad = 'Delta DVP Serisi' AND marka IS NULL")
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS plc_profil_bolgeleri (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,8 +167,8 @@ def init_db():
     delta_dvp = cursor.execute("SELECT id FROM plc_profilleri WHERE ad = 'Delta DVP Serisi'").fetchone()
     if not delta_dvp:
         cursor.execute(
-            "INSERT INTO plc_profilleri (ad, aciklama) VALUES (?, ?)",
-            ('Delta DVP Serisi', 'DVP serisi PLC için X/Y/M/D adres çevirme kuralları.')
+            "INSERT INTO plc_profilleri (marka, ad, aciklama) VALUES (?, ?, ?)",
+            ('Delta', 'Delta DVP Serisi', 'DVP serisi PLC için X/Y/M/D adres çevirme kuralları.')
         )
         delta_dvp_id = cursor.lastrowid
         cursor.executemany('''
@@ -172,13 +178,30 @@ def init_db():
         ''', [
             (delta_dvp_id, 'X', 'discrete_input', 'sekizli', 1025, 'bool',
              'TEST EDİLDİ (Seri Monitör ile doğrulandı) — X21 (oktal 21=onluk 17) + 1025 = ham adres 1042.'),
-            (delta_dvp_id, 'Y', 'coil', 'onluk', -1, 'bool',
-             "TAHMİN (Delta'nın adres tablosundan matematiksel çıkarım, henüz donanımda doğrulanmadı) — ilk denemede çalışmazsa 0 dene."),
+            (delta_dvp_id, 'Y', 'coil', 'sekizli', 1280, 'bool',
+             "TAHMİN (Delta'nın adres tablosundan matematiksel çıkarım, X ile aynı yöntemle — Y de X gibi 8'li fiziksel gruplarla oktal ilerliyor; henüz donanımda doğrulanmadı) — Y000 → 1280, Y007 → 1287."),
             (delta_dvp_id, 'M', 'coil', 'onluk', 0, 'bool',
              'TAHMİN (doğrulanmadı) — dahili röle, genelde doğrudan adresleniyor.'),
             (delta_dvp_id, 'D', 'holding_register', 'onluk', 0, 'int',
              "TAHMİN (doğrulanmadı) — float tag'lerde bazen 1 eksiği gerekebiliyor (WPLSoft'ta görünen adres çiftin yüksek yarısı olabiliyor), deneyerek doğrula."),
         ])
+
+    # Tek seferlik düzeltme: bu oturumda Y bölgesi yanlış tohumlanmıştı
+    # (onluk/-1) — Y'nin de X gibi oktal gruplandığı fark edildi (doğru:
+    # sekizli/1280). Sadece HÂLÂ eski yanlış değerlerdeyse düzelt — admin
+    # panelinden elle değiştirilmişse (artık farklı bir değerdeyse) DOKUNMA.
+    cursor.execute('''
+        UPDATE plc_profil_bolgeleri SET sayi_sistemi = 'sekizli', adres_tabani = 1280
+        WHERE onek = 'Y' AND sayi_sistemi = 'onluk' AND adres_tabani = -1
+          AND profil_id IN (SELECT id FROM plc_profilleri WHERE ad = 'Delta DVP Serisi')
+    ''')
+
+    # Migration: kullanıcı isteği — cihazın KENDİSİNE bir PLC Profili
+    # atanabilsin, böylece o cihaz için yeni tag eklerken profili her
+    # seferinde tekrar seçmek gerekmez (tag tablosunda otomatik öneri
+    # olarak gelir). plc_profilleri tablosu yukarıda zaten oluştu.
+    if cihaz_kolonlari and 'plc_profil_id' not in cihaz_kolonlari:
+        cursor.execute('ALTER TABLE cihazlar ADD COLUMN plc_profil_id INTEGER REFERENCES plc_profilleri(id) ON DELETE SET NULL')
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tagler (
@@ -941,6 +964,19 @@ def cihaz_yeniden_adlandir(cihaz_id: int, yeni_ad: str):
         conn.close()
 
 
+def cihaz_plc_profili_ayarla(cihaz_id: int, plc_profil_id):
+    """Cihazın hangi PLC profiliyle çalıştığını kaydeder — tag tablosunda
+    yeni satır eklerken bu profil otomatik öneri olarak gelir, her tag için
+    tekrar seçmek gerekmez."""
+    conn = get_db()
+    try:
+        conn.execute('UPDATE cihazlar SET plc_profil_id = ? WHERE id = ?', (plc_profil_id, cihaz_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def cihaz_baslangic_sayfa_guncelle(cihaz_id: int, sayfa_ad: str):
     """Boş string/None verilirse başlangıç sayfası kaldırılır (eski davranışa
     — cihaz yönetim sayfasına dönülür)."""
@@ -1051,7 +1087,7 @@ def cihaz_son_gorulme_saniye_once(cihaz_id: int):
 def plc_profilleri_listele():
     conn = get_db()
     try:
-        return [dict(r) for r in conn.execute('SELECT * FROM plc_profilleri ORDER BY ad').fetchall()]
+        return [dict(r) for r in conn.execute('SELECT * FROM plc_profilleri ORDER BY marka, ad').fetchall()]
     finally:
         conn.close()
 
@@ -1071,10 +1107,13 @@ def plc_profil_getir(profil_id: int):
         conn.close()
 
 
-def plc_profil_ekle(ad: str, aciklama: str = ''):
+def plc_profil_ekle(ad: str, aciklama: str = '', marka: str = ''):
     conn = get_db()
     try:
-        cur = conn.execute('INSERT INTO plc_profilleri (ad, aciklama) VALUES (?, ?)', (ad.strip(), aciklama.strip()))
+        cur = conn.execute(
+            'INSERT INTO plc_profilleri (marka, ad, aciklama) VALUES (?, ?, ?)',
+            ((marka or '').strip() or None, ad.strip(), aciklama.strip())
+        )
         conn.commit()
         return True, cur.lastrowid
     except sqlite3.IntegrityError:

@@ -257,12 +257,13 @@ def plc_profilleri():
 @admin_bp.route('/plc-profil-ekle', methods=['POST'])
 @admin_required
 def plc_profil_ekle():
+    marka = request.form.get('marka', '').strip()
     ad = request.form.get('ad', '').strip()
     aciklama = request.form.get('aciklama', '').strip()
     if not ad:
         flash('Profil adı zorunlu.', 'danger')
         return redirect(url_for('admin.plc_profilleri'))
-    ok, sonuc = database.plc_profil_ekle(ad, aciklama)
+    ok, sonuc = database.plc_profil_ekle(ad, aciklama, marka)
     if ok:
         flash(f'Profil eklendi: {ad}', 'success')
     else:
@@ -289,13 +290,23 @@ def plc_profil_bolge_kaydet(profil_id):
     if not onek:
         flash('Önek (örn. X, Y, M, D) zorunlu.', 'danger')
         return redirect(url_for('admin.plc_profilleri'))
+    # Kullanıcı isteği: admin taban ofseti ELLE HESAPLAMASIN — "başlangıç
+    # doğal adres" (örn. Y için 0) ve "o adresin karşılığı ham Modbus
+    # adresi" (örn. 1280, PLC dokümanından/testten) girilir, ofset burada
+    # otomatik çıkarılır. Gerisi (Y1, Y2, ...) zaten aynı formülle otomatik
+    # ilerliyor — dogal_adresi_coz() her tag için bunu zaten yapıyor.
+    baslangic_dogal = request.form.get('baslangic_dogal_adres', '0').strip()
+    baslangic_ham = request.form.get('baslangic_ham_adres', '').strip()
+    taban = 8 if sayi_sistemi == 'sekizli' else 10
     try:
-        adres_tabani = int(request.form.get('adres_tabani', '0') or '0')
+        dogal_sayi = int(baslangic_dogal, taban) if baslangic_dogal else 0
+        ham_sayi = int(baslangic_ham)
     except ValueError:
-        flash('Taban ofset sayısal olmalı.', 'danger')
+        flash(f'Başlangıç adresleri sayısal olmalı ({"sekizli" if taban == 8 else "onluk"} sistemde).', 'danger')
         return redirect(url_for('admin.plc_profilleri'))
+    adres_tabani = ham_sayi - dogal_sayi
     database.plc_profil_bolge_kaydet(profil_id, onek, modbus_fonksiyon, sayi_sistemi, adres_tabani, varsayilan_veri_tipi, guven_notu)
-    flash(f'"{onek.upper()}" bölgesi kaydedildi.', 'success')
+    flash(f'"{onek.upper()}" bölgesi kaydedildi — taban ofset {adres_tabani} olarak hesaplandı.', 'success')
     return redirect(url_for('admin.plc_profilleri'))
 
 

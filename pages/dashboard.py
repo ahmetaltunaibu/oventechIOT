@@ -83,6 +83,19 @@ def cihaz_yeniden_adlandir(cihaz_id):
     return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
 
 
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/plc-profili', methods=['POST'])
+@tasarimci_required
+def cihaz_plc_profili(cihaz_id):
+    if not _cihaz_dogrula(cihaz_id):
+        flash('Cihaz bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    ham = request.form.get('plc_profil_id', '').strip()
+    plc_profil_id = int(ham) if ham else None
+    database.cihaz_plc_profili_ayarla(cihaz_id, plc_profil_id)
+    flash('PLC profili güncellendi.' if plc_profil_id else 'PLC profili kaldırıldı.', 'success')
+    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+
+
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/baslangic-sayfa', methods=['POST'])
 @tasarimci_required
 def cihaz_baslangic_sayfa(cihaz_id):

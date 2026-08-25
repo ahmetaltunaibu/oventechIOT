@@ -12,7 +12,9 @@
     </p>
 </div>
 
-{% for p in profiller %}
+{% for marka, marka_profilleri in profiller | groupby('marka') %}
+<h3 style="margin:22px 0 6px;color:var(--text-secondary);font-size:14px;">{{ marka or '(Markasız)' }}</h3>
+{% for p in marka_profilleri %}
 <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;">
         <h2 style="margin:0;">{{ p.ad }}</h2>
@@ -66,8 +68,12 @@
                 </select>
             </div>
             <div>
-                <label>Taban Ofset</label>
-                <input type="number" name="adres_tabani" value="0" required style="width:100px;margin-bottom:0;">
+                <label title="Örn. Y için 0 (Y000'ın kendisi). Sayı Sistemi neyse (onluk/sekizli) ona göre yorumlanır.">Başlangıç Doğal Adres</label>
+                <input type="text" name="baslangic_dogal_adres" value="0" required style="width:110px;margin-bottom:0;">
+            </div>
+            <div>
+                <label title="O başlangıç adresinin karşılığı olan HAM Modbus adresi — PLC dokümanından ya da test ederek bulduğun sayı. Örn. Y000 için 1280.">Başlangıç Ham Adresi</label>
+                <input type="number" name="baslangic_ham_adres" required style="width:120px;margin-bottom:0;">
             </div>
             <div>
                 <label>Varsayılan Veri Tipi</label>
@@ -83,15 +89,22 @@
             </div>
             <button type="submit">Kaydet</button>
         </form>
-        <p style="font-size:11px;color:var(--text-secondary);margin-top:6px;">Aynı önek tekrar kaydedilirse üzerine yazılır (günceller) — silmene gerek yok, düzeltip tekrar kaydet.</p>
+        <p style="font-size:11px;color:var(--text-secondary);margin-top:6px;">
+            Taban ofseti elle hesaplamana gerek yok — sadece bildiğin bir noktayı gir (örn. "0" → "1280"), gerisi (1, 2, 3, ...) zaten aynı formülle otomatik ilerliyor.
+            Aynı önek tekrar kaydedilirse üzerine yazılır (günceller) — silmene gerek yok, düzeltip tekrar kaydet.
+        </p>
     </details>
 </div>
+{% endfor %}
 {% endfor %}
 
 <div class="card">
     <h2>Yeni Profil</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:-6px;">Yeni bir marka/model geldiğinde (örn. Delta AS Serisi, Delta 15MC, Siemens S7-1200) buradan kendin ekleyebilirsin — kod değişikliği gerekmez.</p>
     <form method="POST" action="{{ url_for('admin.plc_profil_ekle') }}">
-        <label>Profil Adı (örn. "Delta AS Serisi", "Siemens S7-1200")</label>
+        <label>Marka (örn. "Delta", "Siemens" — aynı markadaki modeller birlikte gruplanır)</label>
+        <input type="text" name="marka" placeholder="örn. Delta">
+        <label>Model/Seri Adı (örn. "AS Serisi", "15MC Serisi", "S7-1200")</label>
         <input type="text" name="ad" required>
         <label>Açıklama (opsiyonel)</label>
         <input type="text" name="aciklama">

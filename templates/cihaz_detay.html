@@ -16,6 +16,18 @@
             </div>
             <button type="submit">Kaydet</button>
         </form>
+        <form method="POST" action="{{ url_for('dashboard.cihaz_plc_profili', cihaz_id=cihaz.id) }}" style="display:flex;gap:8px;align-items:flex-end;">
+            <div>
+                <label title="Bu cihazın hangi PLC markası/serisiyle çalıştığını seç — tag tablosunda yeni satır eklerken bu profil otomatik gelir, her tag için tekrar seçmen gerekmez.">PLC Profili</label>
+                <select name="plc_profil_id" style="margin-bottom:0;">
+                    <option value="">— seçilmedi —</option>
+                    {% for p in plc_profilleri %}
+                    <option value="{{ p.id }}" {{ 'selected' if cihaz.plc_profil_id == p.id else '' }}>{{ (p.marka + ' — ' if p.marka) ~ p.ad }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" style="background:var(--panel2);">Kaydet</button>
+        </form>
         <form method="POST" action="{{ url_for('dashboard.cihaz_kopyala', cihaz_id=cihaz.id) }}" onsubmit="return cihazKopyalaOnayla(this, '{{ cihaz.ad|e }}');">
             <input type="hidden" name="ad" class="cihaz-kopya-ad-input">
             <label style="visibility:hidden;">.</label>
@@ -270,7 +282,7 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
                         <select class="tag-hucre" data-alan="plc_profil_id" onchange="tagProfilDegisti(this)">
                             <option value="">— seçilmedi —</option>
                             {% for p in plc_profilleri %}
-                            <option value="{{ p.id }}" {{ 'selected' if t.plc_profil_id == p.id else '' }}>{{ p.ad }}</option>
+                            <option value="{{ p.id }}" {{ 'selected' if t.plc_profil_id == p.id else '' }}>{{ (p.marka + ' — ' if p.marka) ~ p.ad }}</option>
                             {% endfor %}
                         </select>
                     </td>
@@ -332,7 +344,8 @@ const TAG_VERI_TIPLERI = [
 const TAG_ERISIMLER = [
     ['read', 'Sadece okuma'], ['write', 'Sadece yazma'], ['readwrite', 'Okuma + Yazma'],
 ];
-const PLC_PROFILLERI = [{% for p in plc_profilleri %}[{{ p.id }}, {{ p.ad|tojson }}]{{ ',' if not loop.last }}{% endfor %}];
+const PLC_PROFILLERI = [{% for p in plc_profilleri %}[{{ p.id }}, {{ ((p.marka + ' — ' if p.marka) ~ p.ad)|tojson }}]{{ ',' if not loop.last }}{% endfor %}];
+const CIHAZ_PLC_PROFIL_ID = {{ cihaz.plc_profil_id or 'null' }};
 const TAG_CIHAZ_ID = {{ cihaz.id }};
 
 function _tagSelectDoldur(selectEl, secenekler, secili) {
@@ -479,9 +492,14 @@ function tagYeniSatirEkle() {
         <td><input type="number" min="1" class="tag-hucre" data-alan="gecmis_araligi_sn" placeholder="20" disabled></td>
         <td class="tag-sil-hucre"><button type="button" class="tag-sil-btn" onclick="tagSatirSil(this)">Sil</button></td>
     `;
-    _tagSelectDoldur(satir.querySelector('[data-alan="plc_profil_id"]'), [['', '— seçilmedi —'], ...PLC_PROFILLERI], '');
+    // Kullanıcı isteği: cihaza bir PLC Profili atanmışsa (cihaz yönetim
+    // kartındaki "PLC Profili" alanı) yeni tag satırında otomatik öneri
+    // olarak gelsin — her tag için tekrar seçmek gerekmesin.
+    const varsayilanProfil = CIHAZ_PLC_PROFIL_ID ? String(CIHAZ_PLC_PROFIL_ID) : '';
+    _tagSelectDoldur(satir.querySelector('[data-alan="plc_profil_id"]'), [['', '— seçilmedi —'], ...PLC_PROFILLERI], varsayilanProfil);
     _tagSelectDoldur(satir.querySelector('[data-alan="veri_tipi"]'), TAG_VERI_TIPLERI, 'bool');
     _tagSelectDoldur(satir.querySelector('[data-alan="erisim"]'), TAG_ERISIMLER, 'read');
+    if (varsayilanProfil) satir.querySelector('[data-alan="dogal_adres"]').disabled = false;
     govde.appendChild(satir);
     satir.querySelector('[data-alan="ad"]').focus();
 }
