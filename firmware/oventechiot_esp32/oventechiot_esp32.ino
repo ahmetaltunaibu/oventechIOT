@@ -54,7 +54,7 @@
  * ---------------------------------------------------------------
  */
 
-#define FIRMWARE_VERSION "1.5.0"
+#define FIRMWARE_VERSION "1.6.0"
 
 #include <WiFi.h>
 #include <WiFiManager.h>          // tzapu/WiFiManager
@@ -574,6 +574,11 @@ void sunucuIleSenkronOl() {
   gonderilecek["modbus_saglikli"] = (okunamayanSayisi == 0);
   gonderilecek["modbus_hata_sayisi"] = okunamayanSayisi;
   if (okunamayanSayisi > 0) gonderilecek["modbus_hata_mesaji"] = sonModbusHatasi;
+
+  // Kullanıcı isteği: WiFi sinyal gücü de sunucuya bildirilsin — cihaz artık
+  // PC'ye bağlı değil (Seri Monitör yok), sinyal zayıflığını görebilmenin
+  // tek yolu bu.
+  gonderilecek["wifi_rssi"] = WiFi.RSSI();
 
   String govdeStr;
   serializeJson(gonderilecek, govdeStr);

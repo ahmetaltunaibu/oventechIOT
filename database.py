@@ -123,6 +123,10 @@ def init_db():
         cursor.execute("ALTER TABLE cihazlar ADD COLUMN son_modbus_hata_mesaji TEXT")
     if cihaz_kolonlari and 'son_modbus_rapor_zamani' not in cihaz_kolonlari:
         cursor.execute("ALTER TABLE cihazlar ADD COLUMN son_modbus_rapor_zamani TIMESTAMP")
+    # Kullanıcı isteği: WiFi sinyal gücü de görünsün — cihaz artık PC'ye
+    # bağlı değil, Seri Monitör'e bakılamıyor.
+    if cihaz_kolonlari and 'son_wifi_rssi' not in cihaz_kolonlari:
+        cursor.execute("ALTER TABLE cihazlar ADD COLUMN son_wifi_rssi INTEGER")
 
     # Kullanıcı isteği: PLC markası/serisi değiştikçe (Delta DVP → AS →
     # 15MC → ileride Siemens vb.) her seferinde ham Modbus adresini elle
@@ -1053,6 +1057,19 @@ def cihaz_wifi_sifirlama_durumu_al_ve_temizle(cihaz_kimlik: str) -> bool:
         conn.execute('UPDATE cihazlar SET wifi_sifirlama_istendi = 0 WHERE id = ?', (row['id'],))
         conn.commit()
         return True
+    finally:
+        conn.close()
+
+
+def cihaz_wifi_rssi_guncelle(cihaz_kimlik: str, rssi: int):
+    """ESP32 her senkronda WiFi sinyal gücünü (dBm, negatif — 0'a ne kadar
+    yakınsa o kadar iyi) bildirir. Kullanıcı isteği: cihaz artık PC'ye bağlı
+    değil, Seri Monitör'e bakılamadığı için sinyal zayıflığını sunucudan
+    görebilmek gerekiyor."""
+    conn = get_db()
+    try:
+        conn.execute('UPDATE cihazlar SET son_wifi_rssi = ? WHERE cihaz_kimlik = ?', (rssi, cihaz_kimlik))
+        conn.commit()
     finally:
         conn.close()
 

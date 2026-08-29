@@ -391,6 +391,7 @@ def api_baglanti_durumu(cihaz_id):
         'modbus_saglikli': cihaz.get('son_modbus_saglikli'),
         'modbus_hata_sayisi': cihaz.get('son_modbus_hata_sayisi') or 0,
         'modbus_hata_mesaji': cihaz.get('son_modbus_hata_mesaji') or '',
+        'wifi_rssi': cihaz.get('son_wifi_rssi'),
     })
 
 

@@ -810,6 +810,24 @@ function tuvalCiz() {
             return;
         }
 
+        if (el.type === 'wifisinyal') {
+            // Tag'e bağlı değil — cihazdan ESP32'nin en son bildirdiği WiFi
+            // sinyal gücünü (dBm) gösterir. Zaten var olan bağlantı-durumu
+            // polling'ini (bkz. baglantiDurumuKontrolEt) paylaşır, ayrı bir
+            // istek atmaz.
+            div.style.fontSize = (el.font_boyutu || 14) + 'px';
+            div.style.fontWeight = '600';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
+            div.style.boxSizing = 'border-box';
+            div.dataset.wifisinyalId = el.id;
+            wifiSinyalDivGuncelle(div, el);
+            elemDonusUygula(div, el);
+            if (el.custom_css) div.style.cssText += ';' + el.custom_css;
+            hedefKatmanaEkle(div, el, tuval);
+            return;
+        }
+
         if (el.type === 'alarmgecmisi') {
             // Kullanıcı isteği: tekil "Alarm Oluştur" elementleri zaten
             // alarm_kayitlari'na yazıyor ama bunu görmek sadece cihaz_detay
@@ -1229,11 +1247,14 @@ setInterval(alarmGecmisiYukle, 10000);
 // WiFi/Modbus sorununda operatör de görsün — mevcut yazma hata/bekleme
 // toast'ıyla aynı görsel dilde, göz kırparak, ekranın altında otomatik çıkar.
 const BAGLANTI_SORUNU_ESIK_SN = 20; // bu kadar saniye veri gelmezse "bağlantı koptu" say
+const WIFI_ZAYIF_ESIK_DBM = -75; // bundan daha kötü (daha negatif) ise "zayıf sinyal" say
+let sonBilinenWifiRssi = null; // "WiFi Sinyal Gücü" elementleri bunu okur — ayrı istek atmaz
 async function baglantiDurumuKontrolEt() {
     try {
         const res = await fetch(`/api/cihaz/${cihazId}/baglanti-durumu`);
         if (!res.ok) return;
         const d = await res.json();
+        if (typeof d.wifi_rssi === 'number') sonBilinenWifiRssi = d.wifi_rssi;
         const toast = document.getElementById('baglanti-sorunu-toast');
         if (!toast) return;
         if (d.saniye_once === null || d.saniye_once === undefined || d.saniye_once > BAGLANTI_SORUNU_ESIK_SN) {
@@ -1242,6 +1263,9 @@ async function baglantiDurumuKontrolEt() {
         } else if (d.modbus_saglikli === false) {
             toast.textContent = `⚠️ Modbus Hatası — ${d.modbus_hata_sayisi} tag okunamıyor` + (d.modbus_hata_mesaji ? `: ${d.modbus_hata_mesaji}` : '');
             toast.classList.add('gorunur');
+        } else if (typeof d.wifi_rssi === 'number' && d.wifi_rssi < WIFI_ZAYIF_ESIK_DBM) {
+            toast.textContent = `⚠️ Zayıf WiFi Sinyali — ${d.wifi_rssi} dBm (cihazı router'a yaklaştır ya da sinyal güçlendirici kullan)`;
+            toast.classList.add('gorunur');
         } else {
             toast.classList.remove('gorunur');
         }
@@ -1249,6 +1273,35 @@ async function baglantiDurumuKontrolEt() {
 }
 baglantiDurumuKontrolEt();
 setInterval(baglantiDurumuKontrolEt, 5000);
+
+// ---------- WiFi Sinyal Gücü elementi ----------
+// Veri kaynağı baglantiDurumuKontrolEt() tarafından zaten çekiliyor
+// (sonBilinenWifiRssi) — burada sadece ekrandaki div'lere yansıtılıyor.
+function wifiSinyalDivGuncelle(div, el) {
+    if (sonBilinenWifiRssi === null) {
+        div.textContent = (el.on_ek || '') + 'bilinmiyor';
+        div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
+        div.style.color = el.renk_yazi || '#e8eef4';
+        return;
+    }
+    const saglikli = sonBilinenWifiRssi >= (el.esik_dbm ?? -75);
+    div.textContent = (el.on_ek || '') + '📶 ' + sonBilinenWifiRssi + ' dBm';
+    if (el.saglik_renk_goster !== false) {
+        div.style.background = saglikli ? '#1c3326' : '#3a1f22';
+        div.style.color = saglikli ? '#2ecc71' : '#e74c3c';
+    } else {
+        div.style.background = (!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan;
+        div.style.color = el.renk_yazi || '#e8eef4';
+    }
+}
+function wifiSinyalTumGuncelle() {
+    if (!aktifSayfa) return;
+    document.querySelectorAll('[data-wifisinyal-id]').forEach(div => {
+        const el = aktifSayfa.elementler.find(e => e.id === div.dataset.wifisinyalId);
+        if (el) wifiSinyalDivGuncelle(div, el);
+    });
+}
+setInterval(wifiSinyalTumGuncelle, 5000);
 
 function sekilArkaplanCSS(el) {
     if (el.sekil_gradient_aktif) {

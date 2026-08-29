@@ -784,6 +784,29 @@
          — bu bir PLC/tag verisi değil, platform bağlantı bilgisi (zaten
          var: cihazlar.son_gorulme, ESP32 her istekte günceller), bu yüzden
          tag değil, saat/tarih gibi kendi kendine güncellenen bir element. -->
+    <div id="ozAlanWifiSinyal" class="ozel-alan">
+        <label>Ön Ek (opsiyonel)</label>
+        <input type="text" id="ozWifiSinyalOnEk" placeholder="örn. Sinyal: ">
+        <label>Zayıf Sayılma Eşiği (dBm)</label>
+        <input type="number" id="ozWifiSinyalEsik" value="-75" max="0">
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="ozWifiSinyalSaglikRenk" style="width:auto;margin:0;" checked> Sinyal Durumuna Göre Renklendir (yeşil/kırmızı)
+        </label>
+        <label>Font Boyutu (px)</label>
+        <input type="number" id="ozWifiSinyalFontBoyutu" value="14" min="8" max="120">
+        <label>Yazı Rengi</label>
+        <input type="color" id="ozWifiSinyalRenkYazi" value="#e8eef4" style="height:38px;">
+        <label>Arka Plan</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" id="ozWifiSinyalRenkArkaplan" value="#1e2d3d" style="height:38px;flex:1;">
+            <label style="display:flex;align-items:center;gap:4px;margin:0;white-space:nowrap;">
+                <input type="checkbox" id="ozWifiSinyalSeffaf" style="width:auto;margin:0;"> Şeffaf
+            </label>
+        </div>
+        <label>Köşe Yuvarlatma (px)</label>
+        <input type="number" id="ozWifiSinyalKoseYaricapi" value="6" min="0" max="100">
+    </div>
+
     <div id="ozAlanSonVeri" class="ozel-alan">
         <label>Ön Ek (opsiyonel)</label>
         <input type="text" id="ozSonVeriOnEk" placeholder="örn. Son Veri: ">
@@ -1640,6 +1663,18 @@ function sonVeriEkle(x, y) {
     });
 }
 
+// WiFi Sinyal Gücü: PLC/tag verisi değil, cihazın ESP32'sinin son bildirdiği
+// WiFi RSSI'sini (dBm) gösteren, "sonveri" ile aynı mantıkta bir element.
+function wifiSinyalEkle(x, y) {
+    elementEkle({
+        id: uid(), type: 'wifisinyal',
+        x: Math.max(0, x - 90), y: Math.max(0, y - 16), w: 180, h: 32,
+        on_ek: '', esik_dbm: -75, saglik_renk_goster: true,
+        renk_yazi: '#e8eef4', renk_arkaplan: '#1e2d3d',
+        font_boyutu: 14, kose_yaricapi: 6, custom_css: ''
+    });
+}
+
 // Kullanıcı isteği: tekil "Alarm Oluştur" elementleri (tag'e bağlı kurallar)
 // zaten alarm_kayitlari'na yazıyor — bu element belli bir tag'e değil,
 // CİHAZIN TÜM alarm kurallarına bakıp geçmişi tek listede gösterir.
@@ -2000,6 +2035,21 @@ function render() {
             div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.boxSizing = 'border-box';
             div.textContent = (el.on_ek || '') + ornekSaniye + ' saniye önce';
+        } else if (el.type === 'wifisinyal') {
+            // Tasarımda gerçek cihaz bağlantısı yok — örnek bir dBm değeriyle
+            // (-55) önizleme gösteriliyor.
+            const ornekDbm = -55;
+            const saglikli = ornekDbm >= (el.esik_dbm ?? -75);
+            div.style.background = el.saglik_renk_goster !== false
+                ? (saglikli ? '#1c3326' : '#3a1f22')
+                : ((!el.renk_arkaplan || el.renk_arkaplan === 'transparent') ? 'transparent' : el.renk_arkaplan);
+            div.style.color = el.saglik_renk_goster !== false ? (saglikli ? '#2ecc71' : '#e74c3c') : (el.renk_yazi || '#e8eef4');
+            div.style.fontSize = (el.font_boyutu || 14) + 'px';
+            div.style.fontWeight = '600';
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = metinHizalaCSS(el, 'orta');
+            div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
+            div.style.boxSizing = 'border-box';
+            div.textContent = (el.on_ek || '') + '📶 ' + ornekDbm + ' dBm';
         } else if (el.type === 'alarmgecmisi') {
             // Tasarımda gerçek alarm kaydı yok — örnek satırlarla nasıl
             // görüneceğini gösteren statik bir önizleme.
@@ -3079,6 +3129,7 @@ function tuvalBaglamMenusu(e) {
         { etiket: '📋 Alarm Geçmişi Ekle', aksiyon: () => alarmGecmisiEkle(tuvalX, tuvalY) },
         { etiket: '🕐 Saat/Tarih Ekle', aksiyon: () => saatTarihEkle(tuvalX, tuvalY) },
         { etiket: '📡 Son Veri (Bağlantı) Ekle', aksiyon: () => sonVeriEkle(tuvalX, tuvalY) },
+        { etiket: '📶 WiFi Sinyal Gücü Ekle', aksiyon: () => wifiSinyalEkle(tuvalX, tuvalY) },
         { ayrac: true },
     ];
     if (pano.length) maddeler.push({ etiket: '📋 Yapıştır (Ctrl+V)', aksiyon: yapistir });
@@ -3148,7 +3199,7 @@ const TIP_ADLARI = {
     durum: 'Durum Göstergesi', switch: 'Switch (Sürgü)', textbox: 'Metin Kutusu', inputbox: 'Giriş Kutusu',
     combobox: 'Açılır Liste', checkbox: 'Onay Kutusu', progressbar: 'İlerleme Çubuğu',
     groupbox: 'Grup Kutusu/Çerçeve', grafik: 'Grafik', alarm: 'Alarm', saattarih: 'Saat/Tarih',
-    sonveri: 'Son Veri (Bağlantı)', alarmgecmisi: 'Alarm Geçmişi',
+    sonveri: 'Son Veri (Bağlantı)', alarmgecmisi: 'Alarm Geçmişi', wifisinyal: 'WiFi Sinyal Gücü',
 };
 // Metin hizalamanın tipe göre varsayılanı — mevcut (bu özellik eklenmeden
 // önceki) görünümü bozmasın diye her tipin ESKİ sabit davranışıyla aynı.
@@ -3183,6 +3234,7 @@ function guncellePanel() {
     document.getElementById('ozAlanAlarm').classList.toggle('gorunur', el.type === 'alarm');
     document.getElementById('ozAlanSaatTarih').classList.toggle('gorunur', el.type === 'saattarih');
     document.getElementById('ozAlanSonVeri').classList.toggle('gorunur', el.type === 'sonveri');
+    document.getElementById('ozAlanWifiSinyal').classList.toggle('gorunur', el.type === 'wifisinyal');
     document.getElementById('ozAlanAlarmGecmisi').classList.toggle('gorunur', el.type === 'alarmgecmisi');
 
     document.getElementById('ozW').value = el.w;
@@ -3366,6 +3418,16 @@ function guncellePanel() {
         document.getElementById('ozSonVeriSeffaf').checked = sonVeriSeffaf;
         document.getElementById('ozSonVeriRenkArkaplan').value = sonVeriSeffaf ? '#1e2d3d' : el.renk_arkaplan;
         document.getElementById('ozSonVeriKoseYaricapi').value = el.kose_yaricapi ?? 6;
+    } else if (el.type === 'wifisinyal') {
+        document.getElementById('ozWifiSinyalOnEk').value = el.on_ek || '';
+        document.getElementById('ozWifiSinyalEsik').value = el.esik_dbm ?? -75;
+        document.getElementById('ozWifiSinyalSaglikRenk').checked = el.saglik_renk_goster !== false;
+        document.getElementById('ozWifiSinyalFontBoyutu').value = el.font_boyutu || 14;
+        document.getElementById('ozWifiSinyalRenkYazi').value = el.renk_yazi || '#e8eef4';
+        const wifiSinyalSeffaf = !el.renk_arkaplan || el.renk_arkaplan === 'transparent';
+        document.getElementById('ozWifiSinyalSeffaf').checked = wifiSinyalSeffaf;
+        document.getElementById('ozWifiSinyalRenkArkaplan').value = wifiSinyalSeffaf ? '#1e2d3d' : el.renk_arkaplan;
+        document.getElementById('ozWifiSinyalKoseYaricapi').value = el.kose_yaricapi ?? 6;
     } else if (el.type === 'alarmgecmisi') {
         document.getElementById('ozAlarmGecmisiBaslik').value = el.baslik || '';
         document.getElementById('ozAlarmGecmisiLimit').value = el.limit || 20;
@@ -3754,6 +3816,15 @@ function uygula() {
         el.renk_yazi = document.getElementById('ozSonVeriRenkYazi').value;
         el.renk_arkaplan = document.getElementById('ozSonVeriSeffaf').checked ? 'transparent' : document.getElementById('ozSonVeriRenkArkaplan').value;
         el.kose_yaricapi = parseInt(document.getElementById('ozSonVeriKoseYaricapi').value) || 0;
+    } else if (el.type === 'wifisinyal') {
+        el.on_ek = document.getElementById('ozWifiSinyalOnEk').value;
+        el.esik_dbm = parseInt(document.getElementById('ozWifiSinyalEsik').value);
+        if (isNaN(el.esik_dbm)) el.esik_dbm = -75;
+        el.saglik_renk_goster = document.getElementById('ozWifiSinyalSaglikRenk').checked;
+        el.font_boyutu = parseInt(document.getElementById('ozWifiSinyalFontBoyutu').value) || 14;
+        el.renk_yazi = document.getElementById('ozWifiSinyalRenkYazi').value;
+        el.renk_arkaplan = document.getElementById('ozWifiSinyalSeffaf').checked ? 'transparent' : document.getElementById('ozWifiSinyalRenkArkaplan').value;
+        el.kose_yaricapi = parseInt(document.getElementById('ozWifiSinyalKoseYaricapi').value) || 0;
     } else if (el.type === 'alarmgecmisi') {
         el.baslik = document.getElementById('ozAlarmGecmisiBaslik').value;
         el.limit = Math.min(200, Math.max(1, parseInt(document.getElementById('ozAlarmGecmisiLimit').value) || 20));

@@ -99,6 +99,14 @@ def esp32_xchange(cihaz_kimlik):
             str(veri.get('modbus_hata_mesaji') or '')[:500]
         )
 
+    # Kullanıcı isteği: WiFi sinyal gücü — alan opsiyonel, eski firmware
+    # (bunu göndermeyen) hâlâ sorunsuz çalışır.
+    if 'wifi_rssi' in veri:
+        try:
+            database.cihaz_wifi_rssi_guncelle(cihaz_kimlik, int(veri.get('wifi_rssi')))
+        except (TypeError, ValueError):
+            pass
+
     tagler = database.cihaz_tagleri(cihaz['id'])
     tag_idleri = {t['id'] for t in tagler}
     islenen = 0

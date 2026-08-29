@@ -66,6 +66,21 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
             <div style="font-size:14px;font-weight:600;">{{ cihaz.son_gorulme or 'hiç bağlanmadı' }}</div>
         </div>
         <div>
+            <div style="font-size:11px;color:var(--text-secondary);">WiFi Sinyal Gücü</div>
+            {% if cihaz.son_wifi_rssi is not none %}
+                {% set rssi = cihaz.son_wifi_rssi %}
+                {% if rssi >= -50 %}<span class="badge on" style="background:#2ecc71;color:#fff;">📶 Mükemmel</span>
+                {% elif rssi >= -60 %}<span class="badge on" style="background:#2ecc71;color:#fff;">📶 İyi</span>
+                {% elif rssi >= -70 %}<span class="badge" style="background:#f39c12;color:#fff;">📶 Orta</span>
+                {% elif rssi >= -80 %}<span class="badge" style="background:var(--red);color:#fff;">📶 Zayıf</span>
+                {% else %}<span class="badge" style="background:var(--red);color:#fff;">📶 Çok Zayıf</span>
+                {% endif %}
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">{{ rssi }} dBm</div>
+            {% else %}
+                <div style="font-size:13px;color:var(--text-secondary);">Henüz rapor yok (eski firmware ya da hiç senkron olmadı)</div>
+            {% endif %}
+        </div>
+        <div>
             <div style="font-size:11px;color:var(--text-secondary);">Modbus Durumu (son rapor)</div>
             {% if cihaz.son_modbus_rapor_zamani %}
                 {% if cihaz.son_modbus_saglikli %}
