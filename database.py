@@ -826,6 +826,18 @@ def kullanici_ekle(proje_id: int, kullanici_adi: str, sifre: str, ad_soyad: str,
         conn.close()
 
 
+def kullanici_getir(kullanici_id: int):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT id, proje_id, kullanici_adi, ad_soyad, rol FROM kullanicilar WHERE id = ?',
+            (kullanici_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
 def kullanici_guncelle(kullanici_id: int, ad_soyad: str, rol: str, yeni_sifre: str = None):
     conn = get_db()
     try:

@@ -117,6 +117,10 @@
     {% endif %}
 </div>
 
+{% if session.get('rol') == 'tasarimci' %}
+<p style="margin-bottom:16px;"><a class="item-link" href="{{ url_for('dashboard.kullanicilar') }}" style="color:var(--accent);">👤 Operatörleri Yönet</a></p>
+{% endif %}
+
 {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
 <div class="card">
     <h2>Yeni Cihaz Ekle</h2>

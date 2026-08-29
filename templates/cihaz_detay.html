@@ -16,6 +16,7 @@
             </div>
             <button type="submit">Kaydet</button>
         </form>
+        {% if session.get('platform_admin') %}
         <form method="POST" action="{{ url_for('dashboard.cihaz_plc_profili', cihaz_id=cihaz.id) }}" style="display:flex;gap:8px;align-items:flex-end;">
             <div>
                 <label title="Bu cihazın hangi PLC markası/serisiyle çalıştığını seç — tag tablosunda yeni satır eklerken bu profil otomatik gelir, her tag için tekrar seçmen gerekmez.">PLC Profili</label>
@@ -28,6 +29,7 @@
             </div>
             <button type="submit" style="background:var(--panel2);">Kaydet</button>
         </form>
+        {% endif %}
         <form method="POST" action="{{ url_for('dashboard.cihaz_kopyala', cihaz_id=cihaz.id) }}" onsubmit="return cihazKopyalaOnayla(this, '{{ cihaz.ad|e }}');">
             <input type="hidden" name="ad" class="cihaz-kopya-ad-input">
             <label style="visibility:hidden;">.</label>
@@ -78,7 +80,7 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
         </div>
     </div>
 
-    {% if session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+    {% if session.get('platform_admin') %}
     <div style="margin-top:16px;">
         <form method="POST" action="{{ url_for('dashboard.cihaz_wifi_sifirla_iste', cihaz_id=cihaz.id) }}"
               onsubmit="return confirm('Cihaz şu an bağlı olduğu WiFi ağını unutacak ve kurulum moduna girecek. Cihaz internete bağlıysa bu birkaç saniye içinde uygulanır. Emin misin?');">
@@ -121,7 +123,8 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
     {% endif %}
 </div>
 
-{% set tasarimci_mi_fw = session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+{% if session.get('platform_admin') %}
+{% set tasarimci_mi_fw = true %}
 <div class="card">
     <h2>📡 Firmware (Uzaktan Güncelleme)</h2>
     <p style="font-size:12px;color:var(--text-secondary);margin-top:-6px;">
@@ -202,11 +205,15 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
     </table>
     {% endif %}
 </div>
+{% endif %}
 
 <div class="tag-tablo-breakout">
 <div class="card tag-tablo-karti">
     <h2>Tag'ler</h2>
-    {% set tasarimci_mi = session.get('rol') == 'tasarimci' or session.get('platform_admin') %}
+    {# Kullanıcı kararı: tag adresleri/PLC bağlantısı gibi teknik ayarlar
+       şimdilik sadece platform admin'de kalsın — tasarımcı düzenleyemesin,
+       operatör gibi salt-okunur basit tabloyu görsün (aşağıdaki {% elif %}). #}
+    {% set tasarimci_mi = session.get('platform_admin') %}
     {% if tasarimci_mi %}
     <!-- Kullanıcı isteği: tag eklemek/düzenlemek eskiden her tag için ayrı
          bir kart+form+sayfa yenilemesi gerektiriyordu, çok yavaştı. Artık
@@ -342,13 +349,14 @@ function cihazKopyalaOnayla(formEl, kaynakAd) {
         </form>
     </noscript>
     {% elif tagler %}
+    {% set adres_gorunsun = session.get('rol') != 'tasarimci' %}
     <table>
-        <thead><tr><th>Ad</th><th>Modbus Adres</th><th>Tip</th><th>Erişim</th><th>Geçmişe Kaydet</th><th>Kayıt Aralığı (sn)</th></tr></thead>
+        <thead><tr><th>Ad</th>{% if adres_gorunsun %}<th>Modbus Adres</th>{% endif %}<th>Tip</th><th>Erişim</th><th>Geçmişe Kaydet</th><th>Kayıt Aralığı (sn)</th></tr></thead>
         <tbody>
         {% for t in tagler %}
             <tr>
                 <td>{{ t.ad }}</td>
-                <td style="font-family:monospace;">{{ t.modbus_adres }}</td>
+                {% if adres_gorunsun %}<td style="font-family:monospace;">{{ t.modbus_adres }}</td>{% endif %}
                 <td>{{ t.veri_tipi }}</td>
                 <td>{{ t.erisim }}</td>
                 <td>{{ '✅' if t.gecmis_kayit_aktif else '—' }}</td>
@@ -645,8 +653,9 @@ function _tagSatirAlanDegeri(satir, alan) {
 <div class="card">
     <h2>Sayfalar</h2>
     {% if sayfalar %}
-    <table>
-        <thead><tr><th>Ad</th><th>Düzenler</th><th>Son Güncelleme</th><th></th></tr></thead>
+    <div style="overflow-x:auto;">
+    <table style="min-width:600px;">
+        <thead><tr><th>Ad</th><th>Düzenler</th><th>Son Güncelleme</th><th style="min-width:220px;"></th></tr></thead>
         <tbody>
         {% for s in sayfalar %}
             <tr>
@@ -656,7 +665,8 @@ function _tagSatirAlanDegeri(satir, alan) {
                     {% if 'mobil' in s.hedefler %}<span class="badge on">📱 mobil</span>{% endif %}
                 </td>
                 <td>{{ s.guncelleme_zamani }}</td>
-                <td style="white-space:nowrap;">
+                <td>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;">
                     <a class="btn" href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}?gorunum=masaustu" style="padding:5px 10px;font-size:12px;">🖥️ Aç</a>
                     <a class="btn" href="{{ url_for('sayfa.sayfa_calistir', cihaz_id=cihaz.id, sayfa_ad=s.ad) }}?gorunum=mobil" style="padding:5px 10px;font-size:12px;">📱 Aç</a>
                     {% if (session.get('rol') == 'tasarimci' or session.get('platform_admin')) and cihaz.baslangic_sayfa != s.ad %}
@@ -677,11 +687,13 @@ function _tagSatirAlanDegeri(satir, alan) {
                         <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
                     </form>
                     {% endif %}
+                    </div>
                 </td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <p style="color:var(--text-secondary);font-size:14px;">Henüz sayfa yok.</p>
     {% endif %}

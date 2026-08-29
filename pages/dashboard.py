@@ -40,6 +40,81 @@ def cihaz_ekle():
     return redirect(url_for('dashboard.dashboard_page'))
 
 
+@dashboard_bp.route('/kullanicilar')
+@tasarimci_required
+def kullanicilar():
+    proje_id = session['proje_id']
+    kullanicilar = [k for k in database.proje_kullanicilari(proje_id) if k['rol'] == 'operator']
+    cihazlar = database.proje_cihazlari(proje_id)
+    kullanici_cihaz_erisimleri = {k['id']: database.kullanici_cihaz_erisim_idleri(k['id']) for k in kullanicilar}
+    return render_template('kullanicilar.html', kullanicilar=kullanicilar, cihazlar=cihazlar,
+                            kullanici_cihaz_erisimleri=kullanici_cihaz_erisimleri)
+
+
+def _operator_dogrula(kullanici_id):
+    """Hedef kullanıcının, oturumdaki projeye ait VE 'operator' rolünde
+    olduğunu doğrular — tasarımcı bu uçlarla başka bir tasarımcıyı/admini
+    ya da başka bir projenin kullanıcısını asla düzenleyemesin/silemesin."""
+    hedef = database.kullanici_getir(kullanici_id)
+    if not hedef or hedef['proje_id'] != session['proje_id'] or hedef['rol'] != 'operator':
+        return None
+    return hedef
+
+
+@dashboard_bp.route('/kullanici-ekle', methods=['POST'])
+@tasarimci_required
+def kullanici_ekle():
+    proje_id = session['proje_id']
+    kullanici_adi = request.form.get('kullanici_adi', '').strip()
+    sifre = request.form.get('sifre', '')
+    ad_soyad = request.form.get('ad_soyad', '').strip()
+    if not kullanici_adi or not sifre or not ad_soyad:
+        flash('Kullanıcı adı, şifre ve ad soyad zorunlu.', 'danger')
+        return redirect(url_for('dashboard.kullanicilar'))
+    # Tasarımcı SADECE operatör ekleyebilir — rol formdan alınmıyor, sabit.
+    ok, sonuc = database.kullanici_ekle(proje_id, kullanici_adi, sifre, ad_soyad, 'operator')
+    if ok:
+        cihaz_idler = [int(x) for x in request.form.getlist('cihaz_idler') if x.isdigit()]
+        if cihaz_idler:
+            database.kullanici_cihaz_erisimlerini_ayarla(sonuc, cihaz_idler)
+        flash('Operatör eklendi.', 'success')
+    else:
+        flash(f'Hata: {sonuc}', 'danger')
+    return redirect(url_for('dashboard.kullanicilar'))
+
+
+@dashboard_bp.route('/kullanici/<int:kullanici_id>/duzenle', methods=['POST'])
+@tasarimci_required
+def kullanici_duzenle(kullanici_id):
+    hedef = _operator_dogrula(kullanici_id)
+    if not hedef:
+        flash('Kullanıcı bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.kullanicilar'))
+    ad_soyad = request.form.get('ad_soyad', '').strip()
+    yeni_sifre = request.form.get('yeni_sifre', '').strip()
+    if not ad_soyad:
+        flash('Ad soyad zorunlu.', 'danger')
+        return redirect(url_for('dashboard.kullanicilar'))
+    # Rol yine sabit 'operator' — tasarımcı bir operatörü tasarımcı/admin yapamaz.
+    database.kullanici_guncelle(kullanici_id, ad_soyad, 'operator', yeni_sifre or None)
+    cihaz_idler = [int(x) for x in request.form.getlist('cihaz_idler') if x.isdigit()]
+    database.kullanici_cihaz_erisimlerini_ayarla(kullanici_id, cihaz_idler)
+    flash('Operatör güncellendi.' + (' Şifre de değiştirildi.' if yeni_sifre else ''), 'success')
+    return redirect(url_for('dashboard.kullanicilar'))
+
+
+@dashboard_bp.route('/kullanici/<int:kullanici_id>/sil', methods=['POST'])
+@tasarimci_required
+def kullanici_sil(kullanici_id):
+    hedef = _operator_dogrula(kullanici_id)
+    if not hedef:
+        flash('Kullanıcı bulunamadı.', 'danger')
+        return redirect(url_for('dashboard.kullanicilar'))
+    database.kullanici_sil(kullanici_id)
+    flash('Operatör silindi.', 'success')
+    return redirect(url_for('dashboard.kullanicilar'))
+
+
 def _cihaz_dogrula(cihaz_id):
     """Cihazın oturumdaki projeye ait olduğunu VE (operator ise) kullanıcının
     bu cihaza erişimi olduğunu doğrular, yoksa None döner."""

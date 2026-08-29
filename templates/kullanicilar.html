@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Kullanıcılar - OventechIOT{% endblock %}
+{% block content %}
+<p style="margin-bottom:14px;"><a class="item-link" href="{{ url_for('dashboard.dashboard_page') }}" style="color:var(--accent);">&larr; Cihazlar</a></p>
+
+<div class="card">
+    <h2>Operatörler</h2>
+    <p style="font-size:12px;color:var(--text-secondary);">
+        Burada sadece <strong>operatör</strong> hesapları yönetilir — operatörler sayfaları görüntüler/kontrol eder, tasarım/tag/cihaz ayarlarına erişemez.
+        Tasarımcı ve admin hesapları burada görünmez, sadece platform yöneticisi tarafından yönetilir.
+    </p>
+    {% if kullanicilar %}
+    {% for k in kullanicilar %}
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+            <span style="font-family:monospace;font-size:13px;">{{ k.kullanici_adi }}</span>
+            <form method="POST" action="{{ url_for('dashboard.kullanici_sil', kullanici_id=k.id) }}" onsubmit="return confirm('{{ k.kullanici_adi }} silinsin mi?');">
+                <button type="submit" style="background:var(--red);padding:5px 10px;font-size:12px;">Sil</button>
+            </form>
+        </div>
+        <form method="POST" action="{{ url_for('dashboard.kullanici_duzenle', kullanici_id=k.id) }}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:140px;">
+                <label>Ad Soyad</label>
+                <input type="text" name="ad_soyad" value="{{ k.ad_soyad }}" required style="margin-bottom:0;">
+            </div>
+            <div style="flex:1;min-width:140px;">
+                <label>Yeni Şifre (boş bırakılırsa değişmez)</label>
+                <input type="password" name="yeni_sifre" style="margin-bottom:0;">
+            </div>
+            {% if cihazlar %}
+            <div style="flex-basis:100%;margin-top:2px;padding:10px;background:var(--panel2);border-radius:8px;">
+                <label style="margin-bottom:6px;">Erişebileceği Cihazlar (işaretlenmezse hiçbirini göremez)</label>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                    {% for c in cihazlar %}
+                    <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:13px;color:var(--text);">
+                        <input type="checkbox" name="cihaz_idler" value="{{ c.id }}" style="width:auto;margin:0;"
+                               {% if c.id in kullanici_cihaz_erisimleri.get(k.id, []) %}checked{% endif %}>
+                        {{ c.ad }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            <button type="submit">Kaydet</button>
+        </form>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--text-secondary);font-size:14px;">Henüz operatör eklenmedi.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Yeni Operatör Ekle</h2>
+    <form method="POST" action="{{ url_for('dashboard.kullanici_ekle') }}">
+        <label>Kullanıcı Adı (tüm sistemde benzersiz)</label>
+        <input type="text" name="kullanici_adi" required autocomplete="off">
+        <label>Şifre</label>
+        <input type="password" name="sifre" required>
+        <label>Ad Soyad</label>
+        <input type="text" name="ad_soyad" required>
+        {% if cihazlar %}
+        <div style="margin:10px 0;padding:10px;background:var(--panel2);border-radius:8px;">
+            <label style="margin-bottom:6px;">Erişebileceği Cihazlar (işaretlenmezse hiçbirini göremez)</label>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                {% for c in cihazlar %}
+                <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:13px;color:var(--text);">
+                    <input type="checkbox" name="cihaz_idler" value="{{ c.id }}" style="width:auto;margin:0;">
+                    {{ c.ad }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        <button type="submit">Operatör Ekle</button>
+    </form>
+</div>
+{% endblock %}
