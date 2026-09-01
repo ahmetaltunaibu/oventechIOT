@@ -3060,6 +3060,20 @@ function resimArkaplanToggle() {
     durumYaz('👁 Arkaplan görünürlüğü değişti');
 }
 
+// KÖK SEBEP (kullanıcı raporu): özellik panelinde Konum X/Y, Genişlik/
+// Yükseklik gibi <input type="number"> kutuları, tarayıcının standart
+// (ama burada hiç istenmeyen) davranışı yüzünden fare üzerlerindeyken
+// TEKERLEK KAYDIRMASINI "değeri artır/azalt" olarak algılıyordu. Panelde
+// aşağı kaydırırken imleç bu kutuların üzerinden geçince değerleri SESSİZCE
+// değişiyor, "Uygula"ya basılınca o bozuk konum kaydediliyordu — birden
+// çok elementi art arda düzenlerken kayma birikiyordu. Odaktaki sayı
+// kutusunu tekerlek hareketinde hemen bırakıyoruz (blur) ki fare o anda
+// üzerinde olsa bile sayfa/panel normal kaysın, kutu değişmesin.
+document.addEventListener('wheel', () => {
+    const ae = document.activeElement;
+    if (ae && ae.tagName === 'INPUT' && ae.type === 'number') ae.blur();
+}, { passive: true });
+
 // ---------- Klavye kısayolları ----------
 document.addEventListener('keydown', (e) => {
     const aktifEtiket = document.activeElement ? document.activeElement.tagName : '';
