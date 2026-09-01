@@ -703,7 +703,11 @@ function tuvalCiz() {
             div.style.background = switchBeklemede ? '#5a6270' : (acikMi ? el.renk_acik : el.renk_kapali);
             if (switchBeklemede) div.classList.add('el-beklemede');
             div.style.borderRadius = (el.h / 2) + 'px';
-            div.style.position = 'relative'; div.style.cursor = 'pointer';
+            // position:absolute zaten döngü başında (koşulsuz) ayarlandı —
+            // burada 'relative'e çevirmek KÖK SEBEP hatasıydı: div normal
+            // doküman akışına dönüyor, left/top artık kardeş elementlerin
+            // toplam yüksekliğine bağlı bir konumdan itibaren kayıyordu.
+            div.style.cursor = 'pointer';
             div.textContent = '';
             const metin = document.createElement('span');
             // Beklemedeyken hangi tarafa yaslanacağını (ON mu OFF mu) henüz

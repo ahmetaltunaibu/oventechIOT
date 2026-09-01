@@ -1871,7 +1871,18 @@ function render() {
             const acikMi = el._onizleme === 'acik';
             div.style.background = acikMi ? el.renk_acik : el.renk_kapali;
             div.style.borderRadius = (el.h / 2) + 'px';
-            div.style.position = 'relative';
+            // KÖK SEBEP (kullanıcı raporu — switch elementi yoğun sayfalarda
+            // sürüklenirken yukarı çıkamıyor/yanlış konumda görünüyordu):
+            // burada position:relative ayarlanıyordu, bu da .el-ogesi
+            // class'ından gelen position:absolute'u EZİYORDU. absolute değil
+            // relative olunca div artık normal doküman akışında konumlanıyor
+            // (left/top sadece akıştaki konumundan bir KAYDIRMA oluyor),
+            // akıştaki konumu da kendinden önceki tüm kardeş elementlerin
+            // yüksekliklerinin toplamına bağlı — sayfada ne kadar çok element
+            // varsa görsel kayma o kadar büyüyordu. position:absolute zaten
+            // (CSS class'tan) içindeki metin/daire'nin position:absolute'u
+            // için de geçerli bir konumlama bağlamı oluşturuyor, ayrı bir
+            // 'relative'e gerek yok — bu yüzden satır tamamen kaldırıldı.
             div.textContent = '';
             const metin = document.createElement('span');
             metin.textContent = acikMi ? (el.metin_acik || 'ON') : (el.metin_kapali || 'OFF');
@@ -1932,7 +1943,9 @@ function render() {
             div.style.background = el.renk_arkaplan || '#17222e';
             div.style.borderRadius = (el.kose_yaricapi ?? 6) + 'px';
             div.style.overflow = 'hidden';
-            div.style.position = 'relative';
+            // (bkz. switch dalındaki not) position:relative burada da aynı
+            // konum kayması hatasına yol açıyordu — kaldırıldı, CSS
+            // class'tan gelen position:absolute zaten yeterli.
             div.textContent = '';
             // Tasarımda gerçek tag değeri olmadığından örnek %50 doluluk gösterilir.
             const dolu = document.createElement('div');
