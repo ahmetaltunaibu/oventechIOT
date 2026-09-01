@@ -1346,7 +1346,12 @@ function hedefKatmanaEkle(div, el, tuval) {
     // eklenmeden hemen önce burada TEK YERDEN kontrol ediliyor.
     if (el.gizle_tag_id) {
         const gizleDeger = degerler[el.gizle_tag_id] ? degerler[el.gizle_tag_id].deger : null;
-        if (gizleDeger !== null && String(gizleDeger) === String(el.gizle_deger)) {
+        const gizlensinMi = gizleDeger !== null && String(gizleDeger) === String(el.gizle_deger);
+        // GEÇİCİ TEŞHİS (kullanıcı raporu — aynı koşullu iki element farklı
+        // davranıyor gibi görünüyor): kaldırılacak.
+        console.log('[gizle-debug]', 'el.id=', el.id, 'el.tag_id=', el.tag_id, 'el.gizle_tag_id=', el.gizle_tag_id,
+            'el.gizle_deger=', el.gizle_deger, 'okunan gizleDeger=', gizleDeger, 'GİZLENSİN Mİ=', gizlensinMi);
+        if (gizlensinMi) {
             div.style.display = 'none';
         }
     }
