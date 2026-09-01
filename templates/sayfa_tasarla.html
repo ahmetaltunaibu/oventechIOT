@@ -2522,8 +2522,16 @@ document.addEventListener('mousemove', (e) => {
             el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(my - g.offsetY)));
         });
         if (surukleGrubu.length === 1) {
-            const tekEl = bul(surukleGrubu[0].id);
-            if (tekEl) hizaKilavuzUygula(tekEl);
+            // KÖK SEBEP (kullanıcı raporu — switch sürüklerken belirli bir
+            // konumda "yapışıp" kalıyor, yukarı çıkamıyor): "ana sayfa" gibi
+            // ÇOK sayıda elementi (40+) olan yoğun sayfalarda, akıllı
+            // hizalama (smart guide) HER fare hareketinde TÜM diğer
+            // elementlerin kenar/orta noktalarına 6px eşikle bakıyor —
+            // yoğun bir sayfada neredeyse her noktada bir elemente 6px
+            // mesafede kalınıyor, bu da sürekli "snap" tetikleyip elementi
+            // sürekli geri çekiyordu (az elementli sayfalarda fark
+            // edilmiyordu, çünkü çarpışacak hedef azdı). Devre dışı bırakıldı.
+            tumHizaCizgileriGizle();
         } else {
             tumHizaCizgileriGizle();
         }
