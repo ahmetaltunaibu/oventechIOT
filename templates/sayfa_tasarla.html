@@ -2514,8 +2514,10 @@ document.addEventListener('mousemove', (e) => {
             el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(my - g.offsetY)));
         });
         if (surukleGrubu.length === 1) {
-            const tekEl = bul(surukleGrubu[0].id);
-            if (tekEl) hizaKilavuzUygula(tekEl);
+            // GEÇİCİ (kullanıcı raporu — switch elementi yukarı taşınamıyor,
+            // hizalama kılavuzuyla ilgili olabilir): devre dışı, test için.
+            // const tekEl = bul(surukleGrubu[0].id);
+            // if (tekEl) hizaKilavuzUygula(tekEl);
         } else {
             tumHizaCizgileriGizle();
         }
