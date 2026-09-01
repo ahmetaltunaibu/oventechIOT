@@ -676,7 +676,14 @@ function tuvalCiz() {
             div.style.borderRadius = (el.kose_yaricapi || 0) + 'px';
             if (durum) {
                 if (el.durum_modu === 'resim') {
-                    if (durum.resim_url) {
+                    // Kullanıcı isteği: tasarımcıda emoji seçilmişse (resim
+                    // URL'i yerine) burada da aynı emoji büyük harf gibi
+                    // gösterilsin.
+                    if (durum.emoji) {
+                        div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+                        div.style.fontSize = Math.min(durum.genislik || el.w, durum.yukseklik || el.h) * 0.6 + 'px';
+                        div.textContent = durum.emoji;
+                    } else if (durum.resim_url) {
                         div.appendChild(resimNodeAl(el.id, durum.resim_url));
                     }
                 } else {

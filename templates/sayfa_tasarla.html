@@ -99,6 +99,15 @@
     #ikon-modal, #emoji-modal { z-index: 311; }
     .ozel-alan { display: none; }
     .ozel-alan.gorunur { display: block; }
+    /* Kullanıcı isteği: çift tıklamayla açılan Element Özellikleri paneli
+       dar (320px) ve çok alanlı olduğu halde site geneli input/select/label
+       boyutlarını (14px/12px, geniş padding) kullanıyordu — sıkışık paneller
+       için gereğinden büyük görünüyordu. Sadece bu panel için küçültüldü,
+       site genelindeki formlara (giriş, ayarlar vb.) dokunulmadı. */
+    #element-ozellik-modal label { font-size: 11px; margin-bottom: 3px; }
+    #element-ozellik-modal input, #element-ozellik-modal select {
+        font-size: 12px; padding: 6px 8px; margin-bottom: 8px;
+    }
     .sablon-satir {
         padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
         background: var(--panel2); margin-bottom: 6px;
@@ -337,10 +346,11 @@
 <!-- Element Ozellikleri modali -->
 <div id="element-ozellik-perde" class="modal-perde" onclick="ozellikKapat()"></div>
 <div id="element-ozellik-modal" class="modal-kutu">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
         <h2 id="ozellikBaslik" style="color:var(--accent);font-size:15px;">Element Özellikleri</h2>
         <button type="button" onclick="ozellikKapat()" title="Kapat" style="background:transparent;color:var(--text-secondary);padding:2px 8px;font-size:16px;">✕</button>
     </div>
+    <div id="ozellikId" style="font-size:10px;font-family:monospace;color:var(--text-secondary);margin-bottom:12px;"></div>
     <div id="ozAlanGenelMetin" class="ozel-alan gorunur">
         <label>Etiket / Metin</label>
         <div style="display:flex;gap:6px;">
@@ -1540,7 +1550,8 @@ function yeniDurum(deger, metin, renkArkaplan, renkYazi, tagId) {
         // kullanıcı isteği: her durum kendi tag'ini gösterebilsin, bazısı
         // bool bazısı int gibi FARKLI tag'ler tek göstergede birleşebilsin.
         deger: deger, metin: metin, renk_arkaplan: renkArkaplan, renk_yazi: renkYazi,
-        font_boyutu: 14, resim_url: '', genislik: '', yukseklik: '', tag_id: tagId || null
+        font_boyutu: 14, resim_url: '', emoji: '', resim_seffaf: false,
+        genislik: '', yukseklik: '', tag_id: tagId || null
     };
 }
 function durumEkle(x, y) {
@@ -1845,8 +1856,15 @@ function render() {
             if (durum) {
                 if (el.durum_modu === 'resim') {
                     div.style.overflow = 'hidden';
-                    div.style.background = '#0008';
-                    if (durum.resim_url) {
+                    // Kullanıcı isteği: emoji ya da resim seçilince arka
+                    // plandaki koyu kutu (tasarım-yardımcı yer tutucu)
+                    // gizlenebilsin — "Arka Planı Gizle" işaretliyse şeffaf.
+                    div.style.background = durum.resim_seffaf ? 'transparent' : '#0008';
+                    if (durum.emoji) {
+                        div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
+                        div.style.fontSize = Math.min(durum.genislik || el.w, durum.yukseklik || el.h) * 0.6 + 'px';
+                        div.textContent = durum.emoji;
+                    } else if (durum.resim_url) {
                         const img = document.createElement('img');
                         img.src = durum.resim_url;
                         img.style.objectFit = 'contain';
@@ -2156,8 +2174,11 @@ function render() {
         }
 
         // Kullanıcı isteği: tuvalde küçük bir bağlantı simgesi — tıklayınca
-        // tam özellikler modalını açmadan hızlıca tag seçilebilsin.
-        if (el.type === 'button' || el.type === 'label') {
+        // tam özellikler modalını açmadan hızlıca tag seçilebilsin. Önceden
+        // sadece buton/etiket'te vardı — switch, durum, textbox, inputbox da
+        // (hepsi düz el.tag_id kullanıyor, durum'da bu "varsayılan tag")
+        // aynı rozeti kullanabilir.
+        if (['button', 'label', 'switch', 'durum', 'textbox', 'inputbox'].includes(el.type)) {
             const baglanti = document.createElement('div');
             baglanti.textContent = '🔗';
             baglanti.title = 'Tag bağlantısı';
@@ -3257,6 +3278,9 @@ function guncellePanel() {
     const tipAdi = TIP_ADLARI[el.type] || el.type;
     const elIsim = el.label || el.baslik || el.mesaj || el.metin || '';
     document.getElementById('ozellikBaslik').textContent = tipAdi + (elIsim ? ' — ' + elIsim : '');
+    // Kullanıcı isteği: çift tıklamada elementin ID'si panelin en başında
+    // görünsün (tag adresleri/JSON içinde elementi ararken işine yarıyor).
+    document.getElementById('ozellikId').textContent = 'ID: ' + el.id;
 
     document.getElementById('ozAlanGenelMetin').classList.toggle('gorunur', el.type === 'button' || el.type === 'label');
     document.getElementById('ozAlanYaziRengi').classList.toggle('gorunur', el.type === 'button' || el.type === 'label');
@@ -3519,6 +3543,14 @@ function durumSatirlariCiz() {
                 <label>Resim URL</label>
                 <input type="text" class="durum-resim-url" value="${(d.resim_url || '').replace(/"/g, '&quot;')}" placeholder="https://...">
                 <input type="file" class="durum-resim-dosya" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
+                <label>Emoji / Simge (doluysa resmin yerine bu gösterilir)</label>
+                <div style="display:flex;gap:6px;">
+                    <input type="text" class="durum-emoji" value="${(d.emoji || '').replace(/"/g, '&quot;')}" style="flex:1;" placeholder="😀" maxlength="8">
+                    <button type="button" class="durum-emoji-btn-resim" title="Emoji/Simge Seç" style="background:var(--panel2);flex:0 0 38px;padding:0;">😀</button>
+                </div>
+                <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" class="durum-resim-seffaf" style="width:auto;margin:0;" ${d.resim_seffaf ? 'checked' : ''}> Arka Planı Gizle (Şeffaf)
+                </label>
             ` : `
                 <label>Metin</label>
                 <div style="display:flex;gap:6px;">
@@ -3557,6 +3589,14 @@ function durumSatirlariCiz() {
                     else alert(data.error || 'Yükleme hatası');
                 } catch (err) { alert('İstek başarısız'); }
             });
+            // Kullanıcı isteği: "Sadece Resim" modunda gerçek bir resim URL'i
+            // yerine emoji de kullanılabilsin (örn. 🔴/🟢 gibi basit durum
+            // ikonları için resim yüklemeye gerek kalmasın).
+            const emojiInput = satir.querySelector('.durum-emoji');
+            const emojiBtnResim = satir.querySelector('.durum-emoji-btn-resim');
+            if (emojiBtnResim && emojiInput) {
+                emojiBtnResim.addEventListener('click', () => emojiSeciciAc(emojiInput));
+            }
         } else {
             // Kullanıcı isteği: durum göstergesinin metin alanına da
             // emoji/simge eklenebilsin.
@@ -3603,6 +3643,8 @@ function _durumSatirlariniOku(el) {
             renk_yazi: modu === 'resim' ? (eski.renk_yazi || '#ffffff') : satir.querySelector('.durum-renk-yazi').value,
             font_boyutu: modu === 'resim' ? (eski.font_boyutu || 14) : (parseInt(satir.querySelector('.durum-font').value) || 14),
             resim_url: modu === 'resim' ? satir.querySelector('.durum-resim-url').value.trim() : (eski.resim_url || ''),
+            emoji: modu === 'resim' ? satir.querySelector('.durum-emoji').value.trim() : (eski.emoji || ''),
+            resim_seffaf: modu === 'resim' ? satir.querySelector('.durum-resim-seffaf').checked : (eski.resim_seffaf || false),
             genislik: parseInt(satir.querySelector('.durum-genislik').value) || '',
             yukseklik: parseInt(satir.querySelector('.durum-yukseklik').value) || '',
         };
