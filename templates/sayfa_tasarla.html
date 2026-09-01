@@ -1312,8 +1312,16 @@ function ileriAl() {
 
 function uid() { return 'el_' + Math.random().toString(36).slice(2, 10); }
 
+// KÖK SEBEP (kullanıcı raporu — yeni eklenen element tuval dışında
+// beliriyordu): her "...Ekle(x,y)" fonksiyonu sadece ALT sınırı
+// (Math.max(0,...)) kontrol ediyordu, ÜST sınırı (tuval genişliği/
+// yüksekliği) hiç kontrol etmiyordu — tuvalin alt/sağ kısımlarına yakın
+// sağ tıklanınca yeni element tuvalin dışına taşıyordu. Tüm ekleme
+// fonksiyonları TEK bu noktadan geçtiği için düzeltme tek yerden yapılıyor.
 function elementEkle(nesne) {
     gecmiseKaydet();
+    if (typeof nesne.w === 'number') nesne.x = Math.max(0, Math.min(tuvalW - nesne.w, nesne.x));
+    if (typeof nesne.h === 'number') nesne.y = Math.max(0, Math.min(tuvalH - nesne.h, nesne.y));
     elementler.push(nesne);
     secTekli(nesne.id);
     render();
@@ -2514,10 +2522,8 @@ document.addEventListener('mousemove', (e) => {
             el.y = Math.max(0, Math.min(tuvalH - el.h, Math.round(my - g.offsetY)));
         });
         if (surukleGrubu.length === 1) {
-            // GEÇİCİ (kullanıcı raporu — switch elementi yukarı taşınamıyor,
-            // hizalama kılavuzuyla ilgili olabilir): devre dışı, test için.
-            // const tekEl = bul(surukleGrubu[0].id);
-            // if (tekEl) hizaKilavuzUygula(tekEl);
+            const tekEl = bul(surukleGrubu[0].id);
+            if (tekEl) hizaKilavuzUygula(tekEl);
         } else {
             tumHizaCizgileriGizle();
         }
