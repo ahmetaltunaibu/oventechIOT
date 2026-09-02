@@ -126,25 +126,74 @@ def _cihaz_dogrula(cihaz_id):
 @dashboard_bp.route('/cihaz/<int:cihaz_id>')
 @login_required
 def cihaz_detay(cihaz_id):
+    """"Cihaz Özellikleri" sayfası — cihaz adı/yeniden adlandırma/PLC profili/
+    kopyalama/silme + bağlantı-modbus-WiFi durumu. Kullanıcı isteği: eskiden
+    Alarm/Firmware/Tag'ler/Sayfalar da hep bu TEK dev sayfadaydı — artık her
+    biri kendi sayfasında (bkz. cihaz_alarmlar/cihaz_firmware/cihaz_tagler/
+    cihaz_sayfalar), aralarında _cihaz_altmenu.html sekme çubuğuyla geziliyor."""
+    cihaz = _cihaz_dogrula(cihaz_id)
+    if not cihaz:
+        flash('Cihaz bulunamadı ya da bu projeye ait değil.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    plc_profilleri = [database.plc_profil_getir(p['id']) for p in database.plc_profilleri_listele()]
+    return render_template('cihaz_detay.html', cihaz=cihaz, plc_profilleri=plc_profilleri)
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/alarmlar')
+@login_required
+def cihaz_alarmlar(cihaz_id):
+    cihaz = _cihaz_dogrula(cihaz_id)
+    if not cihaz:
+        flash('Cihaz bulunamadı ya da bu projeye ait değil.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    alarmlar = database.alarm_kayitlari_listele(cihaz_id, limit=30)
+    return render_template('cihaz_alarmlar.html', cihaz=cihaz, alarmlar=alarmlar)
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/firmware')
+@login_required
+def cihaz_firmware(cihaz_id):
+    cihaz = _cihaz_dogrula(cihaz_id)
+    if not cihaz:
+        flash('Cihaz bulunamadı ya da bu projeye ait değil.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    # Eskiden bu kart cihaz_detay.html içinde sadece platform_admin'e
+    # gösteriliyordu (veri her rol için çekilse de) — aynı kısıtlama artık
+    # route seviyesinde: diğer roller bu sayfaya hiç giremiyor.
+    if not session.get('platform_admin'):
+        flash('Bu sayfayı görüntüleme yetkin yok.', 'danger')
+        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    firmwarelar = database.firmware_listesi(session['proje_id'])
+    firmware_gecmisi = database.firmware_gecmisi_listele(cihaz_id, limit=15)
+    return render_template('cihaz_firmware.html', cihaz=cihaz, firmwarelar=firmwarelar,
+                            firmware_gecmisi=firmware_gecmisi)
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/tagler')
+@login_required
+def cihaz_tagler(cihaz_id):
     cihaz = _cihaz_dogrula(cihaz_id)
     if not cihaz:
         flash('Cihaz bulunamadı ya da bu projeye ait değil.', 'danger')
         return redirect(url_for('dashboard.dashboard_page'))
     tagler = database.cihaz_tagleri(cihaz_id)
-    sayfalar = database.cihaz_sayfalari(cihaz_id)
-    proje_sayfalari = database.proje_tum_sayfalari(session['proje_id'])
-    alarmlar = database.alarm_kayitlari_listele(cihaz_id, limit=30)
-    firmwarelar = database.firmware_listesi(session['proje_id'])
-    firmware_gecmisi = database.firmware_gecmisi_listele(cihaz_id, limit=15)
     # Sadece id/ad değil, JS tarafında "Doğal Adres" alanının önek (X/Y/M/D)
     # combobox'ını doldurmak için her profilin bölgelerine (onek listesine)
     # de ihtiyaç var — bu yüzden düz listeleme yerine her profili tek tek
     # detaylı (bolgeler dahil) çekiyoruz.
     plc_profilleri = [database.plc_profil_getir(p['id']) for p in database.plc_profilleri_listele()]
-    return render_template('cihaz_detay.html', cihaz=cihaz, tagler=tagler, sayfalar=sayfalar,
-                            proje_sayfalari=proje_sayfalari, alarmlar=alarmlar,
-                            firmwarelar=firmwarelar, firmware_gecmisi=firmware_gecmisi,
-                            plc_profilleri=plc_profilleri)
+    return render_template('cihaz_tagler.html', cihaz=cihaz, tagler=tagler, plc_profilleri=plc_profilleri)
+
+
+@dashboard_bp.route('/cihaz/<int:cihaz_id>/sayfalar')
+@login_required
+def cihaz_sayfalar(cihaz_id):
+    cihaz = _cihaz_dogrula(cihaz_id)
+    if not cihaz:
+        flash('Cihaz bulunamadı ya da bu projeye ait değil.', 'danger')
+        return redirect(url_for('dashboard.dashboard_page'))
+    sayfalar = database.cihaz_sayfalari(cihaz_id)
+    return render_template('cihaz_sayfalar.html', cihaz=cihaz, sayfalar=sayfalar)
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/yeniden-adlandir', methods=['POST'])
@@ -184,7 +233,7 @@ def cihaz_baslangic_sayfa(cihaz_id):
     sayfa_ad = request.form.get('sayfa_ad', '').strip()
     database.cihaz_baslangic_sayfa_guncelle(cihaz_id, sayfa_ad)
     flash('Başlangıç sayfası güncellendi.' if sayfa_ad else 'Başlangıç sayfası kaldırıldı — cihaza tıklayınca yine yönetim sayfası açılacak.', 'success')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_sayfalar', cihaz_id=cihaz_id))
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/wifi-sifirla-iste', methods=['POST'])
@@ -234,7 +283,7 @@ def tag_sil(cihaz_id, tag_id):
         return redirect(url_for('dashboard.dashboard_page'))
     database.tag_sil(tag_id)
     flash('Tag silindi.', 'success')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_tagler', cihaz_id=cihaz_id))
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/tag/<int:tag_id>/duzenle', methods=['POST'])
@@ -251,14 +300,14 @@ def tag_duzenle(cihaz_id, tag_id):
 
     if not ad or not modbus_adres:
         flash('Tag adı ve Modbus adresi zorunlu.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_tagler', cihaz_id=cihaz_id))
 
     ok, hata = database.tag_guncelle(tag_id, ad, modbus_adres, veri_tipi, erisim)
     if ok:
         flash('Tag güncellendi.', 'success')
     else:
         flash(f'Hata: {hata}', 'danger')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_tagler', cihaz_id=cihaz_id))
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/tag-ekle', methods=['POST'])
@@ -276,12 +325,12 @@ def tag_ekle(cihaz_id):
 
     if not ad or not modbus_adres:
         flash('Tag adı ve Modbus adresi zorunlu.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_tagler', cihaz_id=cihaz_id))
 
     ok, sonuc = database.tag_ekle(cihaz_id, ad, modbus_adres, veri_tipi, erisim)
     if not ok:
         flash(f'Hata: {sonuc}', 'danger')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_tagler', cihaz_id=cihaz_id))
 
 
 # ============================================================
@@ -397,15 +446,15 @@ def firmware_yukle(cihaz_id):
     dosya = request.files.get('firmware_dosya')
     if not dosya or dosya.filename == '':
         flash('Dosya seçilmedi.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_firmware', cihaz_id=cihaz_id))
     if not dosya.filename.lower().endswith('.bin'):
         flash('Sadece .bin dosyaları yüklenebilir.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_firmware', cihaz_id=cihaz_id))
 
     veri = dosya.read()
     if len(veri) > 4 * 1024 * 1024:
         flash('Dosya çok büyük (maksimum 4 MB).', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_firmware', cihaz_id=cihaz_id))
 
     versiyon = request.form.get('versiyon', '').strip() or '1.0.0'
     aciklama = request.form.get('aciklama', '').strip()
@@ -418,7 +467,7 @@ def firmware_yukle(cihaz_id):
         flash(f'✅ Firmware yüklendi ({hedef_yazi} uygulanacak): {dosya.filename}', 'success')
     else:
         flash(f'Hata: {sonuc}', 'danger')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_firmware', cihaz_id=cihaz_id))
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/firmware/<int:firmware_id>/aktiflik', methods=['POST'])
@@ -430,11 +479,11 @@ def firmware_aktiflik(cihaz_id, firmware_id):
     fw = database.firmware_getir(firmware_id)
     if not fw or fw['proje_id'] != session['proje_id']:
         flash('Firmware bulunamadı.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_firmware', cihaz_id=cihaz_id))
     yeni_aktif = not fw['aktif']
     database.firmware_aktiflik_ayarla(firmware_id, yeni_aktif)
     flash('Firmware aktifleştirildi — hedef cihaz(lar) bir sonraki kontrolde indirecek.' if yeni_aktif else 'Firmware pasif yapıldı.', 'success')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_firmware', cihaz_id=cihaz_id))
 
 
 @dashboard_bp.route('/cihaz/<int:cihaz_id>/firmware/<int:firmware_id>/sil', methods=['POST'])
@@ -446,7 +495,7 @@ def firmware_sil(cihaz_id, firmware_id):
     fw = database.firmware_getir(firmware_id)
     if not fw or fw['proje_id'] != session['proje_id']:
         flash('Firmware bulunamadı.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_firmware', cihaz_id=cihaz_id))
     database.firmware_sil(firmware_id)
     flash('Firmware silindi.', 'success')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_firmware', cihaz_id=cihaz_id))

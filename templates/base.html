@@ -95,6 +95,19 @@
         a.item-link:hover { color: var(--accent); }
         .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); color: var(--text-secondary); }
         .badge.on { background: rgba(46,204,113,0.15); color: var(--green); }
+        /* Kullanıcı isteği: cihaz yönetim sayfası (Özellikler/Alarm/Firmware/
+           Tag'ler/Sayfalar) tek dev bir sayfaydı — artık ayrı sayfalara
+           bölündü, bu sekme çubuğu aralarında gezinmek için ortak. */
+        .alt-sekme-cubugu {
+            display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto;
+            border-bottom: 1px solid var(--border);
+        }
+        .alt-sekme {
+            padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--text-secondary);
+            text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; flex-shrink: 0;
+        }
+        .alt-sekme:hover { color: var(--text); }
+        .alt-sekme.aktif { color: var(--accent); border-bottom-color: var(--accent); }
     </style>
     {% block extra_css %}{% endblock %}
 </head>

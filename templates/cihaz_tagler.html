@@ -1,0 +1,448 @@
+{% extends "base.html" %}
+{% block title %}{{ cihaz.ad }} - Tag'ler - OventechIOT{% endblock %}
+{% block content %}
+{% include "_cihaz_altmenu.html" %}
+
+<div class="tag-tablo-breakout">
+<div class="card tag-tablo-karti">
+    <h2>Tag'ler</h2>
+    {# Kullanıcı kararı: tag adresleri/PLC bağlantısı gibi teknik ayarlar
+       şimdilik sadece platform admin'de kalsın — tasarımcı düzenleyemesin,
+       operatör gibi salt-okunur basit tabloyu görsün (aşağıdaki {% elif %}). #}
+    {% set tasarimci_mi = session.get('platform_admin') %}
+    {% if tasarimci_mi %}
+    <!-- Kullanıcı isteği: tag eklemek/düzenlemek eskiden her tag için ayrı
+         bir kart+form+sayfa yenilemesi gerektiriyordu, çok yavaştı. Artık
+         Excel benzeri bir tablo — hücreye tıkla, yaz, kutudan çık (blur),
+         otomatik kaydedilir. Sütun başlığına tıklayınca o sütuna göre sıralar.
+         + Yeni Tag Satırı ile boş bir satır eklenir, ilk iki hücre (Ad +
+         Modbus Adresi) doldurulup kutudan çıkılınca gerçek tag olarak oluşur. -->
+    <style>
+        /* Kullanıcı raporu: tag tablosu çok sütunlu (PLC Profili, Doğal
+           Adres artık 2 parça, Modbus Adres, Tip, Erişim, Geçmiş...) hale
+           gelince üst .container'ın sabit max-width:900px sınırına
+           sığmıyordu, kart kenarından taşıyor/kırpılıyor gibi duruyordu.
+           İKİ KATMANLI çözüm: dıştaki .tag-tablo-breakout, width:100vw +
+           position:relative/left:50%/margin-left:-50vw ile .container'dan
+           TAMAMEN bağımsız hale gelip TÜM viewport genişliğini kaplıyor
+           (parent'ın max-width'i ne olursa olsun). İçteki .tag-tablo-karti
+           ise o tam-genişlik şeridin İÇİNDE margin:auto ile ortalanıyor.
+           (Tek katmanlı, vw-tabanlı margin + max-width birlikte kullanılan
+           ilk deneme YANLIŞTI: max-width devreye girip genişliği kısaltınca
+           margin'ler yeniden hesaplanmıyordu, kart sola yapışık kalıp sağda
+           boş alan bırakıyordu — bu yüzden iki katmana bölündü.) */
+        .tag-tablo-breakout {
+            width: 100vw;
+            position: relative;
+            left: 50%;
+            margin-left: -50vw;
+        }
+        .tag-tablo-karti {
+            max-width: 1900px;
+            width: calc(100% - 32px);
+            margin: 0 auto 16px;
+        }
+        .tag-tablo-sarici { overflow-x: auto; }
+        /* Kullanıcı raporu: sütunlar bazen sığmıyor, tag isimleri kesiliyor,
+           genişletemiyordu. Kök neden: width:100% + çok sayıda sütun —
+           tarayıcı hepsini konteynere SIĞDIRMAK için orantılı olarak
+           SIKIŞTIRIYORDU (üstteki overflow-x:auto hiç devreye girmiyordu,
+           çünkü tablo asla 100%'ü aşmıyordu). Artık tablo gerektiğinde
+           konteynerden GENİŞ olabiliyor (width:auto + min-width:100%) —
+           sığmayınca sıkışmak yerine sarmalayıcı yatay kayıyor; her hücreye
+           de asgari bir genişlik (min-width) verildi ki metin/girdi alanı
+           asla aşırı daralmasın. */
+        #tagTablosu { width: auto; min-width: 100%; border-collapse: collapse; }
+        #tagTablosu th, #tagTablosu td { padding: 0; border: 1px solid var(--border); }
+        /* Kullanıcı raporu (2. tur): min-width tek başına yetmedi — sabit
+           bir sayı seçmek zorunda kalıyorduk, uzun isimler yine kesiliyordu.
+           GERÇEK "içeriğe göre otomatik genişlik" için Ad/Modbus Adres
+           kutularının width:100% (yukarıdaki genel .tag-hucre kuralı)
+           ezilip width:auto yapıldı — böylece HTML'in size özniteliği
+           (aşağıda tagGirdiBoyutlandir() ile metin uzunluğuna göre JS'den
+           ayarlanıyor) gerçekten devreye giriyor, kutu tam yazı kadar
+           genişliyor/daralıyor. Select'ler (Tip/Erişim) size özniteliğini
+           desteklemediği için onlarda min-width'e devam. */
+        .tag-hucre[data-alan="ad"], .tag-hucre[data-alan="modbus_adres"] { width: auto; }
+        select.tag-hucre[data-alan="veri_tipi"] { min-width: 150px; }
+        select.tag-hucre[data-alan="erisim"] { min-width: 130px; }
+        select.tag-hucre[data-alan="plc_profil_id"] { min-width: 140px; }
+        .tag-hucre[data-alan="dogal_onek"] { width: auto; flex: 0 0 auto; min-width: 54px; padding: 8px 6px; }
+        .tag-hucre[data-alan="dogal_sayi"] { width: auto; flex: 0 0 auto; min-width: 50px; max-width: 70px; }
+        .tag-hucre[data-alan="gecmis_araligi_sn"] { min-width: 70px; }
+        #tagTablosu th {
+            padding: 8px 10px; text-align: left; font-size: 12px; color: var(--text-secondary);
+            background: var(--panel2); user-select: none; white-space: nowrap;
+        }
+        #tagTablosu th.siralanabilir { cursor: pointer; }
+        #tagTablosu th.siralanabilir:hover { color: var(--text); }
+        #tagTablosu td.tag-id-hucre { padding: 8px 10px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+        .tag-hucre {
+            width: 100%; margin: 0; padding: 8px 10px; border: none; border-radius: 0;
+            background: transparent; box-sizing: border-box;
+        }
+        .tag-hucre:focus { background: var(--panel2); outline: 2px solid var(--accent); outline-offset: -2px; }
+        .tag-hucre.tag-hucre-hata { outline: 2px solid var(--red); outline-offset: -2px; }
+        .tag-sil-hucre { padding: 6px 8px; text-align: center; white-space: nowrap; }
+        .tag-sil-btn { background: var(--red); padding: 5px 10px; font-size: 11px; }
+    </style>
+    <div class="tag-tablo-sarici">
+        <table id="tagTablosu">
+            <thead>
+                <tr>
+                    <th class="siralanabilir" data-sirala="id">#</th>
+                    <th class="siralanabilir" data-sirala="ad">Ad</th>
+                    <th title="Seçersen, ham Modbus adresini elle hesaplamana gerek kalmaz — PLC'nin kendi adresini (Doğal Adres) yaz, otomatik çevrilir.">PLC Profili</th>
+                    <th title="Önek (X/Y/M/D...) PLC Profilinden seçilir, adres numarasını sen yazarsın — örn. X + 21 (PLC Profili seçiliyken).">Doğal Adres</th>
+                    <th class="siralanabilir" data-sirala="modbus_adres">Modbus Adres (ham)</th>
+                    <th class="siralanabilir" data-sirala="veri_tipi">Tip</th>
+                    <th class="siralanabilir" data-sirala="erisim">Erişim</th>
+                    <th title="İşaretlenmezse bu tag grafik geçmişine HİÇ kaydedilmez.">Geçmişe Kaydet</th>
+                    <th title="Sadece 'Geçmişe Kaydet' işaretliyken geçerli — en fazla ne sıklıkla satır düşsün (saniye). Boşsa varsayılan (20sn) kullanılır.">Kayıt Aralığı (sn)</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="tagTabloGovde">
+                {% for t in tagler %}
+                <tr data-tag-id="{{ t.id }}" data-veri-tipi="{{ t.veri_tipi }}" data-erisim="{{ t.erisim }}" data-dogal-adres="{{ t.dogal_adres or '' }}">
+                    <td class="tag-id-hucre">{{ t.id }}</td>
+                    <td><input type="text" class="tag-hucre" data-alan="ad" value="{{ t.ad }}" placeholder="örn. sicaklik"></td>
+                    <td>
+                        <select class="tag-hucre" data-alan="plc_profil_id" onchange="tagProfilDegisti(this)">
+                            <option value="">— seçilmedi —</option>
+                            {% for p in plc_profilleri %}
+                            <option value="{{ p.id }}" {{ 'selected' if t.plc_profil_id == p.id else '' }}>{{ (p.marka + ' — ' if p.marka) ~ p.ad }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td style="display:flex;gap:4px;">
+                        <select class="tag-hucre" data-alan="dogal_onek" {{ '' if t.plc_profil_id else 'disabled' }}></select>
+                        <input type="text" class="tag-hucre" data-alan="dogal_sayi" style="font-family:monospace;" {{ '' if t.plc_profil_id else 'disabled' }}>
+                    </td>
+                    <td><input type="text" class="tag-hucre" data-alan="modbus_adres" value="{{ t.modbus_adres }}" placeholder="örn. 40001" style="font-family:monospace;" {{ 'readonly' if t.plc_profil_id else '' }}></td>
+                    <td><select class="tag-hucre" data-alan="veri_tipi"></select></td>
+                    <td><select class="tag-hucre" data-alan="erisim"></select></td>
+                    <td style="text-align:center;"><input type="checkbox" class="tag-hucre" data-alan="gecmis_kayit_aktif" onchange="tagKayitAktifDegisti(this)" {{ 'checked' if t.gecmis_kayit_aktif else '' }}></td>
+                    <td><input type="number" min="1" class="tag-hucre" data-alan="gecmis_araligi_sn" value="{{ t.gecmis_araligi_sn or '' }}" placeholder="20" {{ '' if t.gecmis_kayit_aktif else 'disabled' }}></td>
+                    <td class="tag-sil-hucre"><button type="button" class="tag-sil-btn" onclick="tagSatirSil(this)">Sil</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:12px;">
+        <button type="button" onclick="tagYeniSatirEkle()" style="background:var(--panel2);">+ Yeni Tag Satırı</button>
+        <span id="tagTabloDurum" style="font-size:12px;color:var(--text-secondary);"></span>
+    </div>
+    <noscript>
+        <p style="color:var(--text-secondary);font-size:12px;margin-top:10px;">Bu tablo JavaScript gerektirir. JS kapalıysa aşağıdaki klasik formu kullan:</p>
+        <form method="POST" action="{{ url_for('dashboard.tag_ekle', cihaz_id=cihaz.id) }}" style="margin-top:6px;">
+            <label>Tag Adı</label>
+            <input type="text" name="ad" placeholder="örn. sicaklik" required>
+            <label>Modbus Adresi</label>
+            <input type="text" name="modbus_adres" placeholder="örn. 40001" required>
+            <button type="submit">Tag Ekle</button>
+        </form>
+    </noscript>
+    {% elif tagler %}
+    {% set adres_gorunsun = session.get('rol') != 'tasarimci' %}
+    <table>
+        <thead><tr><th>Ad</th>{% if adres_gorunsun %}<th>Modbus Adres</th>{% endif %}<th>Tip</th><th>Erişim</th><th>Geçmişe Kaydet</th><th>Kayıt Aralığı (sn)</th></tr></thead>
+        <tbody>
+        {% for t in tagler %}
+            <tr>
+                <td>{{ t.ad }}</td>
+                {% if adres_gorunsun %}<td style="font-family:monospace;">{{ t.modbus_adres }}</td>{% endif %}
+                <td>{{ t.veri_tipi }}</td>
+                <td>{{ t.erisim }}</td>
+                <td>{{ '✅' if t.gecmis_kayit_aktif else '—' }}</td>
+                <td>{{ t.gecmis_araligi_sn or '20 (varsayılan)' if t.gecmis_kayit_aktif else '—' }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-secondary);font-size:14px;">Henüz tag eklenmedi.</p>
+    {% endif %}
+</div>
+</div>
+
+{% if tasarimci_mi %}
+<script>
+// ---------- Tag Tablosu (Excel benzeri, hücre-hücre otomatik kaydeden) ----------
+const TAG_VERI_TIPLERI = [
+    ['bool', 'bool (açık/kapalı)'], ['byte', 'byte'], ['sint', 'sint'], ['usint', 'usint'],
+    ['int', 'int (tam sayı)'], ['uint', 'uint'], ['dint', 'dint'], ['udint', 'udint'],
+    ['word', 'word'], ['dword', 'dword'], ['float', 'float / real (ondalık)'], ['string', 'string'],
+];
+const TAG_ERISIMLER = [
+    ['read', 'Sadece okuma'], ['write', 'Sadece yazma'], ['readwrite', 'Okuma + Yazma'],
+];
+const PLC_PROFILLERI = [{% for p in plc_profilleri %}{
+    id: {{ p.id }},
+    etiket: {{ ((p.marka + ' — ' if p.marka) ~ p.ad)|tojson }},
+    onekler: {{ (p.bolgeler | map(attribute='onek') | list) | tojson }}
+}{{ ',' if not loop.last }}{% endfor %}];
+const CIHAZ_PLC_PROFIL_ID = {{ cihaz.plc_profil_id or 'null' }};
+const TAG_CIHAZ_ID = {{ cihaz.id }};
+
+function _tagSelectDoldur(selectEl, secenekler, secili) {
+    selectEl.innerHTML = secenekler.map(([deger, etiket]) =>
+        `<option value="${deger}"${deger === secili ? ' selected' : ''}>${etiket}</option>`
+    ).join('');
+}
+
+function _tagProfilBul(profilId) {
+    return PLC_PROFILLERI.find(p => String(p.id) === String(profilId));
+}
+
+// "X21" -> {onek: "X", sayi: "21"}. Kullanıcı isteği: Doğal Adres'in önek
+// kısmı (X/Y/M/D...) artık PLC Profilinden seçilen bölgeler arasından
+// combobox ile seçiliyor, elle yazmaya gerek yok — sadece adres numarasını
+// yazıyor. Sunucuya giderken ikisi tekrar tek bir string olarak birleşiyor
+// (bkz. _tagDogalAdresBirlestir), sunucu tarafında hiçbir değişiklik gerekmedi.
+function _tagOnekSayiAyir(dogalAdres) {
+    const m = /^([A-Za-z]+)\s*(\d*)$/.exec((dogalAdres || '').trim());
+    return m ? { onek: m[1].toUpperCase(), sayi: m[2] } : { onek: '', sayi: '' };
+}
+
+function _tagDogalAdresBirlestir(satir) {
+    const onek = satir.querySelector('[data-alan="dogal_onek"]').value;
+    const sayi = satir.querySelector('[data-alan="dogal_sayi"]').value.trim();
+    return (onek && sayi !== '') ? (onek + sayi) : '';
+}
+
+// Seçili PLC Profiline göre önek combobox'ının seçeneklerini yeniden kurar.
+// mevcutOnek doldurulmak istenen (satırda hâlihazırda olan) önek — profilin
+// listesinde yoksa bile (örn. profil sonradan değişmiş) kaybolmasın diye
+// listeye eklenir.
+function _tagOnekSecenekleriniKur(onekSelect, profilId, mevcutOnek) {
+    const profil = _tagProfilBul(profilId);
+    const onekler = profil ? profil.onekler.slice() : [];
+    if (mevcutOnek && !onekler.includes(mevcutOnek)) onekler.unshift(mevcutOnek);
+    _tagSelectDoldur(onekSelect, [['', '—'], ...onekler.map(o => [o, o])], mevcutOnek || '');
+}
+
+// Sunucudan gelen mevcut tag'lerin <select> seçeneklerini dolduruyoruz —
+// hangi değerin seçili olacağı, satırın data-veri-tipi/data-erisim/
+// data-dogal-adres özniteliklerinden (Jinja tarafında <tr>'e basıldı) okunuyor.
+document.querySelectorAll('#tagTabloGovde tr').forEach(satir => {
+    _tagSelectDoldur(satir.querySelector('[data-alan="veri_tipi"]'), TAG_VERI_TIPLERI, satir.dataset.veriTipi);
+    _tagSelectDoldur(satir.querySelector('[data-alan="erisim"]'), TAG_ERISIMLER, satir.dataset.erisim);
+    const { onek, sayi } = _tagOnekSayiAyir(satir.dataset.dogalAdres);
+    const profilId = satir.querySelector('[data-alan="plc_profil_id"]').value;
+    _tagOnekSecenekleriniKur(satir.querySelector('[data-alan="dogal_onek"]'), profilId, onek);
+    satir.querySelector('[data-alan="dogal_sayi"]').value = sayi;
+});
+
+// Kullanıcı raporu: min-width tek başına yetmedi, uzun tag isimleri yine
+// kesiliyordu — SABİT bir sayı seçmek yerine GERÇEK içeriğe göre otomatik
+// genişlik istendi. HTML'in <input> için `size` özniteliği tam bunu yapar
+// (kutunun genişliğini "şu kadar karakter sığsın" diye ayarlar) — CSS'te
+// bu iki alan için width:100% ezilip width:auto yapıldı ki `size` gerçekten
+// görünür genişliği belirlesin. Her tuş vuruşunda güncellenir, yazı
+// uzadıkça kutu genişler, kısaldıkça daralır (asgari/azami sınırla).
+function tagGirdiBoyutlandir(inputEl) {
+    const minKarakter = 8, maksKarakter = 40;
+    inputEl.size = Math.min(maksKarakter, Math.max(minKarakter, inputEl.value.length + 1));
+}
+document.querySelectorAll('#tagTabloGovde [data-alan="ad"], #tagTabloGovde [data-alan="modbus_adres"]')
+    .forEach(tagGirdiBoyutlandir);
+document.getElementById('tagTabloGovde').addEventListener('input', (e) => {
+    if (e.target.dataset.alan === 'ad' || e.target.dataset.alan === 'modbus_adres') {
+        tagGirdiBoyutlandir(e.target);
+    }
+});
+
+// Kullanıcı isteği: Modbus Adres (ham) alanı, Doğal Adres seçimine göre
+// otomatik dolsun — önek (X/Y/M/D) zaten SELECT olduğu için değişince
+// (aşağıdaki genel 'change' dinleyicisiyle) anında kaydedilip hesaplanıyor.
+// Adres NUMARASI ise serbest metin girildiği için kutudan çıkılana (blur)
+// kadar beklemek gerekiyordu — burada kısa bir yazma-durakladı (debounce)
+// süresiyle, kutudan çıkmadan da otomatik kaydedip ham adresi güncelliyoruz.
+let _tagDogalSayiZamanlayici = null;
+document.getElementById('tagTabloGovde').addEventListener('input', (e) => {
+    if (e.target.dataset.alan === 'dogal_sayi') {
+        clearTimeout(_tagDogalSayiZamanlayici);
+        _tagDogalSayiZamanlayici = setTimeout(() => tagHucreDegisti(e.target), 600);
+    }
+});
+
+function tagDurumYaz(msg, hataMi) {
+    const el = document.getElementById('tagTabloDurum');
+    el.textContent = msg;
+    el.style.color = hataMi ? 'var(--red)' : 'var(--text-secondary)';
+    if (!hataMi && msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2000);
+}
+
+// "Geçmişe Kaydet" onay kutusu — normal metin hücreleri gibi blur'da değil,
+// tıklanır tıklanmaz (change) kaydedilmeli; ayrıca kapatılınca "Kayıt
+// Aralığı" hücresi anlamsız kaldığı için soluklaştırılıp kilitlenir.
+function tagKayitAktifDegisti(checkboxEl) {
+    const satir = checkboxEl.closest('tr');
+    const araligiInput = satir.querySelector('[data-alan="gecmis_araligi_sn"]');
+    araligiInput.disabled = !checkboxEl.checked;
+    tagHucreDegisti(checkboxEl);
+}
+
+function _tagSatirDegerleriTam(satir) {
+    const ad = satir.querySelector('[data-alan="ad"]').value.trim();
+    const adres = satir.querySelector('[data-alan="modbus_adres"]').value.trim();
+    const dogalAdres = _tagDogalAdresBirlestir(satir);
+    const profilId = satir.querySelector('[data-alan="plc_profil_id"]').value;
+    // PLC Profili + Doğal Adres seçiliyse Modbus Adres henüz boş olabilir
+    // (sunucu hesaplayacak) — o durumda da "tam" say.
+    return ad !== '' && (adres !== '' || (dogalAdres !== '' && profilId !== ''));
+}
+
+// PLC Profili seçilince: önek combobox'ı o profilin bölgeleriyle (X/Y/M/D...)
+// yeniden kurulup açılır, adres numarası kutusu açılır, Modbus Adres alanı
+// artık otomatik hesaplanacağı için elle düzenlenemez (readonly) olur.
+// Profil kaldırılınca eski (elle adres girme) davranışına döner.
+function tagProfilDegisti(selectEl) {
+    const satir = selectEl.closest('tr');
+    const onekSelect = satir.querySelector('[data-alan="dogal_onek"]');
+    const sayiInput = satir.querySelector('[data-alan="dogal_sayi"]');
+    const modbusAdresInput = satir.querySelector('[data-alan="modbus_adres"]');
+    const profilSecili = selectEl.value !== '';
+    _tagOnekSecenekleriniKur(onekSelect, selectEl.value, onekSelect.value);
+    onekSelect.disabled = !profilSecili;
+    sayiInput.disabled = !profilSecili;
+    modbusAdresInput.readOnly = profilSecili;
+    tagHucreDegisti(selectEl);
+}
+
+async function tagHucreDegisti(inputEl) {
+    const satir = inputEl.closest('tr');
+    inputEl.classList.remove('tag-hucre-hata');
+    const tagId = satir.dataset.tagId;
+    const govde = {
+        ad: satir.querySelector('[data-alan="ad"]').value.trim(),
+        modbus_adres: satir.querySelector('[data-alan="modbus_adres"]').value.trim(),
+        plc_profil_id: satir.querySelector('[data-alan="plc_profil_id"]').value,
+        dogal_adres: _tagDogalAdresBirlestir(satir),
+        veri_tipi: satir.querySelector('[data-alan="veri_tipi"]').value,
+        erisim: satir.querySelector('[data-alan="erisim"]').value,
+        gecmis_kayit_aktif: satir.querySelector('[data-alan="gecmis_kayit_aktif"]').checked,
+        gecmis_araligi_sn: satir.querySelector('[data-alan="gecmis_araligi_sn"]').value.trim(),
+    };
+    // Henüz sunucuda oluşturulmamış (yeni eklenen boş) satır — sadece Ad VE
+    // Modbus Adresi ikisi de dolunca gerçek tag olarak oluşturulur.
+    if (!tagId) {
+        if (!_tagSatirDegerleriTam(satir)) return;
+        try {
+            const res = await fetch(`/cihaz/${TAG_CIHAZ_ID}/tag-ekle-json`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(govde)
+            });
+            const data = await res.json();
+            if (!res.ok) { inputEl.classList.add('tag-hucre-hata'); tagDurumYaz('❌ ' + (data.error || 'Eklenemedi'), true); return; }
+            satir.dataset.tagId = data.id;
+            satir.querySelector('.tag-id-hucre').textContent = data.id;
+            if (data.modbus_adres) satir.querySelector('[data-alan="modbus_adres"]').value = data.modbus_adres;
+            tagDurumYaz('✅ Tag eklendi');
+        } catch (e) { tagDurumYaz('❌ İstek başarısız', true); }
+        return;
+    }
+    if (!govde.ad || (!govde.modbus_adres && !(govde.dogal_adres && govde.plc_profil_id))) {
+        inputEl.classList.add('tag-hucre-hata'); return;
+    }
+    try {
+        const res = await fetch(`/cihaz/${TAG_CIHAZ_ID}/tag/${tagId}/alan-guncelle`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(govde)
+        });
+        const data = await res.json();
+        if (!res.ok) { inputEl.classList.add('tag-hucre-hata'); tagDurumYaz('❌ ' + (data.error || 'Kaydedilemedi'), true); return; }
+        if (data.modbus_adres) satir.querySelector('[data-alan="modbus_adres"]').value = data.modbus_adres;
+        tagDurumYaz('✅ Kaydedildi');
+    } catch (e) { tagDurumYaz('❌ İstek başarısız', true); }
+}
+
+// SELECT için 'change' yeterli. INPUT'lar 'blur' (capture, aşağıda) ile
+// yakalanıyor — ikisini birden dinlemek input'larda çift istek atardı
+// (blur zaten her value-değişince tetiklenen change'i de kapsıyor).
+document.getElementById('tagTabloGovde').addEventListener('change', (e) => {
+    if (e.target.classList.contains('tag-hucre') && e.target.tagName === 'SELECT') tagHucreDegisti(e.target);
+});
+document.getElementById('tagTabloGovde').addEventListener('blur', (e) => {
+    if (e.target.classList.contains('tag-hucre') && e.target.tagName === 'INPUT') tagHucreDegisti(e.target);
+}, true);
+
+function tagYeniSatirEkle() {
+    const govde = document.getElementById('tagTabloGovde');
+    const satir = document.createElement('tr');
+    satir.innerHTML = `
+        <td class="tag-id-hucre">—</td>
+        <td><input type="text" class="tag-hucre" data-alan="ad" placeholder="örn. sicaklik"></td>
+        <td><select class="tag-hucre" data-alan="plc_profil_id" onchange="tagProfilDegisti(this)"></select></td>
+        <td style="display:flex;gap:4px;">
+            <select class="tag-hucre" data-alan="dogal_onek" disabled></select>
+            <input type="text" class="tag-hucre" data-alan="dogal_sayi" style="font-family:monospace;" disabled>
+        </td>
+        <td><input type="text" class="tag-hucre" data-alan="modbus_adres" placeholder="örn. 40001" style="font-family:monospace;"></td>
+        <td><select class="tag-hucre" data-alan="veri_tipi"></select></td>
+        <td><select class="tag-hucre" data-alan="erisim"></select></td>
+        <td style="text-align:center;"><input type="checkbox" class="tag-hucre" data-alan="gecmis_kayit_aktif" onchange="tagKayitAktifDegisti(this)"></td>
+        <td><input type="number" min="1" class="tag-hucre" data-alan="gecmis_araligi_sn" placeholder="20" disabled></td>
+        <td class="tag-sil-hucre"><button type="button" class="tag-sil-btn" onclick="tagSatirSil(this)">Sil</button></td>
+    `;
+    // Kullanıcı isteği: cihaza bir PLC Profili atanmışsa (cihaz yönetim
+    // kartındaki "PLC Profili" alanı) yeni tag satırında otomatik öneri
+    // olarak gelsin — her tag için tekrar seçmek gerekmesin.
+    const varsayilanProfil = CIHAZ_PLC_PROFIL_ID ? String(CIHAZ_PLC_PROFIL_ID) : '';
+    _tagSelectDoldur(satir.querySelector('[data-alan="plc_profil_id"]'),
+        [['', '— seçilmedi —'], ...PLC_PROFILLERI.map(p => [String(p.id), p.etiket])], varsayilanProfil);
+    _tagSelectDoldur(satir.querySelector('[data-alan="veri_tipi"]'), TAG_VERI_TIPLERI, 'bool');
+    _tagSelectDoldur(satir.querySelector('[data-alan="erisim"]'), TAG_ERISIMLER, 'read');
+    if (varsayilanProfil) {
+        _tagOnekSecenekleriniKur(satir.querySelector('[data-alan="dogal_onek"]'), varsayilanProfil, '');
+        satir.querySelector('[data-alan="dogal_onek"]').disabled = false;
+        satir.querySelector('[data-alan="dogal_sayi"]').disabled = false;
+    }
+    govde.appendChild(satir);
+    satir.querySelector('[data-alan="ad"]').focus();
+}
+
+async function tagSatirSil(btn) {
+    const satir = btn.closest('tr');
+    const tagId = satir.dataset.tagId;
+    if (!tagId) { satir.remove(); return; } // henüz sunucuda hiç oluşturulmamıştı
+    const ad = satir.querySelector('[data-alan="ad"]').value || ('#' + tagId);
+    if (!confirm(`"${ad}" tag'i silinsin mi?`)) return;
+    try {
+        const res = await fetch(`/cihaz/${TAG_CIHAZ_ID}/tag/${tagId}/sil-json`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { tagDurumYaz('❌ ' + (data.error || 'Silinemedi'), true); return; }
+        satir.remove();
+        tagDurumYaz('🗑 Tag silindi');
+    } catch (e) { tagDurumYaz('❌ İstek başarısız', true); }
+}
+
+// Sütun başlığına tıklayınca o sütuna göre sırala (client-side, tuval
+// yenilenmeden) — tekrar tıklayınca yön değişir.
+let _tagSiralamaAlani = null, _tagSiralamaYon = 1;
+document.querySelectorAll('#tagTablosu th.siralanabilir').forEach(th => {
+    th.addEventListener('click', () => {
+        const alan = th.dataset.sirala;
+        _tagSiralamaYon = (_tagSiralamaAlani === alan) ? -_tagSiralamaYon : 1;
+        _tagSiralamaAlani = alan;
+        const govde = document.getElementById('tagTabloGovde');
+        const satirlar = [...govde.querySelectorAll('tr')];
+        satirlar.sort((a, b) => {
+            const al = a.dataset.tagId ? _tagSatirAlanDegeri(a, alan) : '';
+            const bl = b.dataset.tagId ? _tagSatirAlanDegeri(b, alan) : '';
+            if (alan === 'id') return ((parseInt(al) || 0) - (parseInt(bl) || 0)) * _tagSiralamaYon;
+            return String(al).localeCompare(String(bl), 'tr') * _tagSiralamaYon;
+        });
+        satirlar.forEach(s => govde.appendChild(s));
+    });
+});
+function _tagSatirAlanDegeri(satir, alan) {
+    if (alan === 'id') return satir.dataset.tagId || 0;
+    const el = satir.querySelector(`[data-alan="${alan}"]`);
+    return el ? el.value : '';
+}
+</script>
+{% endif %}
+{% endblock %}

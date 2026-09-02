@@ -1,0 +1,14 @@
+{# Kullanıcı isteği: cihaz yönetimi (eskiden tek dev sayfa — cihaz_detay.html)
+   Özellikler / Alarm / Firmware / Tag'ler / Sayfalar diye 5 ayrı sayfaya
+   bölündü. Aktif sekme request.endpoint'ten belirleniyor — her route'ta ayrı
+   bir "aktif" değişkeni geçmeye gerek kalmasın diye. #}
+<p><a class="item-link" href="{{ url_for('dashboard.dashboard_page') }}">&larr; Cihazlar</a></p>
+<div class="alt-sekme-cubugu">
+    <a class="alt-sekme {{ 'aktif' if request.endpoint == 'dashboard.cihaz_detay' }}" href="{{ url_for('dashboard.cihaz_detay', cihaz_id=cihaz.id) }}">⚙️ Özellikler</a>
+    <a class="alt-sekme {{ 'aktif' if request.endpoint == 'dashboard.cihaz_alarmlar' }}" href="{{ url_for('dashboard.cihaz_alarmlar', cihaz_id=cihaz.id) }}">🚨 Alarm</a>
+    {% if session.get('platform_admin') %}
+    <a class="alt-sekme {{ 'aktif' if request.endpoint == 'dashboard.cihaz_firmware' }}" href="{{ url_for('dashboard.cihaz_firmware', cihaz_id=cihaz.id) }}">📡 Firmware</a>
+    {% endif %}
+    <a class="alt-sekme {{ 'aktif' if request.endpoint == 'dashboard.cihaz_tagler' }}" href="{{ url_for('dashboard.cihaz_tagler', cihaz_id=cihaz.id) }}">🏷️ Tag'ler</a>
+    <a class="alt-sekme {{ 'aktif' if request.endpoint == 'dashboard.cihaz_sayfalar' }}" href="{{ url_for('dashboard.cihaz_sayfalar', cihaz_id=cihaz.id) }}">🖼️ Sayfa Tasarım</a>
+</div>

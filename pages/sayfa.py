@@ -41,10 +41,10 @@ def sayfa_olustur(cihaz_id):
     ad = request.form.get('ad', '').strip()
     if not ad:
         flash('Sayfa adı zorunlu.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_sayfalar', cihaz_id=cihaz_id))
     if database.sayfa_getir(cihaz_id, ad, 'masaustu'):
         flash('Bu isimde bir sayfa zaten var.', 'danger')
-        return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+        return redirect(url_for('dashboard.cihaz_sayfalar', cihaz_id=cihaz_id))
 
     # Not: sayfa oluştururken "şablon" seçme özelliği kaldırıldı — kullanıcı
     # isteği: aynı işlevi tasarım ekranında sağ tık > "📥 Şablon Uygula" zaten
@@ -62,7 +62,7 @@ def sayfa_sil(cihaz_id, sayfa_ad):
         return redirect(url_for('dashboard.dashboard_page'))
     database.sayfa_sil(cihaz_id, sayfa_ad)
     flash('Sayfa silindi.', 'success')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_sayfalar', cihaz_id=cihaz_id))
 
 
 @sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/<hedef>/sil', methods=['POST'])
@@ -73,7 +73,7 @@ def sayfa_varyant_sil(cihaz_id, sayfa_ad, hedef):
         return redirect(url_for('dashboard.dashboard_page'))
     database.sayfa_varyant_sil(cihaz_id, sayfa_ad, hedef)
     flash(f"{'Mobil' if hedef == 'mobil' else 'Masaüstü'} düzeni silindi.", 'success')
-    return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+    return redirect(url_for('dashboard.cihaz_sayfalar', cihaz_id=cihaz_id))
 
 
 @sayfa_bp.route('/cihaz/<int:cihaz_id>/sayfa/<sayfa_ad>/tasarla')
@@ -96,7 +96,7 @@ def sayfa_tasarla(cihaz_id, sayfa_ad):
         diger = database.sayfa_getir(cihaz_id, sayfa_ad, diger_hedef)
         if diger is None:
             flash('Sayfa bulunamadı.', 'danger')
-            return redirect(url_for('dashboard.cihaz_detay', cihaz_id=cihaz_id))
+            return redirect(url_for('dashboard.cihaz_sayfalar', cihaz_id=cihaz_id))
         sayfa = {'elementler': [], 'tuval_w': None, 'tuval_h': None, 'arkaplan': None}
 
     varsayilan_w = 1280 if hedef == 'masaustu' else 420

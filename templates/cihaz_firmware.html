@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ cihaz.ad }} - Firmware - OventechIOT{% endblock %}
+{% block content %}
+{% include "_cihaz_altmenu.html" %}
+
+<div class="card">
+    <h2>📡 Firmware (Uzaktan Güncelleme)</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:-6px;">
+        Yüklediğin .bin dosyasını ESP32, periyodik senkron sırasında kendisi kontrol edip indirir ve kendini günceller —
+        elle kabloya bağlamana gerek yok. "Bu Cihaz" hedefi sadece bu cihazı, "Tüm Cihazlar" ise projedeki her ESP32'yi hedefler.
+    </p>
+    {% if firmwarelar %}
+    <table>
+        <thead><tr><th>Dosya</th><th>Sürüm</th><th>Hedef</th><th>Boyut</th><th>Durum</th><th>Yüklenme</th><th></th></tr></thead>
+        <tbody>
+        {% for f in firmwarelar %}
+            <tr>
+                <td style="font-family:monospace;font-size:12px;">{{ f.dosya_adi }}</td>
+                <td>{{ f.versiyon }}</td>
+                <td>{{ f.cihaz_ad if f.cihaz_id else '🌐 Tüm Cihazlar' }}</td>
+                <td>{{ (f.boyut / 1024) | round(1) }} KB</td>
+                <td>{% if f.aktif %}<span class="badge on">aktif</span>{% else %}<span class="badge">pasif</span>{% endif %}</td>
+                <td>{{ f.yukleme_zamani }}</td>
+                <td style="white-space:nowrap;">
+                    <form method="POST" action="{{ url_for('dashboard.firmware_aktiflik', cihaz_id=cihaz.id, firmware_id=f.id) }}" style="display:inline;">
+                        <button type="submit" style="padding:5px 10px;font-size:12px;background:var(--panel2);">{{ 'Pasif Yap' if f.aktif else 'Aktif Yap' }}</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('dashboard.firmware_sil', cihaz_id=cihaz.id, firmware_id=f.id) }}" style="display:inline;" onsubmit="return confirm('{{ f.dosya_adi }} silinsin mi?');">
+                        <button type="submit" style="padding:5px 10px;font-size:12px;background:var(--red);">Sil</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-secondary);font-size:14px;">Henüz firmware yüklenmedi.</p>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('dashboard.firmware_yukle', cihaz_id=cihaz.id) }}" enctype="multipart/form-data" style="margin-top:14px;">
+        <label>Firmware Dosyası (.bin)</label>
+        <input type="file" name="firmware_dosya" accept=".bin" required>
+        <div style="display:flex;gap:8px;">
+            <div style="flex:1;">
+                <label>Sürüm</label>
+                <input type="text" name="versiyon" placeholder="örn. 1.2.0" value="1.0.0">
+            </div>
+            <div style="flex:1;">
+                <label>Hedef</label>
+                <select name="hedef">
+                    <option value="bu_cihaz">Sadece bu cihaz ({{ cihaz.ad }})</option>
+                    <option value="tum_cihazlar">🌐 Projedeki tüm cihazlar</option>
+                </select>
+            </div>
+        </div>
+        <label>Açıklama (opsiyonel)</label>
+        <input type="text" name="aciklama" placeholder="örn. Sensör okuma hatası düzeltildi">
+        <button type="submit">Firmware Yükle</button>
+    </form>
+
+    {% if firmware_gecmisi %}
+    <h3 style="font-size:13px;color:var(--text-secondary);margin:16px 0 6px;">Bu Cihazın Güncelleme Geçmişi</h3>
+    <table>
+        <thead><tr><th>Dosya</th><th>Sürüm</th><th>Durum</th><th>Zaman</th></tr></thead>
+        <tbody>
+        {% for g in firmware_gecmisi %}
+            <tr>
+                <td style="font-family:monospace;font-size:12px;">{{ g.dosya_adi or '—' }}</td>
+                <td>{{ g.versiyon or '—' }}</td>
+                <td>
+                    {% if g.durum == 'basarili' %}<span class="badge on">✅ başarılı</span>
+                    {% elif g.durum == 'indiriliyor' %}<span class="badge">⏳ indiriliyor</span>
+                    {% else %}<span class="badge" style="background:var(--red);color:#fff;">❌ {{ g.durum }}</span>{% endif %}
+                </td>
+                <td>{{ g.zaman }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+{% endblock %}
